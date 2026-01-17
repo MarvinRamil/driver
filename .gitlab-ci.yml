@@ -21,4 +21,4 @@ build_expo_release_android:
   artifacts:
     paths:
       - android/app/build/outputs/apk/release/app-release.apk
-    expire_in: 14 days
+    #expire_in: 14 days
