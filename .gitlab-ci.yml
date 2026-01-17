@@ -5,7 +5,7 @@ build_android:
   stage: build
   tags:
     - android
-    - shel
+    - shell
   image: mingc/android-build-box:latest
   before_script:
     - node --version
