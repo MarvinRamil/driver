@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Solo Driver Wallet - Bee App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#FCD34D", // Amber-300 like the bee yellow
+              "primary-dark": "#F59E0B",
+              "background-light": "#F9FAFB",
+              "background-dark": "#18181B", // Zinc-900
+              "surface-light": "#FFFFFF",
+              "surface-dark": "#27272A", // Zinc-800
+              "bee-black": "#111111",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+            },
+            borderRadius: {
+              DEFAULT: "1rem",
+            },
+            boxShadow: {
+                'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                'glow': '0 0 15px rgba(252, 211, 77, 0.3)',
+            }
+          },
+        },
+      };
+    </script>
+<style>.hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-gray-900 dark:text-gray-100 antialiased selection:bg-primary selection:text-bee-black transition-colors duration-200">
+<div class="max-w-md mx-auto min-h-screen relative pb-24 bg-background-light dark:bg-background-dark overflow-hidden">
+<header class="pt-12 px-6 pb-6 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="relative">
+<img alt="Driver Profile" class="w-10 h-10 rounded-full border-2 border-primary object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzIlcqTJDbODcQvpc622WsCD-wvTc7GRagKwe8uE6wC55WIa1_rJ1oaHy-Ow2xg7ED1czEkxRpiptA1m8bW6e5LXcZaWvI0W8RT9SxtqKj5g90NDBg09dVZpFBMf_MO_B5HCDFuGyyCMyyywk3b19iP_c2tS905A_xmveZZEDd6ck_e1eAU9B-TZWxElt_3V60BEoELiFYlQzd3TUwFi9oZIPjF3YsGDYlrZravag04n6_IaUwqizkJiBViPUe6dAwcJbUySxVmmx1"/>
+<div class="absolute -bottom-1 -right-1 bg-primary text-bee-black text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white dark:border-background-dark">SOLO</div>
+</div>
+<div>
+<h1 class="text-sm text-gray-500 dark:text-gray-400 font-medium">Welcome back,</h1>
+<p class="text-lg font-bold text-gray-900 dark:text-white">Alex Johnson</p>
+</div>
+</div>
+<button class="p-2 rounded-full bg-surface-light dark:bg-surface-dark shadow-soft text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative">
+<span class="material-icons-round">notifications</span>
+<span class="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-surface-dark"></span>
+</button>
+</header>
+<div class="px-6 mb-8">
+<div class="bg-bee-black dark:bg-zinc-800 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-yellow-500/20 dark:shadow-black/40">
+<div class="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-primary opacity-10 rounded-full blur-3xl"></div>
+<div class="absolute bottom-0 left-0 -ml-16 -mb-16 w-48 h-48 bg-primary opacity-5 rounded-full blur-2xl"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-2">
+<span class="text-gray-400 text-sm font-medium">Total Balance</span>
+<div class="bg-gray-800/50 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-1 border border-gray-700">
+<span class="material-icons-round text-primary text-xs">verified</span>
+<span class="text-xs text-primary font-bold">VERIFIED</span>
+</div>
+</div>
+<div class="flex items-baseline gap-1 mb-8">
+<span class="text-4xl font-bold tracking-tight">$2,458.50</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex flex-col">
+<span class="text-xs text-gray-400 mb-1">Bee ID</span>
+<span class="font-mono text-sm tracking-wider">**** 8924</span>
+</div>
+<img alt="Card Chip" class="w-8 opacity-80 invert brightness-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd4aIQgZVoMFI6DEMaymKQ5MyTVNhJ2EyPjmXVqyeG-DGO7_2QxUhLtgdjzD6INEF_yfZVqt33XQcJ3w4PkGfBb2OORjLcJavj3Pj9ASGJp3CTjBECpjqPPyK9VFu_aX_bbRRexF2WINVVCLJ7UQjAg0LFrFZSlqvMl7xjBOIDFTWpnZ4DorSj3vfjqhgfxX2kw1ty74zaIZc18ddgiMP-mlEROmBkDfofTe8qyV7ebCKs9yewxRLq0QIuq3snljAur-YZ7c4dn9Q-"/>
+</div>
+</div>
+</div>
+</div>
+<div class="px-6 mb-8">
+<div class="grid grid-cols-4 gap-4">
+<button class="flex flex-col items-center gap-2 group">
+<div class="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-glow group-active:scale-95 transition-transform">
+<span class="material-icons-round text-bee-black text-2xl">add</span>
+</div>
+<span class="text-xs font-medium text-gray-600 dark:text-gray-400">Top Up</span>
+</button>
+<button class="flex flex-col items-center gap-2 group">
+<div class="w-14 h-14 rounded-2xl bg-surface-light dark:bg-surface-dark flex items-center justify-center shadow-soft group-active:scale-95 transition-transform border border-gray-100 dark:border-gray-700">
+<span class="material-icons-round text-gray-700 dark:text-gray-200 text-2xl">arrow_upward</span>
+</div>
+<span class="text-xs font-medium text-gray-600 dark:text-gray-400">Transfer</span>
+</button>
+<button class="flex flex-col items-center gap-2 group">
+<div class="w-14 h-14 rounded-2xl bg-surface-light dark:bg-surface-dark flex items-center justify-center shadow-soft group-active:scale-95 transition-transform border border-gray-100 dark:border-gray-700">
+<span class="material-icons-round text-gray-700 dark:text-gray-200 text-2xl">qr_code_scanner</span>
+</div>
+<span class="text-xs font-medium text-gray-600 dark:text-gray-400">Scan</span>
+</button>
+<button class="flex flex-col items-center gap-2 group">
+<div class="w-14 h-14 rounded-2xl bg-surface-light dark:bg-surface-dark flex items-center justify-center shadow-soft group-active:scale-95 transition-transform border border-gray-100 dark:border-gray-700">
+<span class="material-icons-round text-gray-700 dark:text-gray-200 text-2xl">more_horiz</span>
+</div>
+<span class="text-xs font-medium text-gray-600 dark:text-gray-400">More</span>
+</button>
+</div>
+</div>
+<div class="px-6 mb-4 flex justify-between items-end">
+<h2 class="text-lg font-bold text-gray-900 dark:text-white">Recent Activity</h2>
+<button class="text-primary text-sm font-semibold hover:text-primary-dark transition-colors">See All</button>
+</div>
+<div class="px-4 space-y-3 pb-8">
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+<span class="material-icons-round text-lg">local_taxi</span>
+</div>
+<div>
+<h3 class="font-semibold text-gray-900 dark:text-white text-sm">Ride Payment</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400">Today, 10:23 AM</p>
+</div>
+</div>
+<span class="font-bold text-green-600 dark:text-green-400 text-sm">+$24.50</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
+<span class="material-icons-round text-lg">local_gas_station</span>
+</div>
+<div>
+<h3 class="font-semibold text-gray-900 dark:text-white text-sm">Fuel Station</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400">Yesterday, 4:15 PM</p>
+</div>
+</div>
+<span class="font-bold text-gray-900 dark:text-white text-sm">-$45.00</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center text-yellow-600 dark:text-yellow-500">
+<span class="material-icons-round text-lg">settings</span>
+</div>
+<div>
+<h3 class="font-semibold text-gray-900 dark:text-white text-sm">Maintenance Fee</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400">Sep 20, 2:00 PM</p>
+</div>
+</div>
+<span class="font-bold text-gray-900 dark:text-white text-sm">-$12.00</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+<span class="material-icons-round text-lg">local_taxi</span>
+</div>
+<div>
+<h3 class="font-semibold text-gray-900 dark:text-white text-sm">Ride Payment</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400">Sep 19, 8:45 PM</p>
+</div>
+</div>
+<span class="font-bold text-green-600 dark:text-green-400 text-sm">+$18.20</span>
+</div>
+</div>
+<nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 pb-safe pt-2 px-6 z-50">
+<div class="flex justify-between items-center h-16">
+<a class="flex flex-col items-center gap-1 w-12 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" href="#">
+<span class="material-icons-round text-2xl">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 w-12 text-primary" href="#">
+<span class="material-icons-round text-2xl">account_balance_wallet</span>
+<span class="text-[10px] font-medium">Wallet</span>
+</a>
+<div class="relative -top-6">
+<button class="w-14 h-14 rounded-full bg-bee-black text-primary flex items-center justify-center shadow-lg shadow-black/30 border-4 border-surface-light dark:border-background-dark transform transition hover:scale-105 active:scale-95">
+<span class="material-icons-round text-3xl">qr_code_2</span>
+</button>
+</div>
+<a class="flex flex-col items-center gap-1 w-12 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" href="#">
+<span class="material-icons-round text-2xl">bar_chart</span>
+<span class="text-[10px] font-medium">Earnings</span>
+</a>
+<a class="flex flex-col items-center gap-1 w-12 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300" href="#">
+<span class="material-icons-round text-2xl">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</div>
+</nav>
+<div class="h-20"></div>
+</div>
+<script>
+        // Simple dark mode toggle for demonstration purposes if viewing in browser
+        // In a real app, this would respect system preference automatically via Tailwind classes
+        // but this script ensures you can test it easily.
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+
+</body></html>

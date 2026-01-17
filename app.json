@@ -1,0 +1,94 @@
+{
+  "expo": {
+    "name": "BEE DRIVER APP",
+    "slug": "bee-drivers-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/adaptive-icon.png",
+    "scheme": "beedriversapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#ffcd36"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSUserNotificationsUsageDescription": "We need to send you notifications about new booking offers and dispatch updates.",
+        "NSLocationWhenInUseUsageDescription": "We need your location to track your position during deliveries and provide real-time updates.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to track your position during deliveries and provide real-time updates.",
+        "NSPhotoLibraryUsageDescription": "We need access to your photo library to upload your profile picture.",
+        "NSCameraUsageDescription": "We need access to your camera to take a profile picture.",
+        "CFBundleDisplayName": "BEE DRIVER APP"
+      },
+      "bundleIdentifier": "com.mybeeapp.driver"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FFD700"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.CAMERA"
+      ],
+      "package": "com.mybeeapp.driver",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/adaptive-icon.png",
+          "color": "#FFD700",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow BEE DRIVER APP to use your location to track your position during deliveries and provide real-time updates."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow BEE DRIVER APP to access your photos to upload your profile picture."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1746836d-2181-4337-bf25-dcd5ac61f0a3"
+      }
+    },
+    "owner": "ilocosscriptdevs",
+    "updates": {
+      "url": "https://u.expo.dev/1746836d-2181-4337-bf25-dcd5ac61f0a3"
+    }
+  }
+}

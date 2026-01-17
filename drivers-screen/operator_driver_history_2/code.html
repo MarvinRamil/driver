@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Operator Driver History</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "primary-content": "#1c190d",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#2c281b",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "Noto Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar hide for chip container */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased min-h-screen">
+<!-- Main Container -->
+<div class="relative flex flex-col h-full w-full max-w-md mx-auto bg-background-light dark:bg-background-dark min-h-screen overflow-hidden border-x border-stone-100 dark:border-stone-800 shadow-xl">
+<!-- Top App Bar -->
+<header class="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800">
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors text-stone-900 dark:text-stone-100">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold text-stone-900 dark:text-stone-100">Trip History</h1>
+<div class="size-10"></div> <!-- Spacer for centering -->
+</header>
+<!-- Filter Chips -->
+<div class="sticky top-[65px] z-10 w-full bg-background-light dark:bg-background-dark py-3 pl-4 overflow-hidden">
+<div class="flex gap-3 overflow-x-auto no-scrollbar pr-4">
+<!-- Active Chip -->
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary px-5 shadow-sm transition-transform active:scale-95">
+<span class="text-primary-content text-sm font-semibold">All</span>
+</button>
+<!-- Inactive Chips -->
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-stone-200 dark:border-stone-700 px-5 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95">
+<span class="text-stone-600 dark:text-stone-300 text-sm font-medium">Completed</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-stone-200 dark:border-stone-700 px-5 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95">
+<span class="text-stone-600 dark:text-stone-300 text-sm font-medium">Assigned</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-stone-200 dark:border-stone-700 px-5 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95">
+<span class="text-stone-600 dark:text-stone-300 text-sm font-medium">Cancelled</span>
+</button>
+</div>
+</div>
+<!-- Scrollable Content -->
+<main class="flex-1 flex flex-col w-full pb-8">
+<!-- Section: Today -->
+<div class="px-4 pt-4 pb-2">
+<h3 class="text-stone-900 dark:text-stone-100 text-sm font-bold uppercase tracking-wider opacity-70">Today, Oct 24</h3>
+</div>
+<!-- List Item 1 -->
+<div class="px-4 mb-3">
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-stone-100 dark:border-stone-800 active:scale-[0.99] transition-transform cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/20 text-stone-800 dark:text-primary">
+                            Assigned
+                        </span>
+<span class="text-stone-500 dark:text-stone-400 text-xs font-mono">#BE-4925</span>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center pt-1 gap-1">
+<div class="size-2.5 rounded-full border-2 border-stone-900 dark:border-stone-100 bg-primary"></div>
+<div class="w-0.5 h-8 bg-stone-200 dark:bg-stone-700 rounded-full"></div>
+<div class="size-2.5 rounded-sm bg-stone-900 dark:bg-stone-100"></div>
+</div>
+<div class="flex flex-col flex-1 gap-3">
+<div>
+<p class="text-stone-900 dark:text-stone-100 text-sm font-semibold leading-tight">88 Pollen Path</p>
+<p class="text-stone-500 dark:text-stone-400 text-xs mt-0.5">12 Queen Rd.</p>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-stone-400 text-[18px]">schedule</span>
+<p class="text-stone-700 dark:text-stone-300 text-sm font-medium">02:15 PM</p>
+</div>
+</div>
+<div class="flex items-center self-center justify-center size-10 rounded-full bg-background-light dark:bg-background-dark text-stone-400">
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<!-- List Item 2 -->
+<div class="px-4 mb-3">
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-stone-100 dark:border-stone-800 active:scale-[0.99] transition-transform cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400">
+                            Completed
+                        </span>
+<span class="text-stone-500 dark:text-stone-400 text-xs font-mono">#BE-4921</span>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center pt-1 gap-1">
+<div class="size-2.5 rounded-full border-2 border-stone-900 dark:border-stone-100 bg-primary"></div>
+<div class="w-0.5 h-8 bg-stone-200 dark:bg-stone-700 rounded-full"></div>
+<div class="size-2.5 rounded-sm bg-stone-900 dark:bg-stone-100"></div>
+</div>
+<div class="flex flex-col flex-1 gap-3">
+<div>
+<p class="text-stone-900 dark:text-stone-100 text-sm font-semibold leading-tight">123 Hive St.</p>
+<p class="text-stone-500 dark:text-stone-400 text-xs mt-0.5">45 Flower Ave.</p>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-stone-400 text-[18px]">schedule</span>
+<p class="text-stone-700 dark:text-stone-300 text-sm font-medium">09:30 AM</p>
+</div>
+</div>
+<div class="flex items-center self-center justify-center size-10 rounded-full bg-background-light dark:bg-background-dark text-stone-400">
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Yesterday -->
+<div class="px-4 pt-6 pb-2">
+<h3 class="text-stone-900 dark:text-stone-100 text-sm font-bold uppercase tracking-wider opacity-70">Yesterday, Oct 23</h3>
+</div>
+<!-- List Item 3 -->
+<div class="px-4 mb-3">
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-stone-100 dark:border-stone-800 active:scale-[0.99] transition-transform cursor-pointer opacity-75 hover:opacity-100">
+<div class="flex justify-between items-start mb-3">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400">
+                            Cancelled
+                        </span>
+<span class="text-stone-500 dark:text-stone-400 text-xs font-mono">#BE-4892</span>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center pt-1 gap-1">
+<div class="size-2.5 rounded-full border-2 border-stone-300 dark:border-stone-600 bg-stone-200 dark:bg-stone-700"></div>
+<div class="w-0.5 h-8 bg-stone-200 dark:bg-stone-700 rounded-full border-l border-dashed border-stone-400"></div>
+<div class="size-2.5 rounded-sm bg-stone-300 dark:bg-stone-600"></div>
+</div>
+<div class="flex flex-col flex-1 gap-3">
+<div>
+<p class="text-stone-500 dark:text-stone-400 text-sm font-semibold leading-tight line-through">500 Honeycomb Blvd.</p>
+<p class="text-stone-400 dark:text-stone-500 text-xs mt-0.5 line-through">12 Nectar Lane</p>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-stone-400 text-[18px]">schedule</span>
+<p class="text-stone-500 dark:text-stone-400 text-sm font-medium">11:00 AM</p>
+</div>
+</div>
+<div class="flex items-center self-center justify-center size-10 rounded-full bg-background-light dark:bg-background-dark text-stone-300">
+<span class="material-symbols-outlined">block</span>
+</div>
+</div>
+</div>
+</div>
+<!-- List Item 4 -->
+<div class="px-4 mb-3">
+<div class="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-stone-100 dark:border-stone-800 active:scale-[0.99] transition-transform cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400">
+                            Completed
+                        </span>
+<span class="text-stone-500 dark:text-stone-400 text-xs font-mono">#BE-4810</span>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center pt-1 gap-1">
+<div class="size-2.5 rounded-full border-2 border-stone-900 dark:border-stone-100 bg-primary"></div>
+<div class="w-0.5 h-8 bg-stone-200 dark:bg-stone-700 rounded-full"></div>
+<div class="size-2.5 rounded-sm bg-stone-900 dark:bg-stone-100"></div>
+</div>
+<div class="flex flex-col flex-1 gap-3">
+<div>
+<p class="text-stone-900 dark:text-stone-100 text-sm font-semibold leading-tight">Airport Terminal 1</p>
+<p class="text-stone-500 dark:text-stone-400 text-xs mt-0.5">Grand Hotel Central</p>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-stone-400 text-[18px]">schedule</span>
+<p class="text-stone-700 dark:text-stone-300 text-sm font-medium">08:45 AM</p>
+</div>
+</div>
+<div class="flex items-center self-center justify-center size-10 rounded-full bg-background-light dark:bg-background-dark text-stone-400">
+<span class="material-symbols-outlined">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Empty Space at bottom -->
+<div class="h-12 w-full"></div>
+</main>
+<!-- Bottom Tab Bar (Contextual Visualization) -->
+<nav class="sticky bottom-0 z-20 w-full bg-surface-light dark:bg-surface-dark border-t border-stone-200 dark:border-stone-800 px-6 py-3 flex justify-between items-center text-xs font-medium">
+<div class="flex flex-col items-center gap-1 text-stone-400 hover:text-primary cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[24px]">home</span>
+<span>Home</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-primary cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[24px] fill-current">history</span>
+<span>History</span>
+</div>
+<div class="flex flex-col items-center gap-1 text-stone-400 hover:text-primary cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[24px]">person</span>
+<span>Profile</span>
+</div>
+</nav>
+</div>
+</body></html>

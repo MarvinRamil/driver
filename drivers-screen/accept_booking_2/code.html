@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Accept Booking - Bee Driver</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "primary-dark": "#d9b21f",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#2c2818",
+                        "text-main": "#1c190d",
+                        "text-secondary": "#9c8c49",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(28, 25, 13, 0.05)',
+                        'card': '0 2px 8px -1px rgba(28, 25, 13, 0.04)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-text-main dark:text-[#f8f8f5] font-display antialiased selection:bg-primary selection:text-black">
+<div class="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden shadow-2xl">
+<!-- Header Section -->
+<div class="flex flex-col gap-2 p-4 pb-2 z-10">
+<div class="flex items-center h-12 justify-between">
+<button class="flex size-12 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+<span class="material-symbols-outlined text-[28px]">arrow_back</span>
+</button>
+<div class="flex items-center justify-end bg-surface-dark/5 dark:bg-white/10 px-3 py-1 rounded-full">
+<div class="size-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+<p class="text-text-secondary dark:text-primary text-sm font-bold tracking-wide uppercase">Online</p>
+</div>
+</div>
+<div class="flex justify-between items-end">
+<p class="text-text-main dark:text-white tracking-tight text-[32px] font-bold leading-tight">New Request</p>
+<span class="material-symbols-outlined text-4xl text-primary animate-bounce">local_taxi</span>
+</div>
+</div>
+<!-- Timer / Progress Bar -->
+<div class="px-4 pb-2">
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<p class="text-text-secondary text-sm font-medium">Auto-decline in <span class="text-text-main dark:text-white font-bold tabular-nums">15s</span></p>
+</div>
+<div class="h-2 w-full bg-[#e8e3ce] dark:bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full animate-[width_15s_linear_reverse]" style="width: 75%;"></div>
+</div>
+</div>
+</div>
+<!-- Map Area -->
+<div class="px-4 py-2 w-full">
+<div class="relative w-full aspect-video rounded-2xl overflow-hidden shadow-card border border-white/50 dark:border-white/5">
+<div class="absolute inset-0 bg-gray-200 animate-pulse"></div>
+<!-- Map Image -->
+<div class="absolute inset-0 bg-center bg-cover" data-alt="Map showing a route through a city grid with yellow line highlighting path" data-location="New York City" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCuVxn2_nPj9xwQ8AWRiHgQrCOTLyRV2ZsQcyuKTQ4cUcETZHCLt1sIbQIU9MPd2pxY6ny8HouhJcfFB4O7WB6fT_qa1Dr6SN99KFeURlxLlobDDbq2giSigTsmxulVNkQp728IpTARQ6kGZwVWYb3MWaudHfF53DQ65J3S1x_HHZDmZCONWGROhxB9cceyVHmdHeg7-GYB6sRWGNqKdrCh9Feir2I3RxTiCM-Ts4RIp5zJ4E057JhaERQ-ZYX1h-RhVwTEq2T-a3RF");'>
+</div>
+<!-- Map Overlay Gradient for legibility if needed -->
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/10 pointer-events-none"></div>
+<!-- Floating Badge on Map -->
+<div class="absolute top-3 left-3 bg-surface-light dark:bg-surface-dark px-3 py-1.5 rounded-lg shadow-md flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">schedule</span>
+<span class="text-xs font-bold">8 min away</span>
+</div>
+</div>
+</div>
+<!-- Main Content Scroll Area -->
+<div class="flex-1 flex flex-col px-4 pt-2 pb-24 overflow-y-auto">
+<!-- Price Headline -->
+<div class="flex flex-col items-center py-4">
+<h1 class="text-text-main dark:text-white tracking-tight text-[40px] font-bold leading-none">$24.00</h1>
+<p class="text-text-secondary text-sm font-medium mt-1">Estimated Fare • 4.2 mi total</p>
+</div>
+<!-- Route Details Card -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-soft border border-gray-100 dark:border-white/5 mb-4">
+<div class="flex flex-col gap-6 relative">
+<!-- Vertical connecting line -->
+<div class="absolute left-[11px] top-8 bottom-8 w-0.5 border-l-2 border-dashed border-gray-300 dark:border-gray-600"></div>
+<!-- Pickup -->
+<div class="flex gap-4 items-start relative z-10">
+<div class="mt-1 size-6 rounded-full border-4 border-black dark:border-primary bg-white shrink-0 shadow-sm"></div>
+<div class="flex flex-col">
+<p class="text-[10px] uppercase font-bold text-text-secondary tracking-wider mb-0.5">Pick Up</p>
+<p class="text-text-main dark:text-white text-lg font-bold leading-tight">123 Honeycomb Ave</p>
+<p class="text-text-secondary text-sm leading-normal">Manhattan, NY 10012</p>
+</div>
+</div>
+<!-- Dropoff -->
+<div class="flex gap-4 items-start relative z-10">
+<div class="mt-1 size-6 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[28px] drop-shadow-sm -mt-1">location_on</span>
+</div>
+<div class="flex flex-col">
+<p class="text-[10px] uppercase font-bold text-text-secondary tracking-wider mb-0.5">Drop Off</p>
+<p class="text-text-main dark:text-white text-lg font-bold leading-tight">45 Hive Street</p>
+<p class="text-text-secondary text-sm leading-normal">Brooklyn, NY 11201</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Chips / Extra Info -->
+<div class="flex gap-2 flex-wrap mb-4">
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-lg bg-surface-light border border-gray-200 dark:border-white/10 dark:bg-surface-dark pl-3 pr-4 shadow-sm">
+<span class="material-symbols-outlined text-text-main dark:text-white text-[18px]">payments</span>
+<p class="text-text-main dark:text-white text-xs font-bold">Cash Payment</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-lg bg-surface-light border border-gray-200 dark:border-white/10 dark:bg-surface-dark pl-3 pr-4 shadow-sm">
+<span class="material-symbols-outlined text-text-main dark:text-white text-[18px]">pets</span>
+<p class="text-text-main dark:text-white text-xs font-bold">Pet Friendly</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-lg bg-surface-light border border-gray-200 dark:border-white/10 dark:bg-surface-dark pl-3 pr-4 shadow-sm">
+<span class="material-symbols-outlined text-text-main dark:text-white text-[18px]">star</span>
+<p class="text-text-main dark:text-white text-xs font-bold">4.9 Rider</p>
+</div>
+</div>
+</div>
+<!-- Bottom Actions (Sticky) -->
+<div class="fixed bottom-0 left-0 w-full max-w-md mx-auto bg-gradient-to-t from-background-light via-background-light to-transparent dark:from-background-dark dark:via-background-dark pt-8 pb-6 px-4 z-20">
+<div class="flex gap-3 h-14">
+<!-- Decline Button -->
+<button class="flex-1 rounded-xl border-2 border-gray-200 dark:border-white/20 bg-transparent text-text-main dark:text-white font-bold text-lg hover:bg-gray-100 dark:hover:bg-white/5 active:scale-95 transition-all duration-200">
+                    Decline
+                </button>
+<!-- Accept Button -->
+<button class="flex-[2] rounded-xl bg-primary text-[#000000] font-bold text-lg shadow-[0_4px_14px_0_rgba(244,202,37,0.39)] hover:bg-primary-dark active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
+<span>Accept Ride</span>
+<span class="material-symbols-outlined text-[24px]">check_circle</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

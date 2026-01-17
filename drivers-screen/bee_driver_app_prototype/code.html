@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Bee Driver App Prototype</title>
+    
+    <!-- React & Router -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <!-- Tailwind & Fonts -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&family=Noto+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "primary-dark": "#d9b21f",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#2c2818",
+                        "text-main": "#1c190d",
+                        "text-secondary": "#9c8c49",
+                        "bee-black": "#111111",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        body { min-height: 100vh; overflow-x: hidden; }
+        /* Smooth fade transition for routes */
+        .fade-enter { opacity: 0; }
+        .fade-enter-active { opacity: 1; transition: opacity 200ms ease-in; }
+        .fade-exit { opacity: 1; }
+        .fade-exit-active { opacity: 0; transition: opacity 200ms ease-in; }
+        
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .material-symbols-outlined.filled { font-variation-settings: 'FILL' 1; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-text-main dark:text-[#f8f8f5] font-display antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+        // --- Mock Data & Helpers ---
+        // Helper to check current active tab styling
+        const getNavLinkClass = (path, currentPath) => {
+            const isActive = currentPath === path;
+            return isActive 
+                ? "flex flex-col items-center justify-center w-full h-full text-primary" 
+                : "flex flex-col items-center justify-center w-full h-full text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 transition-colors";
+        };
+
+        // --- Common Components ---
+
+        // Bottom Navigation Bar (Dynamic based on user type, defaulting to Solo Driver style for prototype)
+        const BottomNav = () => {
+            const navigate = useNavigate();
+            const location = useLocation();
+            
+            return (
+                <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 pb-safe-area-inset-bottom z-50">
+                    <div className="flex justify-around items-center h-16 px-1">
+                        <button onClick={() => navigate('/dashboard')} className={getNavLinkClass('/dashboard', location.pathname)}>
+                            <span className="material-symbols-outlined text-2xl mb-1">dashboard</span>
+                            <span className="text-[10px] font-medium">Home</span>
+                        </button>
+                        <button onClick={() => navigate('/missions')} className={getNavLinkClass('/missions', location.pathname)}>
+                            <span className="material-symbols-outlined text-2xl mb-1">target</span>
+                            <span className="text-[10px] font-medium">Missions</span>
+                        </button>
+                        <div className="relative -top-6">
+                            <button onClick={() => navigate('/accept-booking')} className="w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-yellow-500/40 border-4 border-surface-light dark:border-background-dark transform transition hover:scale-105 active:scale-95 text-bee-black">
+                                <span className="material-symbols-outlined text-3xl">local_taxi</span>
+                            </button>
+                        </div>
+                        <button onClick={() => navigate('/earnings')} className={getNavLinkClass('/earnings', location.pathname)}>
+                            <span className="material-symbols-outlined text-2xl mb-1">account_balance_wallet</span>
+                            <span className="text-[10px] font-medium">Wallet</span>
+                        </button>
+                        <button onClick={() => navigate('/profile')} className={getNavLinkClass('/profile', location.pathname)}>
+                            <span className="material-symbols-outlined text-2xl mb-1">person</span>
+                            <span className="text-[10px] font-medium">Profile</span>
+                        </button>
+                    </div>
+                </nav>
+            );
+        };
+
+        // Dark Mode Toggle (Floating)
+        const ThemeToggle = () => {
+            const toggleTheme = () => {
+                document.documentElement.classList.toggle('dark');
+            };
+            return (
+                <button 
+                    onClick={toggleTheme}
+                    className="fixed bottom-24 right-4 z-50 p-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg text-text-main dark:text-white"
+                >
+                    <span className="material-symbols-outlined text-xl">contrast</span>
+                </button>
+            );
+        };
+
+        // --- Screens ---
+
+        // 1. Splash Screen
+        const SplashScreen = () => {
+            const navigate = useNavigate();
+            useEffect(() => {
+                const timer = setTimeout(() => navigate('/welcome'), 2500);
+                return () => clearTimeout(timer);
+            }, []);
+
+            return (
+                <div className="relative flex h-screen w-full flex-col bg-primary items-center justify-between overflow-hidden">
+                    <div className="absolute inset-0 z-0 opacity-10 pointer-events-none" style={{backgroundImage: "radial-gradient(#221e10 1px, transparent 1px)", backgroundSize: "32px 32px"}}></div>
+                    <div className="flex-1 flex flex-col items-center justify-center w-full z-10 px-8 relative">
+                        <div className="relative flex flex-col items-center justify-center transform transition-all duration-700">
+                            <div className="w-32 h-32 md:w-40 md:h-40 bg-background-dark rounded-3xl flex items-center justify-center shadow-xl mb-6 ring-4 ring-background-dark/10">
+                                <span className="material-symbols-outlined text-primary text-[80px] md:text-[100px]" style={{fontVariationSettings: "'FILL' 1"}}>local_taxi</span>
+                            </div>
+                            <h1 className="text-4xl font-bold tracking-tight text-background-dark">BeeDriver</h1>
+                            <p className="mt-2 text-background-dark/80 text-lg font-medium tracking-wide">Drive with the Hive</p>
+                        </div>
+                    </div>
+                    <div className="w-full flex flex-col items-center pb-12 z-10 safe-area-bottom">
+                        <div className="relative w-8 h-8">
+                            <svg className="animate-spin text-background-dark" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 2. Welcome Screen
+        const WelcomeScreen = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="relative z-10 h-screen flex flex-col justify-between max-w-md mx-auto bg-primary dark:bg-background-dark overflow-hidden">
+                    <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
+                         <svg height="100%" width="100%"><rect fill="url(#honeycomb)" height="100%" width="100%"></rect></svg>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center justify-center pt-12 pb-6 px-8 animate-float">
+                        <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center shadow-xl mb-4">
+                            <span className="material-symbols-outlined text-6xl text-background-dark">local_taxi</span>
+                        </div>
+                        <h1 className="text-4xl font-display font-black tracking-widest text-bee-black dark:text-white mt-2 drop-shadow-sm">BEE</h1>
+                        <p className="text-sm font-semibold tracking-wider uppercase mt-1 opacity-80 text-bee-black dark:text-gray-300">Driver App</p>
+                    </div>
+                    <div className="bg-surface-light dark:bg-surface-dark rounded-t-[32px] shadow-[0_-4px_20px_rgba(0,0,0,0.05)] px-8 pt-8 pb-12 w-full transition-transform duration-500 ease-out transform translate-y-0">
+                        <div className="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-8 opacity-50"></div>
+                        <div className="text-center mb-8">
+                            <h2 className="text-2xl font-bold text-bee-black dark:text-white mb-2">Get Started</h2>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">Choose your driver type to begin earning</p>
+                        </div>
+                        <div className="space-y-4">
+                            <button onClick={() => navigate('/login')} className="group w-full relative bg-white dark:bg-zinc-800 border-2 border-transparent hover:border-primary dark:hover:border-primary active:scale-[0.98] transition-all duration-200 rounded-2xl p-4 flex items-center shadow-sm hover:shadow-md">
+                                <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center mr-4 group-hover:bg-primary group-hover:text-black transition-colors">
+                                    <span className="material-icons-round text-yellow-600 dark:text-yellow-400 group-hover:text-black text-2xl">person</span>
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <h3 className="font-bold text-gray-900 dark:text-white">Solo Driver</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">I own my vehicle</p>
+                                </div>
+                                <span className="material-icons-round text-gray-300 dark:text-gray-600 group-hover:text-primary transition-colors">chevron_right</span>
+                            </button>
+                            <button onClick={() => navigate('/login')} className="group w-full relative bg-white dark:bg-zinc-800 border-2 border-transparent hover:border-primary dark:hover:border-primary active:scale-[0.98] transition-all duration-200 rounded-2xl p-4 flex items-center shadow-sm hover:shadow-md">
+                                <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center mr-4 group-hover:bg-primary group-hover:text-black transition-colors">
+                                    <span className="material-icons-round text-yellow-600 dark:text-yellow-400 group-hover:text-black text-2xl">business_center</span>
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <h3 className="font-bold text-gray-900 dark:text-white">Operator Driver</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">I drive for a fleet</p>
+                                </div>
+                                <span className="material-icons-round text-gray-300 dark:text-gray-600 group-hover:text-primary transition-colors">chevron_right</span>
+                            </button>
+                        </div>
+                        <div className="mt-8 text-center">
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">
+                                Already have an account? <Link to="/login" className="font-bold text-bee-black dark:text-primary hover:underline ml-1">Log In</Link>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 3. Login Screen
+        const LoginScreen = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="relative flex h-auto min-h-screen w-full flex-col bg-background-light dark:bg-background-dark overflow-x-hidden">
+                    <div className="pt-4 px-4 py-3">
+                         <div className="w-full bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-background-light dark:bg-background-dark rounded-lg min-h-[200px]" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBGevbNa_Vnuocng-GYRDPl_XKL2NjqcKNZWT3RrRrBcIQbCCswMDTgzTEtVeIhuAaM3lSfSG5uWfu3_uM6hevD0Ifp_5O8K48gSkRWOHBVhFKUkJSO8HiroHYE6Je5Tpep2o65FOprcG0jnedCfwRn1S-4FZGx5qzYBWRaM_1SzJUe4xobQEmWBTErOfRgjn-XddWkTVByco_uG5gjs0NUeXIweQy_Y7G5RkGhyIPdIwxRZPJ368keHPS9wtAoDQekhWnZ4N3O0wdW")'}}>
+                             <div className="w-full h-full bg-gradient-to-b from-transparent to-background-light/20 dark:to-background-dark/20"></div>
+                         </div>
+                    </div>
+                    <div className="px-4 pt-4 pb-2 text-center">
+                        <h1 className="text-text-main dark:text-white tracking-tight text-[32px] font-bold leading-tight">Welcome Back!</h1>
+                        <p className="text-text-secondary dark:text-gray-400 text-sm font-medium mt-2">Log in to start your shift</p>
+                    </div>
+                    <div className="flex flex-col max-w-[480px] mx-auto w-full px-4">
+                        <div className="py-3">
+                            <label className="flex flex-col w-full">
+                                <p className="text-text-main dark:text-white text-base font-medium leading-normal pb-2">Username or Email</p>
+                                <input className="w-full rounded-lg text-text-main dark:text-white bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 h-14 px-4 focus:ring-primary focus:border-primary" placeholder="Enter your Username" />
+                            </label>
+                        </div>
+                        <div className="py-3">
+                            <label className="flex flex-col w-full">
+                                <p className="text-text-main dark:text-white text-base font-medium leading-normal pb-2">Password</p>
+                                <input className="w-full rounded-lg text-text-main dark:text-white bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 h-14 px-4 focus:ring-primary focus:border-primary" type="password" placeholder="Enter your Password" />
+                            </label>
+                        </div>
+                        <div className="flex justify-end pt-1 pb-3">
+                            <a className="text-text-secondary hover:text-primary text-sm font-medium" href="#">Forgot Password?</a>
+                        </div>
+                        <div className="py-3">
+                            <button onClick={() => navigate('/dashboard')} className="flex w-full items-center justify-center rounded-lg h-12 bg-primary hover:bg-primary-dark text-bee-black font-bold text-base shadow-sm">
+                                Log In
+                            </button>
+                        </div>
+                        <div className="flex flex-col items-center gap-4 py-4">
+                            <div className="flex items-center gap-3 w-full">
+                                <div className="h-px bg-gray-200 dark:bg-gray-700 flex-1"></div>
+                                <p className="text-text-secondary text-xs font-medium">OR LOGIN WITH</p>
+                                <div className="h-px bg-gray-200 dark:bg-gray-700 flex-1"></div>
+                            </div>
+                            <div className="flex gap-4">
+                                <button className="flex items-center justify-center w-14 h-14 rounded-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 hover:border-primary text-text-main dark:text-white transition-all shadow-sm">
+                                    <span className="material-symbols-outlined text-[28px]">face</span>
+                                </button>
+                                <button className="flex items-center justify-center w-14 h-14 rounded-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 hover:border-primary text-text-main dark:text-white transition-all shadow-sm">
+                                    <span className="material-symbols-outlined text-[28px]">fingerprint</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Dashboard (Solo Driver)
+        const Dashboard = () => {
+            return (
+                <div className="max-w-md mx-auto min-h-screen bg-background-light dark:bg-background-dark relative pb-24">
+                    <header className="bg-primary pt-12 pb-8 px-6 rounded-b-[2rem] shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 right-0 opacity-10 pointer-events-none transform translate-x-10 -translate-y-10">
+                            <span className="material-icons-round text-9xl text-black">hive</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-6 relative z-10">
+                            <div className="flex items-center space-x-3">
+                                <div className="relative">
+                                    <img alt="Profile" className="w-12 h-12 rounded-full border-2 border-white object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzdU9zq3OT3fdeAxbW-XRw7tpNP_IvyQDuSifP6KujiTv93rl43TgFfVWbTXIenqCaOOqrzp8uy5ySrSZjPhQ_igNVIie2-G1fP1CxBiY3ptMq-q-nCovF4f3DzwfXMijm4uWb-Lj--SV0JkJxBRxpF4La8i9yXZv3zZ5-WRQ9SC4Van8cJhXDE58U_Gby6bO20IX7eP9jLsZQBvBy1flmzisvfiBcEKGoAXpeB_OmHc6bAPpFCArHtd3qbtu7PLjKIm6Epeyioj6L"/>
+                                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-primary rounded-full"></div>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-800 uppercase tracking-wider opacity-80">Welcome back,</p>
+                                    <h1 className="text-xl font-bold text-black">John Bee</h1>
+                                </div>
+                            </div>
+                            <button className="p-2 bg-white/20 backdrop-blur-sm rounded-full text-black hover:bg-white/30 transition">
+                                <span className="material-icons-round">notifications_none</span>
+                            </button>
+                        </div>
+                        <div className="flex justify-between items-center bg-black/5 backdrop-blur-md rounded-xl p-1 pr-4 relative z-10">
+                            <div className="flex items-center">
+                                <div className="bg-white rounded-lg p-2 mr-3 shadow-sm">
+                                    <span className="material-icons-round text-primary text-xl">local_taxi</span>
+                                </div>
+                                <span className="font-bold text-black text-sm">Now Online</span>
+                            </div>
+                            <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                                <input type="checkbox" name="toggle" id="toggle" className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-300 appearance-none cursor-pointer transition-all duration-300 left-6 border-green-500 checked:bg-green-500" defaultChecked/>
+                            </div>
+                        </div>
+                    </header>
+                    <main className="px-5 -mt-6 relative z-20 space-y-6">
+                        <div className="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-md border border-gray-100 dark:border-gray-700">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Today's Earnings</p>
+                                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mt-1">$124.50</h2>
+                                </div>
+                                <div className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 py-1 rounded-lg text-xs font-bold flex items-center">
+                                    <span className="material-icons-round text-sm mr-1">trending_up</span> +12%
+                                </div>
+                            </div>
+                            <div className="h-1 w-full bg-gray-100 dark:bg-gray-700 rounded-full mt-3 overflow-hidden">
+                                <div className="h-full bg-primary w-3/4 rounded-full"></div>
+                            </div>
+                            <div className="flex justify-between mt-2 text-xs text-gray-400 dark:text-gray-500">
+                                <span>Goal: $160</span>
+                                <span>78%</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center mb-2 text-primary">
+                                    <span className="material-icons-round">schedule</span>
+                                </div>
+                                <p className="text-lg font-bold text-gray-900 dark:text-white">6.5h</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Online</p>
+                            </div>
+                            <div className="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 text-blue-500">
+                                    <span className="material-icons-round">directions_car</span>
+                                </div>
+                                <p className="text-lg font-bold text-gray-900 dark:text-white">12</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Trips</p>
+                            </div>
+                            <div className="bg-surface-light dark:bg-surface-dark p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center justify-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-2 text-purple-500">
+                                    <span className="material-icons-round">star</span>
+                                </div>
+                                <p className="text-lg font-bold text-gray-900 dark:text-white">4.9</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Rating</p>
+                            </div>
+                        </div>
+                        <Link to="/accept-booking" className="group bg-primary hover:bg-primary-dark transition-colors rounded-xl p-4 flex flex-col items-start relative overflow-hidden shadow-lg shadow-yellow-500/20 block">
+                            <div className="absolute right-0 top-0 opacity-10 transform translate-x-2 -translate-y-2">
+                                <span className="material-icons-round text-6xl text-black">bolt</span>
+                            </div>
+                            <div className="bg-black/10 rounded-lg p-2 mb-3">
+                                <span className="material-icons-round text-black">hail</span>
+                            </div>
+                            <span className="font-bold text-black text-lg">Accept Rides</span>
+                            <span className="text-xs text-black/70 mt-1">View nearby requests</span>
+                        </Link>
+                    </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        // 5. Accept Booking
+        const AcceptBooking = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark overflow-hidden">
+                     <div className="flex flex-col gap-2 p-4 pb-2 z-10">
+                        <div className="flex items-center h-12 justify-between">
+                            <button onClick={() => navigate(-1)} className="flex size-12 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+                                <span className="material-symbols-outlined text-[28px]">arrow_back</span>
+                            </button>
+                            <div className="flex items-center justify-end bg-surface-dark/5 dark:bg-white/10 px-3 py-1 rounded-full">
+                                <div className="size-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+                                <p className="text-text-secondary dark:text-primary text-sm font-bold tracking-wide uppercase">Online</p>
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-end">
+                            <p className="text-text-main dark:text-white tracking-tight text-[32px] font-bold leading-tight">New Request</p>
+                            <span className="material-symbols-outlined text-4xl text-primary animate-bounce">local_taxi</span>
+                        </div>
+                    </div>
+                    <div className="px-4 pb-2">
+                         <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-end">
+                                <p className="text-text-secondary text-sm font-medium">Auto-decline in <span className="text-text-main dark:text-white font-bold tabular-nums">15s</span></p>
+                            </div>
+                            <div className="h-2 w-full bg-[#e8e3ce] dark:bg-white/10 rounded-full overflow-hidden">
+                                <div className="h-full bg-primary rounded-full animate-[width_15s_linear_reverse]" style={{width: '75%'}}></div>
+                            </div>
+                        </div>
+                    </div>
+                     <div className="px-4 py-2 w-full">
+                        <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-card border border-white/50 dark:border-white/5 bg-gray-200">
+                             <div className="absolute inset-0 bg-center bg-cover" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCuVxn2_nPj9xwQ8AWRiHgQrCOTLyRV2ZsQcyuKTQ4cUcETZHCLt1sIbQIU9MPd2pxY6ny8HouhJcfFB4O7WB6fT_qa1Dr6SN99KFeURlxLlobDDbq2giSigTsmxulVNkQp728IpTARQ6kGZwVWYb3MWaudHfF53DQ65J3S1x_HHZDmZCONWGROhxB9cceyVHmdHeg7-GYB6sRWGNqKdrCh9Feir2I3RxTiCM-Ts4RIp5zJ4E057JhaERQ-ZYX1h-RhVwTEq2T-a3RF")'}}></div>
+                             <div className="absolute top-3 left-3 bg-surface-light dark:bg-surface-dark px-3 py-1.5 rounded-lg shadow-md flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary text-[20px]">schedule</span>
+                                <span className="text-xs font-bold">8 min away</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex-1 flex flex-col px-4 pt-2 pb-56 overflow-y-auto">
+                        <div className="flex flex-col items-center py-4">
+                            <h1 className="text-text-main dark:text-white tracking-tight text-[40px] font-bold leading-none">$24.00</h1>
+                            <p className="text-text-secondary text-sm font-medium mt-1">Estimated Fare • 4.2 mi total</p>
+                        </div>
+                        <div className="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-soft border border-gray-100 dark:border-white/5 mb-4">
+                            <div className="flex flex-col gap-6 relative">
+                                <div className="absolute left-[11px] top-8 bottom-8 w-0.5 border-l-2 border-dashed border-gray-300 dark:border-gray-600"></div>
+                                <div className="flex gap-4 items-start relative z-10">
+                                    <div className="mt-1 size-6 rounded-full border-4 border-black dark:border-primary bg-white shrink-0 shadow-sm"></div>
+                                    <div className="flex flex-col">
+                                        <p className="text-[10px] uppercase font-bold text-text-secondary tracking-wider mb-0.5">Pick Up</p>
+                                        <p className="text-text-main dark:text-white text-lg font-bold leading-tight">123 Honeycomb Ave</p>
+                                        <p className="text-text-secondary text-sm leading-normal">Manhattan, NY 10012</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-4 items-start relative z-10">
+                                    <div className="mt-1 size-6 flex items-center justify-center shrink-0">
+                                        <span className="material-symbols-outlined text-primary text-[28px] drop-shadow-sm -mt-1">location_on</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <p className="text-[10px] uppercase font-bold text-text-secondary tracking-wider mb-0.5">Drop Off</p>
+                                        <p className="text-text-main dark:text-white text-lg font-bold leading-tight">45 Hive Street</p>
+                                        <p className="text-text-secondary text-sm leading-normal">Brooklyn, NY 11201</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 flex-wrap mb-4">
+                            <div className="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-lg bg-surface-light border border-gray-200 dark:border-white/10 dark:bg-surface-dark pl-3 pr-4 shadow-sm">
+                                <span className="material-symbols-outlined text-text-main dark:text-white text-[18px]">payments</span>
+                                <p className="text-text-main dark:text-white text-xs font-bold">Cash Payment</p>
+                            </div>
+                            <div className="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-lg bg-surface-light border border-gray-200 dark:border-white/10 dark:bg-surface-dark pl-3 pr-4 shadow-sm">
+                                <span className="material-symbols-outlined text-text-main dark:text-white text-[18px]">pets</span>
+                                <p className="text-text-main dark:text-white text-xs font-bold">Pet Friendly</p>
+                            </div>
+                        </div>
+                    </div>
+                     <div className="fixed bottom-[80px] left-0 w-full max-w-md mx-auto bg-gradient-to-t from-background-light via-background-light to-transparent dark:from-background-dark dark:via-background-dark pt-8 pb-4 px-4 z-20">
+                        <div className="flex gap-3 h-14">
+                            <button onClick={() => navigate('/dashboard')} className="flex-1 rounded-xl border-2 border-gray-200 dark:border-white/20 bg-transparent text-text-main dark:text-white font-bold text-lg hover:bg-gray-100 dark:hover:bg-white/5 active:scale-95 transition-all duration-200">
+                                Decline
+                            </button>
+                            <button onClick={() => navigate('/in-ride')} className="flex-[2] rounded-xl bg-primary text-[#000000] font-bold text-lg shadow-[0_4px_14px_0_rgba(244,202,37,0.39)] hover:bg-primary-dark active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
+                                <span>Accept Ride</span>
+                                <span className="material-symbols-outlined text-[24px]">check_circle</span>
+                            </button>
+                        </div>
+                    </div>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        // 6. In-Ride Experience
+        const InRide = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="bg-background-light dark:bg-background-dark font-display antialiased overflow-hidden h-screen w-full relative">
+                     <div className="absolute inset-0 z-0 bg-cover bg-center" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBYcN43DpivuPnNJtCWCdPDbgebOwo8M-mutBFoaeMYEKPg621av5mqg3vOyXXsWRFNCgonxMZyJugTW3fVcorZuK1lVPDEakh2l8fzlxHcHLcUg0iJx_036NQvC450t_d18XyiUuqXKvZ-Jz-avWYQDoOoRue-K4PzRaxX2ejj5T073zeuTv__Mu3PrxGLi8vnqWehoSYdqG3n6t59T46sklSyGbANNWfTrxuzk-SLPl5k1BHEvOXqS_0UBPm1BJHC9OsjEkrJFflw")'}}>
+                         <div className="absolute inset-0 bg-surface-dark/60 backdrop-grayscale-[0.5]"></div>
+                     </div>
+                     <div className="relative z-10 w-full pt-12 px-4 pointer-events-none">
+                         <div className="pointer-events-auto flex items-stretch justify-between gap-4 rounded-xl bg-surface-dark border border-white/5 p-4 shadow-lg backdrop-blur-md">
+                            <div className="flex items-center justify-center bg-primary rounded-lg h-16 w-16 shrink-0 text-bee-black">
+                                <span className="material-symbols-outlined text-4xl font-bold">turn_right</span>
+                            </div>
+                            <div className="flex flex-col justify-center flex-1 min-w-0">
+                                <p className="text-white text-2xl font-bold leading-tight tracking-tight">200m</p>
+                                <p className="text-gray-300 text-lg font-medium leading-normal truncate">Turn right onto Main Street</p>
+                            </div>
+                             <div className="flex flex-col justify-center items-end shrink-0 pl-2 border-l border-white/10">
+                                <p className="text-primary text-xl font-bold">12:45</p>
+                                <p className="text-gray-400 text-xs uppercase tracking-wide">Arrival</p>
+                            </div>
+                        </div>
+                     </div>
+                     <div className="relative z-20 w-full mt-auto absolute bottom-0">
+                        <div className="w-full bg-surface-dark rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.4)] border-t border-white/5 pb-8 text-white">
+                             <div className="flex flex-col items-center pt-3 pb-1 w-full">
+                                <div className="h-1.5 w-12 rounded-full bg-white/20"></div>
+                            </div>
+                             <div className="px-5 pt-2 pb-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="relative">
+                                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-14 w-14 border-2 border-primary" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCcMUB29N3Yel6Hd6yI5Ahbjo6Vvg8gr8FTd_qUAfuA26e9WdJCnM0sIySkLxQwT7ftxqT9czqcL6Mg8E0MYUMkW-FGgv8kjc4VZqfOaWygd4UhwsuvorMeCxVGxxLcD2HQt5Y7byCoyaFtTf2Q62xzW1Gk0qP70Ggh8iCizCddEulhUH2T2c8maXOob68grPmSbBnRNAJJgN5aHTsy2-5kzj4gPuXRKGssQOPHV8qd4uEgKg9nBjZV_XBXCTFL9kWFn9sDm4wL9CYW")'}}></div>
+                                            <div className="absolute -bottom-1 -right-1 bg-surface-dark rounded-full p-0.5"><div className="bg-green-500 size-3 rounded-full border-2 border-surface-dark"></div></div>
+                                        </div>
+                                        <div className="flex flex-col justify-center">
+                                            <h3 className="text-white text-xl font-bold leading-none mb-1">Sarah M.</h3>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="flex items-center text-primary text-sm font-bold">4.8 <span className="material-symbols-outlined text-[14px] ml-0.5">star</span></span>
+                                                <span className="text-gray-500 text-xs">•</span>
+                                                <span className="text-gray-400 text-sm">Passenger</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <button className="flex size-11 items-center justify-center rounded-full bg-white/10 active:bg-primary/20 text-white active:text-primary transition-colors"><span className="material-symbols-outlined">chat</span></button>
+                                        <button className="flex size-11 items-center justify-center rounded-full bg-white/10 active:bg-primary/20 text-white active:text-primary transition-colors"><span className="material-symbols-outlined">call</span></button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="h-px bg-white/5 mx-5 mb-4"></div>
+                            <div className="px-5 mb-6">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex flex-col items-center gap-1 mt-1">
+                                        <div className="size-2 rounded-full bg-gray-500"></div>
+                                        <div className="w-0.5 h-8 bg-gradient-to-b from-gray-500 to-primary rounded-full"></div>
+                                        <span className="material-symbols-outlined text-primary text-xl">location_on</span>
+                                    </div>
+                                    <div className="flex-1 flex flex-col gap-4">
+                                        <div>
+                                            <div className="flex justify-between items-baseline">
+                                                <h2 className="text-2xl font-bold text-white tracking-tight">15 min</h2>
+                                                <span className="text-primary font-medium">4.2 km</span>
+                                            </div>
+                                            <p className="text-gray-300 text-base font-medium mt-0.5">123 Honeycomb Ave</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="px-5">
+                                <button onClick={() => navigate('/rate-rider')} className="group relative flex w-full items-center justify-between rounded-xl bg-primary py-4 px-2 overflow-hidden shadow-[0_0_15px_rgba(244,202,37,0.3)] active:shadow-none active:translate-y-0.5 transition-all">
+                                    <div className="absolute inset-0 opacity-10" style={{backgroundImage: "repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 0, transparent 50%)", backgroundSize: "10px 10px"}}></div>
+                                    <div className="flex size-12 items-center justify-center rounded-lg bg-surface-dark/20 text-surface-dark z-10 ml-2">
+                                        <span className="material-symbols-outlined">arrow_forward</span>
+                                    </div>
+                                    <span className="text-surface-dark text-lg font-bold tracking-wide uppercase z-10 flex-1 text-center pr-12">Slide to Drop Off</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+         // 7. Rate Rider
+         const RateRider = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="bg-background-light dark:bg-background-dark font-display antialiased min-h-screen flex flex-col items-center justify-center p-4">
+                    <div className="relative flex h-full min-h-screen w-full max-w-md flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl sm:h-[850px] sm:min-h-0 sm:rounded-[40px] sm:border-[8px] sm:border-gray-900">
+                        <div className="flex items-center justify-between p-4 pt-6 pb-2 sm:pt-8 bg-transparent z-10">
+                            <div onClick={() => navigate('/dashboard')} className="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer text-text-main dark:text-white">
+                                <span className="material-symbols-outlined text-[24px]">close</span>
+                            </div>
+                            <div className="flex-1"></div>
+                            <button onClick={() => navigate('/dashboard')} className="flex items-center justify-center rounded-full px-4 py-2 transition-colors hover:bg-black/5 dark:hover:bg-white/10">
+                                <p className="text-text-main dark:text-white text-base font-bold leading-normal">Skip</p>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-6 pb-24">
+                            <div className="flex flex-col items-center pt-2 pb-6">
+                                <h1 className="text-text-main dark:text-white text-3xl font-bold leading-tight text-center">How was your ride?</h1>
+                                <p className="text-text-secondary dark:text-gray-400 mt-2 text-center text-sm">Your feedback helps us improve.</p>
+                            </div>
+                            <div className="flex w-full flex-col gap-4 items-center mb-8">
+                                <div className="relative">
+                                    <div className="bg-center bg-no-repeat bg-cover rounded-full h-24 w-24 ring-4 ring-primary/20 dark:ring-primary/10 shadow-lg" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCcMUB29N3Yel6Hd6yI5Ahbjo6Vvg8gr8FTd_qUAfuA26e9WdJCnM0sIySkLxQwT7ftxqT9czqcL6Mg8E0MYUMkW-FGgv8kjc4VZqfOaWygd4UhwsuvorMeCxVGxxLcD2HQt5Y7byCoyaFtTf2Q62xzW1Gk0qP70Ggh8iCizCddEulhUH2T2c8maXOob68grPmSbBnRNAJJgN5aHTsy2-5kzj4gPuXRKGssQOPHV8qd4uEgKg9nBjZV_XBXCTFL9kWFn9sDm4wL9CYW")'}}></div>
+                                </div>
+                                <div className="flex flex-col items-center justify-center">
+                                    <p className="text-text-main dark:text-white text-xl font-bold leading-tight text-center">Sarah M.</p>
+                                    <p className="text-text-secondary dark:text-gray-400 text-sm font-medium mt-1 text-center">Passenger</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-col items-center mb-8">
+                                <div className="flex gap-2 sm:gap-4 justify-center">
+                                     {[1, 2, 3, 4, 5].map((star) => (
+                                        <button key={star} className="group transition-transform active:scale-90 focus:outline-none">
+                                            <span className={`material-symbols-outlined text-[40px] sm:text-[48px] drop-shadow-sm ${star <= 4 ? 'text-primary filled' : 'text-gray-300 dark:text-gray-600'}`}>star</span>
+                                        </button>
+                                     ))}
+                                </div>
+                                <p className="mt-3 text-primary font-bold text-lg">Great!</p>
+                            </div>
+                            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-background-light via-background-light to-transparent dark:from-background-dark dark:via-background-dark pt-8 pb-6 px-6">
+                                <button onClick={() => navigate('/dashboard')} className="flex w-full items-center justify-center rounded-xl bg-primary px-4 py-4 text-bee-black shadow-lg transition-transform active:scale-[0.98] hover:shadow-xl hover:bg-[#eac01e]">
+                                    <span className="text-base font-bold leading-normal">Submit Rating</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+         };
+
+        // 8. Missions
+        const Missions = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="relative mx-auto flex h-full min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-background-light dark:bg-background-dark shadow-xl pb-24">
+                     <div className="sticky top-0 z-50 flex items-center bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm p-4 pb-2 justify-between border-b border-[#e8e3ce] dark:border-[#3a3525]">
+                        <div onClick={() => navigate(-1)} className="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer">
+                            <span className="material-symbols-outlined text-[#1c190d] dark:text-white" style={{fontSize: "24px"}}>arrow_back</span>
+                        </div>
+                        <h2 className="text-[#1c190d] dark:text-white text-lg font-bold leading-tight flex-1 text-center">Weekly Missions</h2>
+                        <div className="flex w-10 items-center justify-end"></div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                        <div className="flex flex-wrap gap-3 mb-6">
+                            <div className="flex min-w-[100px] flex-1 basis-[fit-content] flex-col gap-1 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] bg-white dark:bg-[#2c281b] p-3 items-center text-center shadow-sm">
+                                <p className="text-[#1c190d] dark:text-white tracking-tight text-2xl font-bold leading-tight">$45.00</p>
+                                <div className="flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-primary text-sm">savings</span>
+                                    <p className="text-[#9c8c49] dark:text-[#c4b67a] text-xs font-medium leading-normal">Current Bonus</p>
+                                </div>
+                            </div>
+                            <div className="flex min-w-[100px] flex-1 basis-[fit-content] flex-col gap-1 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] bg-white dark:bg-[#2c281b] p-3 items-center text-center shadow-sm">
+                                <p className="text-[#1c190d] dark:text-white tracking-tight text-2xl font-bold leading-tight">3</p>
+                                <div className="flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-primary text-sm">bolt</span>
+                                    <p className="text-[#9c8c49] dark:text-[#c4b67a] text-xs font-medium leading-normal">Active Missions</p>
+                                </div>
+                            </div>
+                        </div>
+                         <h2 className="text-[#1c190d] dark:text-white text-xl font-bold leading-tight mb-3 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary">local_fire_department</span> Current Focus
+                        </h2>
+                         <div className="flex flex-col rounded-xl shadow-md bg-white dark:bg-[#2c281b] border border-[#e8e3ce] dark:border-[#3a3525] overflow-hidden mb-6">
+                             <div className="relative w-full h-40 bg-center bg-no-repeat bg-cover" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDrzYSGDeSQ88k3L4l1IHHbMMKprnJkbWaZ4258Q3DswFzgibXa49LqKxp5KGh1so74YkjI9rZVpYJC7M0TC7uzeIu18KjS6vxeDSXH0XWmLVqfBWx_Z9DdBvFk_kWRtYpNJ3fWBNVjXppQa4hfKyIam6LDtn8eJJBQ80D5bzfrRVt8jVM6z6JDOE7stxOt1uEZELPGgY2YvnDm-6Z9w68b8MYcN2mOsnWiBKB0euq4jqJZupCtbcFfuDjGP_FgUj4TBmcJabPpebdq")'}}>
+                                <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md rounded-lg px-2 py-1 flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-primary text-xs">timer</span>
+                                    <span className="text-white text-xs font-bold">Ends in 2 days</span>
+                                </div>
+                            </div>
+                             <div className="p-4 flex flex-col gap-3">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-[#1c190d] dark:text-white text-lg font-bold leading-tight">The Queen Bee Challenge</h3>
+                                        <p className="text-[#9c8c49] dark:text-[#c4b67a] text-sm mt-1">Complete 50 rides this week.</p>
+                                    </div>
+                                    <div className="bg-primary/20 dark:bg-primary/30 text-[#1c190d] dark:text-[#primary] px-3 py-1 rounded-lg">
+                                        <span className="font-bold text-sm">$100 Bonus</span>
+                                    </div>
+                                </div>
+                                 <div className="space-y-1">
+                                    <div className="flex justify-between text-xs font-medium text-[#1c190d] dark:text-[#c4b67a]">
+                                        <span>35 rides completed</span>
+                                        <span>50 rides goal</span>
+                                    </div>
+                                    <div className="w-full bg-[#f4f1e7] dark:bg-[#3d3828] rounded-full h-3">
+                                        <div className="bg-primary h-3 rounded-full relative" style={{width: '70%'}}></div>
+                                    </div>
+                                </div>
+                            </div>
+                         </div>
+                         <h2 className="text-[#1c190d] dark:text-white text-lg font-bold leading-tight mb-3">Other Missions</h2>
+                         <div className="flex flex-col gap-3">
+                            <div className="group flex flex-col bg-white dark:bg-[#2c281b] p-4 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-start gap-3">
+                                    <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                                        <span className="material-symbols-outlined text-primary-dark text-[#bca500]">wb_twilight</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h4 className="text-[#1c190d] dark:text-white font-bold truncate">Morning Rush Hour</h4>
+                                            <span className="bg-[#f4f1e7] dark:bg-[#3d3828] text-[#1c190d] dark:text-white text-xs font-bold px-2 py-1 rounded-md">+$15</span>
+                                        </div>
+                                        <p className="text-[#9c8c49] dark:text-[#c4b67a] text-sm text-xs line-clamp-2">Complete 3 rides between 6 AM - 9 AM.</p>
+                                    </div>
+                                </div>
+                            </div>
+                         </div>
+                    </div>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        // 9. Profile
+        const Profile = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark pb-24 shadow-2xl">
+                     <div className="flex items-center px-4 py-3 justify-between sticky top-0 z-10 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md">
+                        <h2 className="text-xl font-bold leading-tight tracking-tight flex-1 pl-2">My Profile</h2>
+                        <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => navigate('/support')} className="flex items-center justify-center rounded-full size-10 text-current hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+                                <span className="material-symbols-outlined">support_agent</span>
+                            </button>
+                        </div>
+                    </div>
+                     <div className="flex flex-col items-center pt-2 pb-6 px-4">
+                        <div className="relative mb-4">
+                            <div className="bg-center bg-no-repeat bg-cover rounded-full size-32 border-4 border-white dark:border-surface-dark shadow-lg" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuAJSaTybPLbdtdIWHBs_7HhbBVqLbbS1Dkq2qiZ5s2-nrxKZFYBl7-7wnB3CB3IkfhcWIfeX_v55WtrlNv2RUhyI8hoC365DN3wTsq92t1y-y4PUOxJOiYIrl6omGd-z0S-KQLD8GgPqJ92WGp7wy7wqxqm2piwHuib1Qu31m49WvyGa3hSYXYAETPHk50ya4_CzhD2HUQedNHTGWzfnL6q8q45eMG6fwEEEDQa05aGCwaJYXOvzMIz9vesEBxCFiYM8iI3MJTAM79t")'}}></div>
+                            <div className="absolute bottom-0 right-0 bg-primary text-black text-xs font-bold px-3 py-1 rounded-full border-2 border-white dark:border-surface-dark shadow-sm">SOLO</div>
+                        </div>
+                        <div className="text-center space-y-1">
+                            <h1 className="text-2xl font-bold tracking-tight">John "Buzz" Doe</h1>
+                            <p className="text-gray-500 dark:text-gray-400 font-medium">Member since 2023</p>
+                        </div>
+                    </div>
+                     <div className="grid grid-cols-2 gap-4 px-4 mb-6">
+                        <div className="flex flex-col gap-1 rounded-2xl p-4 bg-white dark:bg-surface-dark shadow-sm border border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-primary text-[28px]">star</span>
+                                <p className="text-2xl font-bold">4.9</p>
+                            </div>
+                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Driver Rating</p>
+                        </div>
+                         <div className="flex flex-col gap-1 rounded-2xl p-4 bg-white dark:bg-surface-dark shadow-sm border border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-primary text-[28px]">local_taxi</span>
+                                <p className="text-2xl font-bold">1,240</p>
+                            </div>
+                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Trips</p>
+                        </div>
+                    </div>
+                     <div className="mt-4">
+                        <h3 className="text-lg font-bold px-6 pb-2 pt-2">Personal Details</h3>
+                        <div className="bg-white dark:bg-surface-dark mx-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+                             <div className="flex items-center gap-4 px-4 py-4 border-b border-gray-100 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                <div className="flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 shrink-0 size-10">
+                                    <span className="material-symbols-outlined text-[20px]">call</span>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Phone Number</p>
+                                    <p className="text-base font-medium">+1 555-0123</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 px-4 py-4 border-b border-gray-100 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                <div className="flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 shrink-0 size-10">
+                                    <span className="material-symbols-outlined text-[20px]">mail</span>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Email</p>
+                                    <p className="text-base font-medium truncate">john.buzz.doe@bee.com</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        // 10. Earnings/Wallet
+        const Earnings = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="max-w-md mx-auto min-h-screen relative pb-24 bg-background-light dark:bg-background-dark overflow-hidden">
+                     <div className="sticky top-0 z-50 bg-background-light dark:bg-background-dark/95 backdrop-blur-md pt-12 pb-4 px-6 flex justify-between items-center border-b border-gray-100 dark:border-gray-800">
+                        <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                            <span className="material-icons-round text-2xl text-text-main dark:text-white">arrow_back</span>
+                        </button>
+                        <h1 className="text-lg font-semibold tracking-tight">My Earnings</h1>
+                        <button className="p-2 -mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                            <span className="material-icons-round text-2xl text-text-main dark:text-white">help_outline</span>
+                        </button>
+                    </div>
+                     <main className="px-6 pt-6">
+                         <div className="relative bg-primary rounded-2xl p-6 shadow-lg mb-8 overflow-hidden">
+                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/20 rounded-full blur-2xl"></div>
+                            <div className="absolute -left-4 -bottom-4 w-32 h-32 bg-yellow-600/10 rounded-full blur-2xl"></div>
+                            <div className="relative z-10">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-bee-black/70 font-medium text-sm">Available Balance</span>
+                                    <div className="w-8 h-8 bg-bee-black rounded-full flex items-center justify-center">
+                                        <span className="material-icons-round text-primary text-sm">local_taxi</span>
+                                    </div>
+                                </div>
+                                <h2 className="text-4xl font-bold text-bee-black mb-1">$1,248.50</h2>
+                                <div className="flex items-center text-bee-black/80 text-sm font-medium mb-6">
+                                    <span className="material-icons-round text-base mr-1">trending_up</span>
+                                    <span>+12% vs last week</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button className="flex items-center justify-center bg-bee-black text-white py-3 px-4 rounded-xl font-medium text-sm hover:bg-gray-900 transition-colors shadow-sm active:scale-95 transform transition-transform">
+                                        <span className="material-icons-round mr-2 text-lg">payments</span> Withdraw
+                                    </button>
+                                    <button className="flex items-center justify-center bg-white/30 backdrop-blur-sm text-bee-black border border-black/10 py-3 px-4 rounded-xl font-medium text-sm hover:bg-white/40 transition-colors active:scale-95 transform transition-transform">
+                                        <span className="material-icons-round mr-2 text-lg">history</span> History
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                         <div className="mb-8">
+                            <div className="flex justify-between items-end mb-4">
+                                <h3 className="font-bold text-lg">Weekly Overview</h3>
+                            </div>
+                             <div className="bg-white dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+                                <div className="flex items-end justify-between h-32 gap-2 mt-2">
+                                    {[40, 65, 30, 85, 50, 90, 20].map((h, i) => (
+                                        <div key={i} className="flex flex-col items-center gap-2 flex-1">
+                                            <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden">
+                                                <div className={`w-full rounded-t-lg transition-all duration-500 ${i===3 ? 'bg-primary' : 'bg-primary/40'}`} style={{height: `${h}%`}}></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                     </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+        
+        // 11. Support
+        const Support = () => {
+             const navigate = useNavigate();
+             return (
+                <div className="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto shadow-xl bg-background-light dark:bg-background-dark pb-24">
+                     <div className="flex items-center p-4 pb-2 justify-between sticky top-0 z-50 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm">
+                        <button onClick={() => navigate(-1)} className="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+                            <span className="material-symbols-outlined text-2xl">arrow_back</span>
+                        </button>
+                        <h2 className="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Support</h2>
+                        <div className="flex w-10 items-center justify-end"></div>
+                    </div>
+                     <div className="px-4 pt-4 pb-2">
+                        <h2 className="tracking-light text-[28px] font-bold leading-tight text-left">
+                            Hello Driver,<br/>
+                            <span className="text-text-secondary dark:text-text-secondary opacity-80">how can we help you?</span>
+                        </h2>
+                    </div>
+                    <div className="px-4 py-4">
+                        <div className="grid grid-cols-3 gap-3">
+                            <button className="group flex flex-col items-center justify-center gap-2 rounded-xl bg-primary p-4 shadow-sm transition-all hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
+                                <div className="flex size-10 items-center justify-center rounded-full bg-black/10 text-text-main group-hover:bg-black/20">
+                                    <span className="material-symbols-outlined text-2xl">call</span>
+                                </div>
+                                <span className="text-xs font-bold text-text-main">Call Us</span>
+                            </button>
+                            <button className="group flex flex-col items-center justify-center gap-2 rounded-xl bg-primary p-4 shadow-sm transition-all hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
+                                <div className="flex size-10 items-center justify-center rounded-full bg-black/10 text-text-main group-hover:bg-black/20">
+                                    <span className="material-symbols-outlined text-2xl">chat</span>
+                                </div>
+                                <span className="text-xs font-bold text-text-main">Live Chat</span>
+                            </button>
+                            <button className="group flex flex-col items-center justify-center gap-2 rounded-xl bg-primary p-4 shadow-sm transition-all hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
+                                <div className="flex size-10 items-center justify-center rounded-full bg-black/10 text-text-main group-hover:bg-black/20">
+                                    <span className="material-symbols-outlined text-2xl">mail</span>
+                                </div>
+                                <span className="text-xs font-bold text-text-main">Email</span>
+                            </button>
+                        </div>
+                    </div>
+                     <div className="flex flex-col gap-2">
+                        <h3 className="text-lg font-bold leading-tight tracking-[-0.015em] px-4">Common Questions</h3>
+                        <div className="flex flex-col px-4 gap-2">
+                             <details className="group rounded-xl bg-surface-light dark:bg-surface-dark shadow-sm [&_summary::-webkit-details-marker]:hidden border border-transparent dark:border-white/5">
+                                <summary className="flex cursor-pointer items-center justify-between gap-1.5 p-4 text-text-main dark:text-white">
+                                    <div className="flex items-center gap-3">
+                                        <span className="material-symbols-outlined text-text-secondary">account_balance_wallet</span>
+                                        <span className="font-medium">How do I track my earnings?</span>
+                                    </div>
+                                    <span className="shrink-0 transition duration-300 group-open:-rotate-180">
+                                        <span className="material-symbols-outlined">keyboard_arrow_down</span>
+                                    </span>
+                                </summary>
+                                <div className="px-4 pb-4 pt-0 text-sm leading-relaxed text-text-secondary dark:text-gray-400 ml-9">
+                                    Go to the "Earnings" tab in the bottom navigation.
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+             );
+        };
+
+
+        // --- App Wrapper ---
+        const App = () => {
+            return (
+                <MemoryRouter initialEntries={['/']}>
+                    <ThemeToggle />
+                    <Routes>
+                        <Route path="/" element={<SplashScreen />} />
+                        <Route path="/welcome" element={<WelcomeScreen />} />
+                        <Route path="/login" element={<LoginScreen />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/accept-booking" element={<AcceptBooking />} />
+                        <Route path="/in-ride" element={<InRide />} />
+                        <Route path="/rate-rider" element={<RateRider />} />
+                        <Route path="/missions" element={<Missions />} />
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/earnings" element={<Earnings />} />
+                        <Route path="/support" element={<Support />} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

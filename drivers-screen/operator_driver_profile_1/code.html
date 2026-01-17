@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Operator Driver Profile</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25", // Bee Yellow
+                        "primary-dark": "#e0b615",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#18181b",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#27272a",
+                        "text-main": "#1c190d",
+                        "text-secondary": "#6b6b6b",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>.no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased text-text-main dark:text-white">
+<div class="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto shadow-2xl bg-background-light dark:bg-background-dark pb-[88px]">
+<div class="relative bg-primary pb-8 rounded-b-[2rem] shadow-md z-10">
+<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(#000 1px, transparent 1px); background-size: 20px 20px;"></div>
+<div class="relative flex items-center p-4 justify-between">
+<button class="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-black hover:bg-white/30 transition-colors">
+<span class="material-symbols-outlined" style="font-size: 24px;">arrow_back</span>
+</button>
+<h2 class="text-black text-lg font-bold leading-tight tracking-tight">Driver Profile</h2>
+<button class="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-black hover:bg-white/30 transition-colors">
+<span class="material-symbols-outlined" style="font-size: 24px;">settings</span>
+</button>
+</div>
+<div class="flex flex-col items-center mt-2 px-4">
+<div class="relative mb-4">
+<div class="size-28 rounded-full border-4 border-white dark:border-surface-dark bg-gray-200 bg-center bg-cover shadow-lg" data-alt="Portrait of a smiling male driver" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB2C06Y3i-P26hPdLKtQWs3MaerTtMltHCb7ViUQ-teeMiGLfp7cDrr9d0spaAda88QhQ2fIvbJNe582JB2gQiipS91JoZgn121dIoSPDo-Pnqnj6WtLszuBL104zPYkOQyiVmYzzCWz0JzvWDyg1LQaj3fg3hZUR-NzhOn7UAtY-TAc8i2g2TAEh07by3nOYnxjqg5uHq03uIxsOEtEZ7QgKzuSaTt0oqeH8inHBSLwiab-iFmTcKx1Mjc7bUcVAhFbzn_17DYTAL7");'></div>
+<div class="absolute bottom-0 right-0 bg-green-500 border-2 border-white size-6 rounded-full" title="Online"></div>
+</div>
+<h1 class="text-black text-2xl font-bold leading-tight">John Doe</h1>
+<p class="text-black/70 text-sm font-medium mt-1">Driver ID: #8821</p>
+<div class="mt-3 flex items-center gap-2">
+<span class="inline-flex items-center gap-1 rounded-full bg-black/10 px-3 py-1 text-xs font-bold text-black border border-black/5">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+                        Active
+                    </span>
+<span class="inline-flex items-center gap-1 rounded-full bg-black px-3 py-1 text-xs font-bold text-primary shadow-sm">
+                        On Duty
+                    </span>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-6 p-5 -mt-2 z-0">
+<div class="flex flex-col gap-3">
+<h3 class="text-text-main dark:text-white text-lg font-bold px-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">domain</span>
+                    Operator Details
+                </h3>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="flex items-center justify-center rounded-lg bg-primary/20 text-primary-dark dark:text-primary shrink-0 size-12">
+<span class="material-symbols-outlined">local_shipping</span>
+</div>
+<div class="flex flex-col">
+<p class="text-text-main dark:text-white text-base font-bold">Hive Fleet Logistics</p>
+<p class="text-text-secondary dark:text-gray-400 text-xs font-medium">Managed By</p>
+</div>
+</div>
+<button class="size-10 flex items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200 transition-colors">
+<span class="material-symbols-outlined">call</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-3">
+<h3 class="text-text-main dark:text-white text-lg font-bold px-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">directions_car</span>
+                    Assigned Vehicle
+                </h3>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800">
+<div class="relative h-40 w-full bg-gray-100 dark:bg-gray-800">
+<div class="absolute inset-0 bg-center bg-cover" data-alt="Yellow taxi cab side view" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAbnATb_Ceu1DzF1fiMtQuL7QydjvBvVUAwy4ibsDIZsN9wiIyQkYEaBEdHT3H2G72f2Go-CqTPnnaPP_4UBhIki1UgvIL1TZQPjdF3tewUG_VfLjibdKXhg2-0w3XLqnLqYBX3g_86KA2wk0IAxv_c2GXJBkv0M1cSyODKcs43WvziTlijrPTKwWNSbz_Egjh4UO8OGMuSWLQqxjDQr3SORWgxjIqwKNWnHuni3TkAjbc6GAJA5DfqUDKHEP3wh7mvS6a_WqWijDPI");'></div>
+<div class="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded">
+                            Standard
+                        </div>
+</div>
+<div class="p-4 flex items-center justify-between">
+<div>
+<p class="text-text-main dark:text-white text-lg font-bold">Toyota Prius</p>
+<p class="text-text-secondary dark:text-gray-400 text-sm">Hybrid • 2022 Model</p>
+</div>
+<div class="flex flex-col items-end">
+<div class="bg-primary text-black font-mono font-bold px-3 py-1 rounded border-2 border-black text-sm shadow-sm">
+                                BEE-455
+                            </div>
+<span class="text-[10px] text-gray-400 mt-1 uppercase tracking-wider">Plate No.</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-3">
+<h3 class="text-text-main dark:text-white text-lg font-bold px-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">badge</span>
+                    Personal Information
+                </h3>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+<div class="flex items-center gap-4 p-4">
+<div class="text-gray-400 dark:text-gray-500">
+<span class="material-symbols-outlined">phone_iphone</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-text-secondary dark:text-gray-400 text-xs">Mobile Number</p>
+<p class="text-text-main dark:text-white text-sm font-medium">+1 (555) 000-8821</p>
+</div>
+<div class="text-primary">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4">
+<div class="text-gray-400 dark:text-gray-500">
+<span class="material-symbols-outlined">mail</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-text-secondary dark:text-gray-400 text-xs">Email Address</p>
+<p class="text-text-main dark:text-white text-sm font-medium">john.doe@hivefleet.com</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4">
+<div class="text-gray-400 dark:text-gray-500">
+<span class="material-symbols-outlined">id_card</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-text-secondary dark:text-gray-400 text-xs">License Number</p>
+<p class="text-text-main dark:text-white text-sm font-medium">D123-4567-8900</p>
+</div>
+<span class="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 text-[10px] font-bold px-2 py-0.5 rounded">Valid</span>
+</div>
+<div class="flex items-center gap-4 p-4">
+<div class="text-gray-400 dark:text-gray-500">
+<span class="material-symbols-outlined">star</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-text-secondary dark:text-gray-400 text-xs">Driver Rating</p>
+<div class="flex items-center gap-1">
+<span class="text-text-main dark:text-white text-sm font-bold">4.8</span>
+<div class="flex text-primary text-[12px]">
+<span class="material-symbols-outlined text-[14px] fill-current">star</span>
+<span class="material-symbols-outlined text-[14px] fill-current">star</span>
+<span class="material-symbols-outlined text-[14px] fill-current">star</span>
+<span class="material-symbols-outlined text-[14px] fill-current">star</span>
+<span class="material-symbols-outlined text-[14px] fill-current">star_half</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-4 mb-2">
+<button class="w-full bg-black/5 dark:bg-white/5 text-text-main dark:text-white hover:bg-black/10 transition-all h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-black/10 dark:border-white/10">
+<span class="material-symbols-outlined">support_agent</span>
+        Contact Dispatch Support
+    </button>
+</div>
+</div>
+<div class="fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 shadow-[0_-5px_10px_rgba(0,0,0,0.05)] pb-6 pt-3 px-6">
+<nav class="flex items-center justify-between">
+<a class="flex flex-col items-center gap-1 group text-text-secondary dark:text-gray-400 hover:text-black dark:hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform">dashboard</span>
+<span class="text-[10px] font-medium">Dashboard</span>
+</a>
+<a class="flex flex-col items-center gap-1 group text-text-secondary dark:text-gray-400 hover:text-black dark:hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform">confirmation_number</span>
+<span class="text-[10px] font-medium">Bookings</span>
+</a>
+<a class="flex flex-col items-center gap-1 group text-primary relative" href="#">
+<div class="absolute -top-10 bg-black text-primary p-2 rounded-full border-4 border-white dark:border-surface-dark shadow-lg">
+<span class="material-symbols-outlined text-2xl">person</span>
+</div>
+<span class="text-[10px] font-bold mt-3">Profile</span>
+</a>
+<a class="flex flex-col items-center gap-1 group text-text-secondary dark:text-gray-400 hover:text-black dark:hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform">history</span>
+<span class="text-[10px] font-medium">History</span>
+</a>
+</nav>
+</div>
+</div>
+</body></html>

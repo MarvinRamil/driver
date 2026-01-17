@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Solo Driver History</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "primary-content": "#423506",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#2d2a1d",
+                        "text-main": "#1c190d",
+                        "text-secondary": "#757060",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main dark:text-white transition-colors duration-200">
+<div class="relative flex h-full min-h-screen w-full flex-col max-w-md mx-auto shadow-2xl overflow-hidden bg-background-light dark:bg-background-dark">
+<header class="flex items-center px-4 pt-12 pb-4 justify-between bg-surface-light dark:bg-surface-dark sticky top-0 z-20 shadow-sm transition-colors duration-200">
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+<span class="material-symbols-outlined text-text-main dark:text-white">arrow_back</span>
+</button>
+<h2 class="text-lg font-bold leading-tight flex-1 text-center pr-10">Trip History</h2>
+</header>
+<div class="px-4 py-4">
+<div class="flex gap-3">
+<div class="flex flex-1 flex-col gap-1 rounded-xl bg-primary p-4 items-start shadow-md relative overflow-hidden group">
+<div class="absolute -right-4 -top-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">payments</span>
+</div>
+<p class="text-primary-content text-3xl font-bold leading-tight z-10">$1,240.50</p>
+<div class="flex items-center gap-1 z-10">
+<p class="text-primary-content/80 text-sm font-medium">October Earnings</p>
+</div>
+</div>
+<div class="flex flex-1 flex-col gap-1 rounded-xl bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 p-4 items-start shadow-sm justify-center">
+<p class="text-text-main dark:text-white text-3xl font-bold leading-tight">45</p>
+<p class="text-text-secondary dark:text-gray-400 text-sm font-medium">Total Trips</p>
+</div>
+</div>
+</div>
+<div class="px-4 pb-2 sticky top-[72px] z-10 bg-background-light dark:bg-background-dark pt-2 transition-colors duration-200">
+<label class="flex flex-col h-12 w-full">
+<div class="flex w-full flex-1 items-stretch rounded-xl h-full shadow-sm">
+<div class="text-text-secondary dark:text-gray-400 flex border-none bg-surface-light dark:bg-surface-dark items-center justify-center pl-4 rounded-l-xl">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-xl rounded-l-none text-text-main dark:text-white focus:outline-0 focus:ring-0 border-none bg-surface-light dark:bg-surface-dark h-full placeholder:text-text-secondary dark:placeholder:text-gray-500 px-4 pl-2 text-base font-normal leading-normal transition-colors duration-200" placeholder="Search location or passenger..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar scroll-smooth">
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-primary text-primary-content bg-primary/20 pl-4 pr-4 transition-all">
+<span class="text-sm font-medium leading-normal text-text-main dark:text-white">All</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 hover:border-primary transition-all">
+<span class="text-sm font-medium leading-normal text-text-main dark:text-white">This Week</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 hover:border-primary transition-all">
+<span class="text-sm font-medium leading-normal text-text-main dark:text-white">Last Month</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 hover:border-primary transition-all">
+<span class="text-sm font-medium leading-normal text-text-main dark:text-white">Canceled</span>
+</button>
+</div>
+<div class="flex-1 flex flex-col gap-4 p-4 pb-24">
+<p class="text-sm font-bold text-text-secondary dark:text-gray-400 uppercase tracking-wider ml-1 mb-[-8px]">Today</p>
+<div class="flex flex-col gap-3 rounded-xl bg-surface-light dark:bg-surface-dark p-4 shadow-sm border border-gray-100 dark:border-gray-800 transition-colors duration-200 cursor-pointer active:scale-[0.98] transform transition-transform">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Completed</span>
+<span class="text-xs text-text-secondary dark:text-gray-400">2:30 PM</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined filled text-primary text-[16px]">star</span>
+<span class="text-sm font-bold text-text-main dark:text-white">5.0</span>
+</div>
+</div>
+<div class="flex gap-4 items-center">
+<div class="flex flex-col items-center gap-1 pt-1 h-full">
+<div class="size-2.5 rounded-full bg-text-secondary dark:bg-gray-500"></div>
+<div class="w-0.5 h-6 bg-gray-200 dark:bg-gray-700 flex-1"></div>
+<div class="size-2.5 rounded-sm bg-primary"></div>
+</div>
+<div class="flex flex-1 flex-col gap-3">
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">Downtown Market</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">1200 Main St.</p>
+</div>
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">International Airport (Terminal 2)</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">Airport Blvd.</p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end justify-center self-center">
+<p class="text-lg font-bold text-text-main dark:text-white">$45.00</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-3 rounded-xl bg-surface-light dark:bg-surface-dark p-4 shadow-sm border border-gray-100 dark:border-gray-800 transition-colors duration-200 cursor-pointer active:scale-[0.98] transform transition-transform">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Completed</span>
+<span class="text-xs text-text-secondary dark:text-gray-400">1:15 PM</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined filled text-primary text-[16px]">star</span>
+<span class="text-sm font-bold text-text-main dark:text-white">4.8</span>
+</div>
+</div>
+<div class="flex gap-4 items-center">
+<div class="flex flex-col items-center gap-1 pt-1 h-full">
+<div class="size-2.5 rounded-full bg-text-secondary dark:bg-gray-500"></div>
+<div class="w-0.5 h-6 bg-gray-200 dark:bg-gray-700 flex-1"></div>
+<div class="size-2.5 rounded-sm bg-primary"></div>
+</div>
+<div class="flex flex-1 flex-col gap-3">
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">Grand Central Station</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">89 E 42nd St.</p>
+</div>
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">5th Ave Shopping District</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">685 5th Ave</p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end justify-center self-center">
+<p class="text-lg font-bold text-text-main dark:text-white">$12.50</p>
+</div>
+</div>
+</div>
+<p class="text-sm font-bold text-text-secondary dark:text-gray-400 uppercase tracking-wider ml-1 mt-2 mb-[-8px]">Yesterday</p>
+<div class="flex flex-col gap-3 rounded-xl bg-surface-light dark:bg-surface-dark p-4 shadow-sm border border-gray-100 dark:border-gray-800 transition-colors duration-200 cursor-pointer active:scale-[0.98] transform transition-transform">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Completed</span>
+<span class="text-xs text-text-secondary dark:text-gray-400">6:00 PM</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined filled text-primary text-[16px]">star</span>
+<span class="text-sm font-bold text-text-main dark:text-white">5.0</span>
+</div>
+</div>
+<div class="flex gap-4 items-center">
+<div class="flex flex-col items-center gap-1 pt-1 h-full">
+<div class="size-2.5 rounded-full bg-text-secondary dark:bg-gray-500"></div>
+<div class="w-0.5 h-6 bg-gray-200 dark:bg-gray-700 flex-1"></div>
+<div class="size-2.5 rounded-sm bg-primary"></div>
+</div>
+<div class="flex flex-1 flex-col gap-3">
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">Hotel Lux</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">450 Powell St.</p>
+</div>
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">Pier 39</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">The Embarcadero</p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end justify-center self-center">
+<p class="text-lg font-bold text-text-main dark:text-white">$22.00</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-3 rounded-xl bg-surface-light dark:bg-surface-dark p-4 shadow-sm border border-gray-100 dark:border-gray-800 transition-colors duration-200 opacity-70">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Canceled</span>
+<span class="text-xs text-text-secondary dark:text-gray-400">4:45 PM</span>
+</div>
+</div>
+<div class="flex gap-4 items-center">
+<div class="flex flex-col items-center gap-1 pt-1 h-full">
+<div class="size-2.5 rounded-full bg-text-secondary dark:bg-gray-500"></div>
+<div class="w-0.5 h-6 bg-gray-200 dark:bg-gray-700 flex-1"></div>
+<div class="size-2.5 rounded-sm bg-red-400 dark:bg-red-600"></div>
+</div>
+<div class="flex flex-1 flex-col gap-3">
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">Tech Park HQ</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">100 Innovation Way</p>
+</div>
+<div>
+<p class="text-sm font-medium text-text-main dark:text-white truncate">North Station</p>
+<p class="text-xs text-text-secondary dark:text-gray-500 truncate">Main Lobby</p>
+</div>
+</div>
+<div class="shrink-0 flex flex-col items-end justify-center self-center">
+<p class="text-lg font-bold text-text-secondary dark:text-gray-400 decoration-slice">$0.00</p>
+</div>
+</div>
+</div>
+</div>
+<div class="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 px-4 py-3 pb-6 max-w-md mx-auto">
+<button class="flex flex-col items-center gap-1 text-text-secondary dark:text-gray-500 hover:text-primary transition-colors min-w-[3.5rem]">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-text-secondary dark:text-gray-500 hover:text-primary transition-colors min-w-[3.5rem]">
+<span class="material-symbols-outlined">local_taxi</span>
+<span class="text-[10px] font-medium">Bookings</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-text-secondary dark:text-gray-500 hover:text-primary transition-colors min-w-[3.5rem]">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="text-[10px] font-medium">Wallet</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-text-secondary dark:text-gray-500 hover:text-primary transition-colors min-w-[3.5rem]">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-primary min-w-[3.5rem]">
+<span class="material-symbols-outlined filled">history</span>
+<span class="text-[10px] font-medium">History</span>
+</button>
+</div>
+</div>
+
+</body></html>

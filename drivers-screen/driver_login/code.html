@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Driver Login - Bee App</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "Noto Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700&amp;family=Spline+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        /* Custom scrollbar to keep it clean */
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-display antialiased">
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-background-light dark:bg-background-dark overflow-x-hidden">
+<!-- Header Image Area -->
+<div class="@container">
+<div class="@[480px]:px-4 @[480px]:py-3 pt-4">
+<div class="w-full bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-background-light dark:bg-background-dark @[480px]:rounded-lg min-h-[260px]" data-alt="Illustration of a happy delivery driver with a yellow bee theme in a city" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBGevbNa_Vnuocng-GYRDPl_XKL2NjqcKNZWT3RrRrBcIQbCCswMDTgzTEtVeIhuAaM3lSfSG5uWfu3_uM6hevD0Ifp_5O8K48gSkRWOHBVhFKUkJSO8HiroHYE6Je5Tpep2o65FOprcG0jnedCfwRn1S-4FZGx5qzYBWRaM_1SzJUe4xobQEmWBTErOfRgjn-XddWkTVByco_uG5gjs0NUeXIweQy_Y7G5RkGhyIPdIwxRZPJ368keHPS9wtAoDQekhWnZ4N3O0wdW");'>
+<!-- Gradient overlay for text readability if needed, though text is below -->
+<div class="w-full h-full bg-gradient-to-b from-transparent to-background-light/20 dark:to-background-dark/20"></div>
+</div>
+</div>
+</div>
+<!-- Headline -->
+<div class="px-4 pt-6 pb-2 text-center">
+<h1 class="text-[#1c190d] dark:text-[#fcfbf8] tracking-tight text-[32px] font-bold leading-tight">Welcome Back, Driver!</h1>
+<p class="text-[#9c8c49] dark:text-[#ccb865] text-sm font-medium mt-2">Log in to start your shift</p>
+</div>
+<!-- Login Form -->
+<div class="flex flex-col max-w-[480px] mx-auto w-full">
+<!-- Username Field -->
+<div class="flex flex-wrap items-end gap-4 px-4 py-3">
+<label class="flex flex-col min-w-40 flex-1">
+<p class="text-[#1c190d] dark:text-[#fcfbf8] text-base font-medium leading-normal pb-2">Username or Email</p>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#1c190d] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#e8e3ce] dark:border-[#443f2e] bg-white dark:bg-[#2e2a1b] focus:border-primary h-14 placeholder:text-[#9c8c49] dark:placeholder:text-[#7a6f4a] p-[15px] text-base font-normal leading-normal transition-all" placeholder="Enter your Username or Email" value=""/>
+</label>
+</div>
+<!-- Password Field -->
+<div class="flex flex-wrap items-end gap-4 px-4 py-3">
+<label class="flex flex-col min-w-40 flex-1">
+<p class="text-[#1c190d] dark:text-[#fcfbf8] text-base font-medium leading-normal pb-2">Password</p>
+<div class="flex w-full flex-1 items-stretch rounded-lg relative">
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#1c190d] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#e8e3ce] dark:border-[#443f2e] bg-white dark:bg-[#2e2a1b] focus:border-primary h-14 placeholder:text-[#9c8c49] dark:placeholder:text-[#7a6f4a] p-[15px] pr-12 text-base font-normal leading-normal transition-all" placeholder="Enter your Password" type="password" value=""/>
+<div class="absolute right-0 top-0 h-full flex items-center justify-center pr-[15px] cursor-pointer text-[#9c8c49] hover:text-primary transition-colors">
+<span class="material-symbols-outlined" style="font-size: 24px;">visibility</span>
+</div>
+</div>
+</label>
+</div>
+<!-- Forgot Password Link -->
+<div class="flex justify-end px-4 pt-1 pb-3">
+<a class="text-[#9c8c49] dark:text-[#ccb865] hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal" href="#">Forgot Password?</a>
+</div>
+<!-- Action Button -->
+<div class="px-4 py-3">
+<button class="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary hover:bg-yellow-400 text-[#1c190d] text-base font-bold leading-normal tracking-[0.015em] transition-colors shadow-sm">
+<span class="truncate">Log In</span>
+</button>
+</div>
+<!-- Biometrics & Divider -->
+<div class="flex flex-col items-center gap-4 px-4 py-4">
+<div class="flex items-center gap-3 w-full">
+<div class="h-px bg-[#e8e3ce] dark:bg-[#443f2e] flex-1"></div>
+<p class="text-[#9c8c49] dark:text-[#7a6f4a] text-xs font-medium">OR LOGIN WITH</p>
+<div class="h-px bg-[#e8e3ce] dark:bg-[#443f2e] flex-1"></div>
+</div>
+<div class="flex gap-4">
+<button class="flex items-center justify-center w-14 h-14 rounded-full bg-white dark:bg-[#2e2a1b] border border-[#e8e3ce] dark:border-[#443f2e] text-[#1c190d] dark:text-[#fcfbf8] hover:border-primary hover:text-primary transition-all shadow-sm">
+<span class="material-symbols-outlined text-[28px]">face</span> <!-- Face ID -->
+</button>
+<button class="flex items-center justify-center w-14 h-14 rounded-full bg-white dark:bg-[#2e2a1b] border border-[#e8e3ce] dark:border-[#443f2e] text-[#1c190d] dark:text-[#fcfbf8] hover:border-primary hover:text-primary transition-all shadow-sm">
+<span class="material-symbols-outlined text-[28px]">fingerprint</span> <!-- Touch ID -->
+</button>
+</div>
+</div>
+<!-- Footer Meta -->
+<div class="px-4 py-4 text-center mt-auto">
+<p class="text-[#9c8c49] dark:text-[#7a6f4a] text-sm font-normal leading-normal">
+                    Don't have an account? 
+                    <a class="text-[#1c190d] dark:text-[#fcfbf8] font-bold underline decoration-primary decoration-2 underline-offset-2 hover:text-primary transition-colors" href="#">Sign up</a>
+</p>
+</div>
+</div>
+<div class="h-5 bg-transparent"></div>
+</div>
+</body></html>

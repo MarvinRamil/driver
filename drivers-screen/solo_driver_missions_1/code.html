@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Solo Driver Missions</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for horizontal chips */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-[#1c190d] dark:text-[#fcfbf8]">
+<!-- Main Mobile Container -->
+<div class="relative mx-auto flex h-full min-h-screen w-full max-w-md flex-col overflow-x-hidden bg-background-light dark:bg-background-dark shadow-xl">
+<!-- Top App Bar -->
+<div class="sticky top-0 z-50 flex items-center bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm p-4 pb-2 justify-between border-b border-[#e8e3ce] dark:border-[#3a3525]">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer">
+<span class="material-symbols-outlined text-[#1c190d] dark:text-white" style="font-size: 24px;">arrow_back</span>
+</div>
+<h2 class="text-[#1c190d] dark:text-white text-lg font-bold leading-tight flex-1 text-center">Weekly Missions</h2>
+<div class="flex w-10 items-center justify-end">
+<span class="material-symbols-outlined text-[#9c8c49] dark:text-[#f4ca25] cursor-pointer" style="font-size: 24px;">help</span>
+</div>
+</div>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto pb-20">
+<!-- Profile Stats / Earnings Summary -->
+<div class="flex flex-wrap gap-3 px-4 py-4">
+<div class="flex min-w-[100px] flex-1 basis-[fit-content] flex-col gap-1 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] bg-white dark:bg-[#2c281b] p-3 items-center text-center shadow-sm">
+<p class="text-[#1c190d] dark:text-white tracking-tight text-2xl font-bold leading-tight">$45.00</p>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-primary text-sm">savings</span>
+<p class="text-[#9c8c49] dark:text-[#c4b67a] text-xs font-medium leading-normal">Current Bonus</p>
+</div>
+</div>
+<div class="flex min-w-[100px] flex-1 basis-[fit-content] flex-col gap-1 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] bg-white dark:bg-[#2c281b] p-3 items-center text-center shadow-sm">
+<p class="text-[#1c190d] dark:text-white tracking-tight text-2xl font-bold leading-tight">3</p>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-primary text-sm">bolt</span>
+<p class="text-[#9c8c49] dark:text-[#c4b67a] text-xs font-medium leading-normal">Active Missions</p>
+</div>
+</div>
+</div>
+<!-- Filter Chips -->
+<div class="flex gap-2 px-4 pb-2 overflow-x-auto hide-scrollbar">
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary text-[#1c190d] px-4 shadow-sm ring-2 ring-primary ring-offset-1 ring-offset-background-light dark:ring-offset-background-dark">
+<p class="text-sm font-bold leading-normal">Active</p>
+</button>
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-[#2c281b] border border-[#e8e3ce] dark:border-[#3a3525] px-4">
+<p class="text-[#1c190d] dark:text-[#c4b67a] text-sm font-medium leading-normal">Available</p>
+</button>
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-[#2c281b] border border-[#e8e3ce] dark:border-[#3a3525] px-4">
+<p class="text-[#1c190d] dark:text-[#c4b67a] text-sm font-medium leading-normal">Completed</p>
+</button>
+</div>
+<!-- Hero Card: Current Focus -->
+<div class="pt-4 px-4 pb-2">
+<h2 class="text-[#1c190d] dark:text-white text-xl font-bold leading-tight mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">local_fire_department</span>
+                    Current Focus
+                </h2>
+<div class="flex flex-col rounded-xl shadow-md bg-white dark:bg-[#2c281b] border border-[#e8e3ce] dark:border-[#3a3525] overflow-hidden">
+<div class="relative w-full h-40 bg-center bg-no-repeat bg-cover" data-alt="Abstract yellow hexagonal honeycomb pattern representing bee hive" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDrzYSGDeSQ88k3L4l1IHHbMMKprnJkbWaZ4258Q3DswFzgibXa49LqKxp5KGh1so74YkjI9rZVpYJC7M0TC7uzeIu18KjS6vxeDSXH0XWmLVqfBWx_Z9DdBvFk_kWRtYpNJ3fWBNVjXppQa4hfKyIam6LDtn8eJJBQ80D5bzfrRVt8jVM6z6JDOE7stxOt1uEZELPGgY2YvnDm-6Z9w68b8MYcN2mOsnWiBKB0euq4jqJZupCtbcFfuDjGP_FgUj4TBmcJabPpebdq");'>
+<div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md rounded-lg px-2 py-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-primary text-xs">timer</span>
+<span class="text-white text-xs font-bold">Ends in 2 days</span>
+</div>
+</div>
+<div class="p-4 flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="text-[#1c190d] dark:text-white text-lg font-bold leading-tight">The Queen Bee Challenge</h3>
+<p class="text-[#9c8c49] dark:text-[#c4b67a] text-sm mt-1">Complete 50 rides this week.</p>
+</div>
+<div class="bg-primary/20 dark:bg-primary/30 text-[#1c190d] dark:text-[#primary] px-3 py-1 rounded-lg">
+<span class="font-bold text-sm">$100 Bonus</span>
+</div>
+</div>
+<!-- Progress Bar -->
+<div class="space-y-1">
+<div class="flex justify-between text-xs font-medium text-[#1c190d] dark:text-[#c4b67a]">
+<span>35 rides completed</span>
+<span>50 rides goal</span>
+</div>
+<div class="w-full bg-[#f4f1e7] dark:bg-[#3d3828] rounded-full h-3">
+<div class="bg-primary h-3 rounded-full relative" style="width: 70%">
+<div class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-4 h-4 bg-white dark:bg-[#2c281b] border-2 border-primary rounded-full shadow-sm"></div>
+</div>
+</div>
+</div>
+<button class="mt-2 w-full flex items-center justify-center rounded-lg h-10 px-4 bg-primary hover:bg-[#e5bc20] text-[#1c190d] text-sm font-bold shadow-sm transition-colors">
+                            View Details
+                        </button>
+</div>
+</div>
+</div>
+<!-- List: Other Missions -->
+<div class="pt-4 px-4 pb-6">
+<h2 class="text-[#1c190d] dark:text-white text-lg font-bold leading-tight mb-3">Other Missions</h2>
+<div class="flex flex-col gap-3">
+<!-- Mission Card 1 -->
+<div class="group flex flex-col bg-white dark:bg-[#2c281b] p-4 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-3">
+<div class="size-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary-darker text-[#bca500]">wb_twilight</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-[#1c190d] dark:text-white font-bold truncate">Morning Rush Hour</h4>
+<span class="bg-[#f4f1e7] dark:bg-[#3d3828] text-[#1c190d] dark:text-white text-xs font-bold px-2 py-1 rounded-md">+$15</span>
+</div>
+<p class="text-[#9c8c49] dark:text-[#c4b67a] text-sm text-xs line-clamp-2">Complete 3 rides between 6 AM - 9 AM.</p>
+<div class="mt-3 flex items-center gap-3">
+<div class="flex-1 h-2 bg-[#f4f1e7] dark:bg-[#3d3828] rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 33%"></div>
+</div>
+<span class="text-xs font-bold text-[#1c190d] dark:text-[#c4b67a]">1/3</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Mission Card 2 -->
+<div class="group flex flex-col bg-white dark:bg-[#2c281b] p-4 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-3">
+<div class="size-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary-darker text-[#bca500]">verified_user</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-[#1c190d] dark:text-white font-bold truncate">5 Star Service</h4>
+<span class="bg-[#f4f1e7] dark:bg-[#3d3828] text-[#1c190d] dark:text-white text-xs font-bold px-2 py-1 rounded-md">+$10</span>
+</div>
+<p class="text-[#9c8c49] dark:text-[#c4b67a] text-sm text-xs line-clamp-2">Maintain a 5.0 rating for 10 consecutive rides.</p>
+<div class="mt-3 flex items-center gap-3">
+<div class="flex-1 h-2 bg-[#f4f1e7] dark:bg-[#3d3828] rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 80%"></div>
+</div>
+<span class="text-xs font-bold text-[#1c190d] dark:text-[#c4b67a]">8/10</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Mission Card 3 (Available) -->
+<div class="group flex flex-col bg-white dark:bg-[#2c281b] p-4 rounded-xl border border-[#e8e3ce] dark:border-[#3a3525] shadow-sm hover:shadow-md transition-shadow opacity-90">
+<div class="flex items-start gap-3">
+<div class="size-10 rounded-full bg-[#f4f1e7] dark:bg-[#3d3828] flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-gray-500 dark:text-gray-400">explore</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-[#1c190d] dark:text-white font-bold truncate">Airport Runner</h4>
+<span class="bg-[#f4f1e7] dark:bg-[#3d3828] text-[#1c190d] dark:text-white text-xs font-bold px-2 py-1 rounded-md">+$25</span>
+</div>
+<p class="text-[#9c8c49] dark:text-[#c4b67a] text-sm text-xs line-clamp-2">Complete 5 trips to or from the Airport zone.</p>
+<button class="mt-3 w-full py-1.5 border border-primary text-primary dark:text-primary hover:bg-primary/10 rounded-lg text-xs font-bold transition-colors">
+                                    Accept Mission
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Achievements / Badges Section -->
+<div class="px-4 pb-6">
+<div class="flex justify-between items-center mb-3">
+<h2 class="text-[#1c190d] dark:text-white text-lg font-bold leading-tight">Achievements</h2>
+<a class="text-primary text-sm font-bold" href="#">View All</a>
+</div>
+<div class="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
+<div class="flex flex-col items-center gap-2 min-w-[80px]">
+<div class="size-16 rounded-full bg-gradient-to-br from-yellow-100 to-primary flex items-center justify-center shadow-sm border-2 border-white dark:border-[#2c281b]">
+<span class="material-symbols-outlined text-[#1c190d] text-2xl">emoji_events</span>
+</div>
+<span class="text-xs font-medium text-center text-[#1c190d] dark:text-white">Busy Bee</span>
+</div>
+<div class="flex flex-col items-center gap-2 min-w-[80px]">
+<div class="size-16 rounded-full bg-[#f4f1e7] dark:bg-[#2c281b] flex items-center justify-center border-2 border-[#e8e3ce] dark:border-[#3a3525] grayscale opacity-60">
+<span class="material-symbols-outlined text-[#9c8c49] text-2xl">electric_bolt</span>
+</div>
+<span class="text-xs font-medium text-center text-[#9c8c49] dark:text-gray-500">Speedy</span>
+</div>
+<div class="flex flex-col items-center gap-2 min-w-[80px]">
+<div class="size-16 rounded-full bg-[#f4f1e7] dark:bg-[#2c281b] flex items-center justify-center border-2 border-[#e8e3ce] dark:border-[#3a3525] grayscale opacity-60">
+<span class="material-symbols-outlined text-[#9c8c49] text-2xl">local_gas_station</span>
+</div>
+<span class="text-xs font-medium text-center text-[#9c8c49] dark:text-gray-500">Eco Drive</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation -->
+<div class="fixed bottom-0 z-50 w-full max-w-md bg-white dark:bg-[#1a170d] border-t border-[#e8e3ce] dark:border-[#3a3525] pb-safe">
+<div class="flex items-center justify-around h-16">
+<button class="flex flex-col items-center justify-center w-full h-full text-[#9c8c49] dark:text-[#8a8a8a] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-2xl mb-1">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center w-full h-full text-primary dark:text-primary">
+<span class="material-symbols-outlined text-2xl mb-1 filled">target</span>
+<span class="text-[10px] font-bold">Missions</span>
+</button>
+<div class="relative -top-5 flex items-center justify-center">
+<button class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-[#1c190d] shadow-lg ring-4 ring-white dark:ring-[#1a170d]">
+<span class="material-symbols-outlined text-3xl">directions_car</span>
+</button>
+</div>
+<button class="flex flex-col items-center justify-center w-full h-full text-[#9c8c49] dark:text-[#8a8a8a] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-2xl mb-1">payments</span>
+<span class="text-[10px] font-medium">Earnings</span>
+</button>
+<button class="flex flex-col items-center justify-center w-full h-full text-[#9c8c49] dark:text-[#8a8a8a] hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-2xl mb-1">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Support Section - Bee Driver App</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "primary-dark": "#dcb210",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#2d291b",
+                        "text-main": "#1c190d",
+                        "text-secondary": "#9c8c49",
+                        "dark-text-main": "#fcfbf8",
+                        "dark-text-secondary": "#d1cba4",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main dark:text-dark-text-main transition-colors duration-200">
+<div class="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto shadow-xl bg-background-light dark:bg-background-dark">
+<!-- TopAppBar -->
+<div class="flex items-center p-4 pb-2 justify-between sticky top-0 z-50 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm">
+<button class="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+<span aria-label="Go back" class="material-symbols-outlined text-2xl">arrow_back</span>
+</button>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Support</h2>
+<div class="flex w-10 items-center justify-end">
+<button class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-primary bg-surface-light">
+<img alt="Driver profile picture" class="w-full h-full object-cover" data-alt="Close up portrait of a smiling man" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnSwYHvRT0eAiauDDIpelWnUJLZ7BIZkiaTFaDVnEstFeSlntQQzfP83Ib3qr5nmZJnAInAPanisn6zzAi074WS2AOrMx7PAeSHRPtkd63GT8OWDgv39fhtymheBnw4j126a0RVwa9TWsbRkbfUtx8y368h0zryYDSVu-plPXdW1q4wMilX_RCnrP2VT1_dN7GcvOCrV50qwU6NRExOS6HXeekteNfb_7MQJ7uQ6l818ZA9Z_bTQyCv8hhKwmFnp3bl3oHvJwC247K"/>
+</button>
+</div>
+</div>
+<!-- Greeting -->
+<div class="px-4 pt-4 pb-2">
+<h2 class="tracking-light text-[28px] font-bold leading-tight text-left">
+                Hello Driver,<br/>
+<span class="text-text-secondary dark:text-text-secondary opacity-80">how can we help you?</span>
+</h2>
+</div>
+<!-- Quick Contact Grid -->
+<div class="px-4 py-4">
+<div class="grid grid-cols-3 gap-3">
+<button class="group flex flex-col items-center justify-center gap-2 rounded-xl bg-primary p-4 shadow-sm transition-all hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
+<div class="flex size-10 items-center justify-center rounded-full bg-black/10 text-text-main group-hover:bg-black/20">
+<span class="material-symbols-outlined text-2xl">call</span>
+</div>
+<span class="text-xs font-bold text-text-main">Call Us</span>
+</button>
+<button class="group flex flex-col items-center justify-center gap-2 rounded-xl bg-primary p-4 shadow-sm transition-all hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
+<div class="flex size-10 items-center justify-center rounded-full bg-black/10 text-text-main group-hover:bg-black/20">
+<span class="material-symbols-outlined text-2xl">chat</span>
+</div>
+<span class="text-xs font-bold text-text-main">Live Chat</span>
+</button>
+<button class="group flex flex-col items-center justify-center gap-2 rounded-xl bg-primary p-4 shadow-sm transition-all hover:bg-primary-dark hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
+<div class="flex size-10 items-center justify-center rounded-full bg-black/10 text-text-main group-hover:bg-black/20">
+<span class="material-symbols-outlined text-2xl">mail</span>
+</div>
+<span class="text-xs font-bold text-text-main">Email</span>
+</button>
+</div>
+</div>
+<!-- Hours Action Panel -->
+<div class="px-4 pb-6">
+<div class="flex flex-col gap-4 rounded-xl border border-[#e8e3ce] dark:border-white/10 bg-surface-light dark:bg-surface-dark p-4 shadow-sm">
+<div class="flex items-start justify-between">
+<div class="flex gap-3">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary-dark dark:text-primary">
+<span class="material-symbols-outlined">schedule</span>
+</div>
+<div class="flex flex-col">
+<p class="text-base font-bold leading-tight">Support Hours</p>
+<p class="text-text-secondary dark:text-dark-text-secondary text-sm mt-1">
+                                Mon - Fri: 8:00 AM - 8:00 PM<br/>
+                                Sat - Sun: 9:00 AM - 5:00 PM
+                            </p>
+</div>
+</div>
+<span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400">
+                        Open Now
+                    </span>
+</div>
+</div>
+</div>
+<!-- Recent Tickets Section -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between px-4">
+<h3 class="text-lg font-bold leading-tight tracking-[-0.015em]">Recent Tickets</h3>
+<button class="text-sm font-bold text-primary-dark dark:text-primary">View All</button>
+</div>
+<div class="flex flex-col px-4 gap-3 pt-2">
+<!-- Ticket Item 1 -->
+<div class="flex items-center justify-between rounded-xl bg-surface-light dark:bg-surface-dark p-4 shadow-sm border border-transparent dark:border-white/5">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined">payments</span>
+</div>
+<div>
+<p class="font-bold text-sm">Payment Issue #4821</p>
+<p class="text-xs text-text-secondary dark:text-dark-text-secondary">Updated 2 hours ago</p>
+</div>
+</div>
+<span class="flex items-center gap-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2.5 py-1 text-xs font-medium text-yellow-700 dark:text-yellow-400">
+<span class="size-1.5 rounded-full bg-yellow-500"></span>
+                        Pending
+                    </span>
+</div>
+<!-- Ticket Item 2 -->
+<div class="flex items-center justify-between rounded-xl bg-surface-light dark:bg-surface-dark p-4 shadow-sm border border-transparent dark:border-white/5 opacity-80">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+<span class="material-symbols-outlined">car_repair</span>
+</div>
+<div>
+<p class="font-bold text-sm">Vehicle Inspection</p>
+<p class="text-xs text-text-secondary dark:text-dark-text-secondary">Closed yesterday</p>
+</div>
+</div>
+<span class="flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-1 text-xs font-medium text-green-700 dark:text-green-400">
+<span class="size-1.5 rounded-full bg-green-500"></span>
+                        Resolved
+                    </span>
+</div>
+</div>
+</div>
+<div class="h-6"></div>
+<!-- FAQ Section -->
+<div class="flex flex-col gap-2">
+<h3 class="text-lg font-bold leading-tight tracking-[-0.015em] px-4">Common Questions</h3>
+<div class="flex flex-col px-4 gap-2">
+<!-- FAQ Item 1 -->
+<details class="group rounded-xl bg-surface-light dark:bg-surface-dark shadow-sm [&amp;_summary::-webkit-details-marker]:hidden border border-transparent dark:border-white/5">
+<summary class="flex cursor-pointer items-center justify-between gap-1.5 p-4 text-text-main dark:text-dark-text-main">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-secondary">account_balance_wallet</span>
+<span class="font-medium">How do I track my earnings?</span>
+</div>
+<span class="shrink-0 transition duration-300 group-open:-rotate-180">
+<span class="material-symbols-outlined">keyboard_arrow_down</span>
+</span>
+</summary>
+<div class="px-4 pb-4 pt-0 text-sm leading-relaxed text-text-secondary dark:text-dark-text-secondary ml-9">
+                        Go to the "Earnings" tab in the bottom navigation. You can view daily, weekly, and monthly summaries of your trips and bonuses.
+                    </div>
+</details>
+<!-- FAQ Item 2 -->
+<details class="group rounded-xl bg-surface-light dark:bg-surface-dark shadow-sm [&amp;_summary::-webkit-details-marker]:hidden border border-transparent dark:border-white/5">
+<summary class="flex cursor-pointer items-center justify-between gap-1.5 p-4 text-text-main dark:text-dark-text-main">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-secondary">cancel</span>
+<span class="font-medium">What if a passenger cancels?</span>
+</div>
+<span class="shrink-0 transition duration-300 group-open:-rotate-180">
+<span class="material-symbols-outlined">keyboard_arrow_down</span>
+</span>
+</summary>
+<div class="px-4 pb-4 pt-0 text-sm leading-relaxed text-text-secondary dark:text-dark-text-secondary ml-9">
+                        If a passenger cancels more than 2 minutes after you accept the ride, you will receive a cancellation fee. This will appear in your earnings statement.
+                    </div>
+</details>
+<!-- FAQ Item 3 -->
+<details class="group rounded-xl bg-surface-light dark:bg-surface-dark shadow-sm [&amp;_summary::-webkit-details-marker]:hidden border border-transparent dark:border-white/5">
+<summary class="flex cursor-pointer items-center justify-between gap-1.5 p-4 text-text-main dark:text-dark-text-main">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-secondary">phonelink_setup</span>
+<span class="font-medium">App technical issues</span>
+</div>
+<span class="shrink-0 transition duration-300 group-open:-rotate-180">
+<span class="material-symbols-outlined">keyboard_arrow_down</span>
+</span>
+</summary>
+<div class="px-4 pb-4 pt-0 text-sm leading-relaxed text-text-secondary dark:text-dark-text-secondary ml-9">
+                        Try restarting the app first. If issues persist, check your internet connection or clear the app cache. You can also report a bug using the button below.
+                    </div>
+</details>
+</div>
+</div>
+<div class="h-8"></div>
+<!-- Report Issue Button -->
+<div class="px-4 pb-8 mt-auto">
+<button class="w-full relative flex items-center justify-center overflow-hidden rounded-xl h-14 bg-text-main dark:bg-primary text-white dark:text-text-main font-bold text-lg shadow-lg active:scale-[0.98] transition-transform">
+<span class="material-symbols-outlined mr-2">report_problem</span>
+                Report an Issue
+            </button>
+<p class="text-center text-xs text-text-secondary dark:text-dark-text-secondary mt-3">
+                Ticket response time is usually within 24 hours.
+            </p>
+</div>
+</div>
+</body></html>

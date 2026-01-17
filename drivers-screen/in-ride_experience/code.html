@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>In-Ride Experience - Bee Driver</title>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4ca25",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                        "surface-dark": "#2d291c",
+                        "surface-darker": "#1a1810",
+                    },
+                    fontFamily: {
+                        "display": ["Spline Sans", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "2xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar hide for cleaner look */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased overflow-hidden h-screen w-full select-none">
+<!-- Main Container -->
+<div class="relative flex h-full w-full flex-col">
+<!-- Map Layer (Background) -->
+<div class="absolute inset-0 z-0 bg-cover bg-center" data-alt="Dark mode city map with yellow navigation route" data-location="San Francisco" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBYcN43DpivuPnNJtCWCdPDbgebOwo8M-mutBFoaeMYEKPg621av5mqg3vOyXXsWRFNCgonxMZyJugTW3fVcorZuK1lVPDEakh2l8fzlxHcHLcUg0iJx_036NQvC450t_d18XyiUuqXKvZ-Jz-avWYQDoOoRue-K4PzRaxX2ejj5T073zeuTv__Mu3PrxGLi8vnqWehoSYdqG3n6t59T46sklSyGbANNWfTrxuzk-SLPl5k1BHEvOXqS_0UBPm1BJHC9OsjEkrJFflw");'>
+<!-- Gradient Overlay for better contrast -->
+<div class="absolute inset-0 bg-surface-darker/60 backdrop-grayscale-[0.5]"></div>
+<!-- Simulated Route Line (Visual representation on top of map image) -->
+<svg class="absolute top-0 left-0 w-full h-full pointer-events-none opacity-80" xmlns="http://www.w3.org/2000/svg">
+<path d="M180,600 C220,550 200,450 250,350 S350,250 320,150 L310,100" fill="none" stroke="#f4ca25" stroke-linecap="round" stroke-linejoin="round" stroke-width="6" style="filter: drop-shadow(0px 0px 8px rgba(244, 202, 37, 0.5));"></path>
+<circle cx="180" cy="600" fill="#f4ca25" r="8" stroke="white" stroke-width="3"></circle>
+</svg>
+</div>
+<!-- Top Navigation Instruction -->
+<div class="relative z-10 w-full pt-12 px-4 pointer-events-none">
+<div class="pointer-events-auto flex items-stretch justify-between gap-4 rounded-xl bg-surface-dark border border-white/5 p-4 shadow-lg backdrop-blur-md">
+<div class="flex items-center justify-center bg-primary rounded-lg h-16 w-16 shrink-0 text-surface-darker">
+<span class="material-symbols-outlined text-4xl font-bold">turn_right</span>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0">
+<p class="text-white text-2xl font-bold leading-tight tracking-tight">200m</p>
+<p class="text-gray-300 text-lg font-medium leading-normal truncate">Turn right onto Main Street</p>
+</div>
+<div class="flex flex-col justify-center items-end shrink-0 pl-2 border-l border-white/10">
+<p class="text-primary text-xl font-bold">12:45</p>
+<p class="text-gray-400 text-xs uppercase tracking-wide">Arrival</p>
+</div>
+</div>
+</div>
+<!-- Right Side Controls (Floating) -->
+<div class="relative z-10 flex-1 w-full px-4 py-4 pointer-events-none flex flex-col items-end justify-center gap-4">
+<!-- Safety Shield -->
+<button class="pointer-events-auto flex size-12 items-center justify-center rounded-full bg-surface-dark border border-red-500/30 text-red-500 shadow-lg active:scale-95 transition-transform">
+<span class="material-symbols-outlined filled">security</span>
+</button>
+<!-- Map Controls -->
+<div class="pointer-events-auto flex flex-col gap-px rounded-xl overflow-hidden shadow-lg border border-white/5 bg-surface-dark/90 backdrop-blur-sm">
+<button class="flex size-12 items-center justify-center bg-transparent active:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-white">add</span>
+</button>
+<div class="h-px w-full bg-white/10"></div>
+<button class="flex size-12 items-center justify-center bg-transparent active:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-white">remove</span>
+</button>
+</div>
+<!-- Recenter -->
+<button class="pointer-events-auto flex size-12 items-center justify-center rounded-xl bg-primary text-surface-darker shadow-lg active:scale-95 transition-transform">
+<span class="material-symbols-outlined">navigation</span>
+</button>
+</div>
+<!-- Bottom Sheet (Ride Details) -->
+<div class="relative z-20 w-full mt-auto">
+<div class="w-full bg-surface-dark rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.4)] border-t border-white/5 pb-8">
+<!-- Drag Handle -->
+<div class="flex flex-col items-center pt-3 pb-1 w-full">
+<div class="h-1.5 w-12 rounded-full bg-white/20"></div>
+</div>
+<!-- Passenger Info Header -->
+<div class="px-5 pt-2 pb-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="relative">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-14 w-14 border-2 border-primary" data-alt="Portrait of a smiling passenger" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCcMUB29N3Yel6Hd6yI5Ahbjo6Vvg8gr8FTd_qUAfuA26e9WdJCnM0sIySkLxQwT7ftxqT9czqcL6Mg8E0MYUMkW-FGgv8kjc4VZqfOaWygd4UhwsuvorMeCxVGxxLcD2HQt5Y7byCoyaFtTf2Q62xzW1Gk0qP70Ggh8iCizCddEulhUH2T2c8maXOob68grPmSbBnRNAJJgN5aHTsy2-5kzj4gPuXRKGssQOPHV8qd4uEgKg9nBjZV_XBXCTFL9kWFn9sDm4wL9CYW");'>
+</div>
+<div class="absolute -bottom-1 -right-1 bg-surface-dark rounded-full p-0.5">
+<div class="bg-green-500 size-3 rounded-full border-2 border-surface-dark"></div>
+</div>
+</div>
+<div class="flex flex-col justify-center">
+<h3 class="text-white text-xl font-bold leading-none mb-1">Sarah M.</h3>
+<div class="flex items-center gap-1.5">
+<span class="flex items-center text-primary text-sm font-bold">
+                                        4.8 <span class="material-symbols-outlined text-[14px] ml-0.5">star</span>
+</span>
+<span class="text-gray-500 text-xs">•</span>
+<span class="text-gray-400 text-sm">Passenger</span>
+</div>
+</div>
+</div>
+<!-- Communication Actions -->
+<div class="flex items-center gap-3">
+<button class="flex size-11 items-center justify-center rounded-full bg-white/10 active:bg-primary/20 text-white active:text-primary transition-colors">
+<span class="material-symbols-outlined">chat</span>
+</button>
+<button class="flex size-11 items-center justify-center rounded-full bg-white/10 active:bg-primary/20 text-white active:text-primary transition-colors">
+<span class="material-symbols-outlined">call</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Divider -->
+<div class="h-px bg-white/5 mx-5 mb-4"></div>
+<!-- Destination Details -->
+<div class="px-5 mb-6">
+<div class="flex items-start gap-3">
+<div class="flex flex-col items-center gap-1 mt-1">
+<div class="size-2 rounded-full bg-gray-500"></div>
+<div class="w-0.5 h-8 bg-gradient-to-b from-gray-500 to-primary rounded-full"></div>
+<span class="material-symbols-outlined text-primary text-xl">location_on</span>
+</div>
+<div class="flex-1 flex flex-col gap-4">
+<!-- Current Step (Hidden/Small) -->
+<div class="opacity-50">
+<p class="text-gray-400 text-sm line-clamp-1">Current: 5th Avenue</p>
+</div>
+<!-- Destination -->
+<div>
+<div class="flex justify-between items-baseline">
+<h2 class="text-2xl font-bold text-white tracking-tight">15 min</h2>
+<span class="text-primary font-medium">4.2 km</span>
+</div>
+<p class="text-gray-300 text-base font-medium mt-0.5">123 Honeycomb Ave</p>
+<p class="text-gray-500 text-sm">Near Central Park Entrance</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Primary Action Slider / Button -->
+<div class="px-5">
+<button class="group relative flex w-full items-center justify-between rounded-xl bg-primary py-4 px-2 overflow-hidden shadow-[0_0_15px_rgba(244,202,37,0.3)] active:shadow-none active:translate-y-0.5 transition-all">
+<!-- Background Pattern for texture -->
+<div class="absolute inset-0 opacity-10" style="background-image: repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 0, transparent 50%); background-size: 10px 10px;"></div>
+<div class="flex size-12 items-center justify-center rounded-lg bg-surface-darker/20 text-surface-darker z-10 ml-2">
+<span class="material-symbols-outlined">arrow_forward</span>
+</div>
+<span class="text-surface-darker text-lg font-bold tracking-wide uppercase z-10 flex-1 text-center pr-12">Slide to Drop Off</span>
+</button>
+</div>
+<!-- Secondary Menu / More -->
+<div class="absolute top-4 right-5">
+<button class="text-gray-400 hover:text-white p-2">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</body></html>

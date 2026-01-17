@@ -1,0 +1,149 @@
+import { useAuth } from '@/features/auth';
+import type { Booking } from '@/shared/types/booking';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { bookingService } from '../services/bookingService';
+import type { BookingFilter } from '../types';
+
+/**
+ * Return type for useBookings hook
+ */
+interface UseBookingsReturn {
+  /** Array of bookings (filtered client-side) */
+  bookings: Booking[];
+  /** All bookings from API (unfiltered) */
+  allBookings: Booking[];
+  /** Loading state */
+  isLoading: boolean;
+  /** Error message if any */
+  error: string | null;
+  /** Function to refresh bookings */
+  refresh: () => Promise<void>;
+  /** Function to set filter */
+  setFilter: (filter: BookingFilter) => void;
+  /** Current filter */
+  filter: BookingFilter;
+}
+
+/**
+ * Filter bookings by status (client-side filtering)
+ */
+function filterBookingsByStatus(
+  bookings: Booking[],
+  filter: BookingFilter
+): Booking[] {
+  if (filter === 'All') {
+    return bookings;
+  }
+
+  if (filter === 'Active') {
+    const activeStatuses = [
+      'Pending',
+      'Assigned',
+      'Broadcasting',
+      'Confirmed',
+      'Dispatched',
+      'InProgress',
+    ];
+    return bookings.filter((booking) => activeStatuses.includes(booking.status));
+  }
+
+  if (filter === 'Completed') {
+    return bookings.filter(
+      (booking) => booking.status === 'Completed' || booking.status === 'Cancelled'
+    );
+  }
+
+  return bookings;
+}
+
+/**
+ * Custom hook for fetching and managing bookings for drivers
+ * Automatically uses the correct endpoint based on user role:
+ * - Driver under operator: GET /api/dispatches/driver/{driverId}
+ * - Driver/Operator: GET /api/bookings
+ * @param initialFilter - Initial filter to apply (default: 'All')
+ * @returns Object containing bookings, loading state, error, and control functions
+ */
+export function useBookings(initialFilter: BookingFilter = 'All'): UseBookingsReturn {
+  const { user } = useAuth();
+  const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<BookingFilter>(initialFilter);
+
+  /**
+   * Fetch bookings from API
+   * Uses role-based endpoint selection
+   */
+  const fetchBookings = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await bookingService.getBookings(user);
+      
+      // Deduplicate bookings by ID to prevent duplicate key errors in React
+      // This can happen due to race conditions or API returning duplicates
+      const uniqueBookings = Array.from(
+        new Map(data.map((booking) => [booking.id, booking])).values()
+      );
+      
+      // Log if duplicates were found
+      if (data.length !== uniqueBookings.length) {
+        console.warn(
+          `[useBookings] Found ${data.length - uniqueBookings.length} duplicate bookings, deduplicated to ${uniqueBookings.length}`
+        );
+      }
+      
+      setAllBookings(uniqueBookings);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch bookings';
+      setError(errorMessage);
+      setAllBookings([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  /**
+   * Refresh bookings list
+   */
+  const refresh = useCallback(async () => {
+    await fetchBookings();
+  }, [fetchBookings]);
+
+  /**
+   * Update filter (client-side filtering)
+   */
+  const handleSetFilter = useCallback((newFilter: BookingFilter) => {
+    setFilter(newFilter);
+  }, []);
+
+  /**
+   * Apply client-side filtering based on current filter
+   */
+  const filteredBookings = useMemo(() => {
+    return filterBookingsByStatus(allBookings, filter);
+  }, [allBookings, filter]);
+
+  // Fetch bookings on mount and when user changes
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  return {
+    bookings: filteredBookings,
+    allBookings,
+    isLoading,
+    error,
+    refresh,
+    setFilter: handleSetFilter,
+    filter,
+  };
+}
+

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bee-Driver Rating</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f4ca25",
+            "primary-content": "#1c190d",
+            "background-light": "#f8f8f5",
+            "background-dark": "#221e10",
+            "surface-light": "#ffffff",
+            "surface-dark": "#2a2618",
+            "text-primary-light": "#1c190d",
+            "text-primary-dark": "#f4f1e7",
+            "text-secondary-light": "#757575",
+            "text-secondary-dark": "#a1a1aa",
+          },
+          fontFamily: {
+            "display": ["Spline Sans", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.375rem",
+            "md": "0.375rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "3xl": "1.5rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+<style>
+    /* Custom Scrollbar for cleaner look if needed */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #e5e5e5;
+      border-radius: 4px;
+    }
+    .dark ::-webkit-scrollbar-thumb {
+      background: #444;
+    }
+    .filled-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .unfilled-icon {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased min-h-screen flex flex-col items-center justify-center">
+<!-- Mobile Container Wrapper -->
+<div class="relative flex h-full min-h-screen w-full max-w-md flex-col overflow-hidden bg-background-light dark:bg-background-dark shadow-2xl sm:h-[850px] sm:min-h-0 sm:rounded-[40px] sm:border-[8px] sm:border-gray-900">
+<!-- Top App Bar -->
+<div class="flex items-center justify-between p-4 pt-6 pb-2 sm:pt-8 bg-transparent z-10">
+<div class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer text-text-primary-light dark:text-text-primary-dark">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</div>
+<!-- Spacer for centering title if needed, or keeping spacing -->
+<div class="flex-1"></div>
+<button class="flex items-center justify-center rounded-full px-4 py-2 transition-colors hover:bg-black/5 dark:hover:bg-white/10">
+<p class="text-text-primary-light dark:text-text-primary-dark text-base font-bold leading-normal">Skip</p>
+</button>
+</div>
+<!-- Main Content Scrollable Area -->
+<div class="flex-1 overflow-y-auto px-6 pb-24">
+<!-- Headline -->
+<div class="flex flex-col items-center pt-2 pb-6">
+<h1 class="text-text-primary-light dark:text-text-primary-dark text-3xl font-bold leading-tight text-center">How was your ride?</h1>
+<p class="text-text-secondary-light dark:text-text-secondary-dark mt-2 text-center text-sm">Your feedback helps us improve.</p>
+</div>
+<!-- Driver Profile -->
+<div class="flex w-full flex-col gap-4 items-center mb-8">
+<div class="relative">
+<div class="bg-center bg-no-repeat bg-cover rounded-full h-24 w-24 ring-4 ring-primary/20 dark:ring-primary/10 shadow-lg" data-alt="Portrait of a friendly smiling driver" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBeb5Mdut0fV4nWrxMvIibW-18rhMinqlliqxykORx6OO1JawL_1vuYKlQhLQFylwLyKabwFMuKA8zqhoVgZuvJrExm_KUiqECc7vzIIilN-C7NLKbZ5fPEUB3K8apOLfP8CFaAK94hwXpLtdmcSmNqpcs5g1ji2OJeBiDzjOfqYxLqSU8_XmsRqz79b8wD8Xh43pJtgSgWND9LLPk9BczurjOeUBO-aNW__iL4hjfX2EXWk9eS5IkrPx6FhIgdfAWt4j6ygFRQbtfV");'>
+</div>
+<div class="absolute -bottom-1 -right-1 bg-white dark:bg-surface-dark rounded-full p-1.5 shadow-sm border border-gray-100 dark:border-gray-800">
+<span class="material-symbols-outlined text-primary text-[18px] filled-icon">local_taxi</span>
+</div>
+</div>
+<div class="flex flex-col items-center justify-center">
+<p class="text-text-primary-light dark:text-text-primary-dark text-xl font-bold leading-tight text-center">John Doe</p>
+<p class="text-text-secondary-light dark:text-text-secondary-dark text-sm font-medium mt-1 text-center">Toyota Camry • ABC 123</p>
+</div>
+</div>
+<!-- Star Rating -->
+<div class="flex flex-col items-center mb-8">
+<div class="flex gap-2 sm:gap-4 justify-center">
+<!-- Star 1 (Filled) -->
+<button class="group transition-transform active:scale-90 focus:outline-none">
+<span class="material-symbols-outlined text-primary text-[40px] sm:text-[48px] filled-icon drop-shadow-sm">star</span>
+</button>
+<!-- Star 2 (Filled) -->
+<button class="group transition-transform active:scale-90 focus:outline-none">
+<span class="material-symbols-outlined text-primary text-[40px] sm:text-[48px] filled-icon drop-shadow-sm">star</span>
+</button>
+<!-- Star 3 (Filled) -->
+<button class="group transition-transform active:scale-90 focus:outline-none">
+<span class="material-symbols-outlined text-primary text-[40px] sm:text-[48px] filled-icon drop-shadow-sm">star</span>
+</button>
+<!-- Star 4 (Filled) -->
+<button class="group transition-transform active:scale-90 focus:outline-none">
+<span class="material-symbols-outlined text-primary text-[40px] sm:text-[48px] filled-icon drop-shadow-sm">star</span>
+</button>
+<!-- Star 5 (Unfilled) -->
+<button class="group transition-transform active:scale-90 focus:outline-none">
+<span class="material-symbols-outlined text-gray-300 dark:text-gray-600 text-[40px] sm:text-[48px] unfilled-icon hover:text-primary/50 transition-colors">star</span>
+</button>
+</div>
+<p class="mt-3 text-primary font-bold text-lg">Great!</p>
+</div>
+<!-- Quick Feedback Chips -->
+<div class="mb-8">
+<p class="text-text-secondary-light dark:text-text-secondary-dark text-xs font-bold uppercase tracking-wider mb-3 ml-1">What went well?</p>
+<div class="flex gap-3 flex-wrap">
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg border border-primary bg-primary/10 pl-4 pr-4 transition-all active:scale-95">
+<span class="text-primary-content dark:text-primary font-bold text-sm">Clean Car</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 shadow-sm transition-all active:scale-95 hover:border-primary/50">
+<span class="text-text-primary-light dark:text-text-primary-dark text-sm font-medium">Safe Driving</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 shadow-sm transition-all active:scale-95 hover:border-primary/50">
+<span class="text-text-primary-light dark:text-text-primary-dark text-sm font-medium">Great Chat</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 shadow-sm transition-all active:scale-95 hover:border-primary/50">
+<span class="text-text-primary-light dark:text-text-primary-dark text-sm font-medium">Good Music</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-4 pr-4 shadow-sm transition-all active:scale-95 hover:border-primary/50">
+<span class="text-text-primary-light dark:text-text-primary-dark text-sm font-medium">Navigation</span>
+</button>
+</div>
+</div>
+<!-- Comment Section -->
+<div class="w-full">
+<label class="sr-only" for="feedback">Additional comments</label>
+<div class="relative">
+<textarea class="block w-full rounded-xl border-0 bg-surface-light dark:bg-surface-dark py-3 pl-4 pr-10 text-text-primary-light dark:text-text-primary-dark shadow-sm ring-1 ring-inset ring-gray-200 dark:ring-gray-700 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 resize-none" id="feedback" name="feedback" placeholder="Tell us more about your trip..." rows="3"></textarea>
+<div class="pointer-events-none absolute right-3 top-3 text-gray-400">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Button -->
+<div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-background-light via-background-light to-transparent dark:from-background-dark dark:via-background-dark pt-8 pb-6 px-6">
+<button class="flex w-full items-center justify-center rounded-xl bg-primary px-4 py-4 text-primary-content shadow-lg transition-transform active:scale-[0.98] hover:shadow-xl hover:bg-[#eac01e]">
+<span class="text-base font-bold leading-normal">Submit Rating</span>
+</button>
+</div>
+</div>
+</body></html>

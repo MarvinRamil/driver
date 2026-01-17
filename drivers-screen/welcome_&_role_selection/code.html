@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bee Driver - Welcome</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Montserrat:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#FFD700", // Bright yellow from the image
+                        "primary-hover": "#E6C200",
+                        "accent-black": "#1A1A1A",
+                        "background-light": "#FFD700", // Full yellow background as requested
+                        "background-dark": "#1A1A1A", // Dark mode alternative
+                        "surface-light": "#FFFFFF",
+                        "surface-dark": "#2D2D2D",
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Montserrat', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        DEFAULT: "12px",
+                        'xl': "24px",
+                        '2xl': "32px",
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                },
+            },
+        };
+    </script>
+<style>.bottom-sheet-curve {
+            border-radius: 32px 32px 0 0;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen font-sans text-accent-black dark:text-white overflow-hidden relative transition-colors duration-300">
+<div class="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
+<svg height="100%" width="100%">
+<defs>
+<pattern height="100" id="honeycomb" patternUnits="userSpaceOnUse" width="56" x="0" y="0">
+<path d="M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 100" fill="none" stroke="currentColor" stroke-width="1"></path>
+</pattern>
+</defs>
+<rect fill="url(#honeycomb)" height="100%" width="100%"></rect>
+</svg>
+</div>
+<div class="relative z-10 h-screen flex flex-col justify-between max-w-md mx-auto">
+<div class="flex-1 flex flex-col items-center justify-center pt-12 pb-6 px-8 animate-float">
+<div class="w-40 h-40 relative mb-4">
+<svg class="w-full h-full drop-shadow-xl" fill="none" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<path class="dark:fill-gray-200 text-accent-black dark:text-white" d="M150 70C170 60 190 70 195 90C200 110 190 130 170 140C150 150 130 140 120 120" fill="white" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"></path>
+<path class="dark:fill-gray-200 text-accent-black dark:text-white" d="M50 70C30 60 10 70 5 90C0 110 10 130 30 140C50 150 70 140 80 120" fill="white" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"></path>
+<path class="text-accent-black dark:text-white" d="M85 60C80 40 85 20 95 25" stroke="currentColor" stroke-linecap="round" stroke-width="12"></path>
+<path class="text-accent-black dark:text-white" d="M115 60C120 40 115 20 105 25" stroke="currentColor" stroke-linecap="round" stroke-width="12"></path>
+<ellipse class="text-accent-black dark:text-white dark:fill-yellow-500" cx="100" cy="110" fill="#FFD700" rx="45" ry="55" stroke="currentColor" stroke-width="12"></ellipse>
+<path class="text-accent-black dark:text-white" d="M65 100H135" stroke="currentColor" stroke-linecap="round" stroke-width="12"></path>
+<path class="text-accent-black dark:text-white" d="M70 125H130" stroke="currentColor" stroke-linecap="round" stroke-width="12"></path>
+<circle class="text-accent-black dark:text-white dark:fill-yellow-500" cx="100" cy="65" fill="#FFD700" r="25" stroke="currentColor" stroke-width="12"></circle>
+<path class="text-accent-black dark:text-white" d="M100 165L110 190H90L100 165Z" fill="currentColor"></path>
+</svg>
+</div>
+<h1 class="text-4xl font-display font-black tracking-widest text-accent-black dark:text-white mt-2 drop-shadow-sm">BEE</h1>
+<p class="text-sm font-semibold tracking-wider uppercase mt-1 opacity-80 text-accent-black dark:text-gray-300">Driver App</p>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark bottom-sheet-curve px-8 pt-8 pb-12 w-full transition-transform duration-500 ease-out transform translate-y-0 shadow-2xl">
+<div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-8 opacity-50"></div>
+<div class="text-center mb-8">
+<h2 class="text-2xl font-bold text-accent-black dark:text-white mb-2">Get Started</h2>
+<p class="text-gray-500 dark:text-gray-400 text-sm">Choose your driver type to begin earning</p>
+</div>
+<div class="space-y-4">
+<button class="group w-full relative bg-white dark:bg-zinc-800 border-2 border-transparent hover:border-primary dark:hover:border-primary active:scale-[0.98] transition-all duration-200 rounded-2xl p-4 flex items-center shadow-sm hover:shadow-md">
+<div class="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center mr-4 group-hover:bg-primary group-hover:text-black transition-colors">
+<span class="material-icons-round text-yellow-600 dark:text-yellow-400 group-hover:text-black text-2xl">person</span>
+</div>
+<div class="flex-1 text-left">
+<h3 class="font-bold text-gray-900 dark:text-white">Solo Driver</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">I own my vehicle and drive independently</p>
+</div>
+<span class="material-icons-round text-gray-300 dark:text-gray-600 group-hover:text-primary transition-colors">chevron_right</span>
+</button>
+<button class="group w-full relative bg-white dark:bg-zinc-800 border-2 border-transparent hover:border-primary dark:hover:border-primary active:scale-[0.98] transition-all duration-200 rounded-2xl p-4 flex items-center shadow-sm hover:shadow-md">
+<div class="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center mr-4 group-hover:bg-primary group-hover:text-black transition-colors">
+<span class="material-icons-round text-yellow-600 dark:text-yellow-400 group-hover:text-black text-2xl">business_center</span>
+</div>
+<div class="flex-1 text-left">
+<h3 class="font-bold text-gray-900 dark:text-white">Driver under Operator</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">I drive for a fleet or company</p>
+</div>
+<span class="material-icons-round text-gray-300 dark:text-gray-600 group-hover:text-primary transition-colors">chevron_right</span>
+</button>
+</div>
+<div class="mt-8 text-center">
+<p class="text-gray-500 dark:text-gray-400 text-sm">
+                    Already have an account? 
+                    <a class="font-bold text-accent-black dark:text-primary hover:underline ml-1" href="#">Log In</a>
+</p>
+</div>
+</div>
+</div>
+<div class="absolute top-6 right-6 z-50">
+<button class="p-2 rounded-full bg-white/20 backdrop-blur-sm text-accent-black dark:text-white hover:bg-white/30 transition-colors" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-icons-round text-xl dark:hidden">dark_mode</span>
+<span class="material-icons-round text-xl hidden dark:block">light_mode</span>
+</button>
+</div>
+
+</body></html>

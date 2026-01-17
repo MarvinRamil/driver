@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "94811040896",
+    "project_id": "mybeeapp-f3911",
+    "storage_bucket": "mybeeapp-f3911.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:94811040896:android:4adb6b36230983b5fc0a65",
+        "android_client_info": {
+          "package_name": "com.mybee.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAKpth-RsiN0JRaGBT0IpqtmsFTEvudy4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:94811040896:android:da824a1c1da4a58ffc0a65",
+        "android_client_info": {
+          "package_name": "com.mybeeapp.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAKpth-RsiN0JRaGBT0IpqtmsFTEvudy4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

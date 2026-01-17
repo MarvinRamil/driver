@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Operator Driver Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#FFC800", // Bee Yellow
+                        "primary-dark": "#E6B400",
+                        "background-light": "#F9FAFB", // Light gray background
+                        "background-dark": "#121212", // Dark mode background
+                        "surface-light": "#FFFFFF",
+                        "surface-dark": "#1E1E1E",
+                        "text-light": "#1F2937",
+                        "text-dark": "#F3F4F6",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                        sans: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem",
+                        'xl': "1rem",
+                        '2xl': "1.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-sans min-h-screen text-text-light dark:text-text-dark antialiased pb-24">
+<header class="bg-primary pt-12 pb-8 px-6 rounded-b-[2rem] shadow-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 opacity-10 pointer-events-none transform translate-x-1/4 -translate-y-1/4">
+<span class="material-icons-round text-9xl text-black">hive</span>
+</div>
+<div class="flex justify-between items-center relative z-10">
+<div class="flex items-center space-x-3">
+<div class="w-12 h-12 bg-black rounded-full flex items-center justify-center border-2 border-white shadow-md">
+<span class="material-icons-round text-primary text-2xl">local_taxi</span>
+</div>
+<div>
+<p class="text-black text-sm font-semibold opacity-70">Welcome back,</p>
+<h1 class="text-black text-2xl font-bold leading-none">Driver Mike</h1>
+</div>
+</div>
+<button class="bg-black/10 hover:bg-black/20 p-2 rounded-full transition-colors relative">
+<span class="material-icons-round text-black">notifications</span>
+<span class="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-primary"></span>
+</button>
+</div>
+<div class="mt-8 grid grid-cols-2 gap-4">
+<div class="bg-black/5 backdrop-blur-sm rounded-xl p-4 border border-black/5">
+<div class="flex items-center space-x-2 mb-1">
+<span class="material-icons-round text-black text-lg">schedule</span>
+<span class="text-black text-sm font-medium opacity-80">Shift Time</span>
+</div>
+<p class="text-black text-2xl font-bold">4h 12m</p>
+</div>
+<div class="bg-black/5 backdrop-blur-sm rounded-xl p-4 border border-black/5">
+<div class="flex items-center space-x-2 mb-1">
+<span class="material-icons-round text-black text-lg">assignment_turned_in</span>
+<span class="text-black text-sm font-medium opacity-80">Completed</span>
+</div>
+<p class="text-black text-2xl font-bold">3 Jobs</p>
+</div>
+</div>
+</header>
+<main class="px-5 mt-6 space-y-6">
+<section>
+<div class="flex justify-between items-end mb-4">
+<h2 class="text-lg font-bold text-gray-900 dark:text-white">Assigned Bookings</h2>
+<span class="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-surface-dark px-2 py-1 rounded-lg">Today</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden mb-4">
+<div class="absolute top-0 left-0 w-1.5 h-full bg-primary"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center space-x-2">
+<span class="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wide">Active</span>
+<span class="text-xs text-gray-500 dark:text-gray-400 font-medium">#BK-9201</span>
+</div>
+<span class="text-sm font-bold text-gray-900 dark:text-white">$45.00</span>
+</div>
+<div class="flex flex-col space-y-4 relative">
+<div class="absolute left-[7px] top-2 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700 -z-10"></div>
+<div class="flex items-start space-x-3">
+<div class="w-4 h-4 rounded-full bg-white border-[3px] border-primary mt-1 shrink-0"></div>
+<div>
+<p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Pickup • 10:30 AM</p>
+<p class="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Terminal 3, JFK Airport</p>
+</div>
+</div>
+<div class="flex items-start space-x-3">
+<div class="w-4 h-4 rounded-full bg-primary mt-1 shrink-0"></div>
+<div>
+<p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Dropoff • Est. 11:15 AM</p>
+<p class="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Grand Hyatt, Manhattan</p>
+</div>
+</div>
+</div>
+<div class="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 flex gap-3">
+<button class="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-center gap-2">
+<span class="material-icons-round text-base">call</span> Call
+                    </button>
+<button class="flex-1 bg-black text-white hover:bg-gray-900 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-black/20 flex items-center justify-center gap-2">
+<span class="material-icons-round text-base text-primary">navigation</span> Navigate
+                    </button>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800 opacity-90">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center space-x-2">
+<span class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wide">Upcoming</span>
+<span class="text-xs text-gray-500 dark:text-gray-400 font-medium">#BK-9204</span>
+</div>
+<span class="text-sm font-bold text-gray-900 dark:text-white">$32.50</span>
+</div>
+<div class="flex items-center gap-3 mb-1">
+<span class="material-icons-round text-gray-400 text-lg">schedule</span>
+<p class="text-sm text-gray-900 dark:text-white font-medium">Today at 2:00 PM</p>
+</div>
+<div class="flex items-center gap-3">
+<span class="material-icons-round text-gray-400 text-lg">location_on</span>
+<p class="text-sm text-gray-500 dark:text-gray-400 truncate">124 W 57th St, New York</p>
+</div>
+</div>
+</section>
+<section>
+<h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Quick Access</h2>
+<div class="grid grid-cols-2 gap-4">
+<a class="group bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:border-primary/50 transition-all" href="#">
+<div class="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/20 flex items-center justify-center mb-3 group-hover:bg-primary transition-colors">
+<span class="material-icons-round text-primary-dark group-hover:text-black transition-colors">history</span>
+</div>
+<h3 class="font-bold text-gray-900 dark:text-white">Job History</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">View past 30 days</p>
+</a>
+<a class="group bg-surface-light dark:bg-surface-dark p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:border-primary/50 transition-all" href="#">
+<div class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-3 group-hover:bg-black transition-colors">
+<span class="material-icons-round text-gray-600 dark:text-gray-300 group-hover:text-primary transition-colors">person</span>
+</div>
+<h3 class="font-bold text-gray-900 dark:text-white">My Profile</h3>
+<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Manage details</p>
+</a>
+</div>
+</section>
+<div class="bg-gray-900 dark:bg-black rounded-xl p-4 flex items-start space-x-3 shadow-lg">
+<span class="material-icons-round text-primary text-xl mt-0.5">info</span>
+<div>
+<h4 class="text-white text-sm font-semibold">Message from Operator</h4>
+<p class="text-gray-400 text-xs mt-1 leading-relaxed">
+                    Vehicle maintenance is scheduled for all units this Saturday. Please ensure your logs are submitted by Friday 5PM.
+                </p>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 pb-6 pt-2 px-6 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-50">
+<div class="flex justify-between items-center max-w-md mx-auto">
+<a class="flex flex-col items-center p-2 text-primary" href="#">
+<span class="material-icons-round text-2xl">dashboard</span>
+<span class="text-[10px] font-medium mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition" href="#">
+<span class="material-icons-round text-2xl">format_list_bulleted</span>
+<span class="text-[10px] font-medium mt-1">Bookings</span>
+</a>
+<div class="relative -top-8">
+<button class="w-14 h-14 bg-primary rounded-full shadow-lg shadow-primary/40 flex items-center justify-center border-4 border-surface-light dark:border-surface-dark transform transition active:scale-95">
+<span class="material-icons-round text-black text-3xl">qr_code_scanner</span>
+</button>
+</div>
+<a class="flex flex-col items-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition" href="#">
+<span class="material-icons-round text-2xl">chat_bubble_outline</span>
+<span class="text-[10px] font-medium mt-1">Chat</span>
+</a>
+<a class="flex flex-col items-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition" href="#">
+<span class="material-icons-round text-2xl">settings</span>
+<span class="text-[10px] font-medium mt-1">Settings</span>
+</a>
+</div>
+</nav>
+<button class="fixed bottom-24 right-4 bg-gray-200 dark:bg-gray-800 p-2 rounded-full shadow-md z-40 opacity-50 hover:opacity-100 transition" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-icons-round text-gray-800 dark:text-gray-200 text-sm">brightness_4</span>
+</button>
+
+</body></html>

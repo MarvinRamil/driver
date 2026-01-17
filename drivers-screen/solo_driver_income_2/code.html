@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Solo Driver Income - Bee App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#FFD700", // Gold/Yellow from the bee theme
+                        "primary-dark": "#E6C200", // Slightly darker yellow for hover/active states
+                        "background-light": "#F9FAFB", // Light gray background
+                        "background-dark": "#18181B", // Dark zinc background
+                        "surface-light": "#FFFFFF",
+                        "surface-dark": "#27272A",
+                        "text-main-light": "#1F2937",
+                        "text-main-dark": "#F3F4F6",
+                        "text-sub-light": "#6B7280",
+                        "text-sub-dark": "#9CA3AF",
+                        "accent-black": "#000000", // Black for contrast against yellow
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "1rem",
+                        'xl': "1.5rem",
+                        '2xl': "2rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>.hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-sans text-text-main-light dark:text-text-main-dark transition-colors duration-200 antialiased pb-24">
+<div class="sticky top-0 z-50 bg-background-light dark:bg-background-dark/95 backdrop-blur-md pt-12 pb-4 px-6 flex justify-between items-center border-b border-gray-100 dark:border-gray-800">
+<button class="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+<span class="material-icons-round text-2xl text-text-main-light dark:text-text-main-dark">arrow_back</span>
+</button>
+<h1 class="text-lg font-semibold tracking-tight">My Earnings</h1>
+<button class="p-2 -mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+<span class="material-icons-round text-2xl text-text-main-light dark:text-text-main-dark">help_outline</span>
+</button>
+</div>
+<main class="px-6 pt-6">
+<div class="relative bg-primary rounded-2xl p-6 shadow-lg mb-8 overflow-hidden">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-white/20 rounded-full blur-2xl"></div>
+<div class="absolute -left-4 -bottom-4 w-32 h-32 bg-yellow-600/10 rounded-full blur-2xl"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-2">
+<span class="text-accent-black/70 font-medium text-sm">Available Balance</span>
+<div class="w-8 h-8 bg-black rounded-full flex items-center justify-center">
+<span class="material-icons-round text-primary text-sm">local_taxi</span>
+</div>
+</div>
+<h2 class="text-4xl font-bold text-accent-black mb-1">$1,248.50</h2>
+<div class="flex items-center text-accent-black/80 text-sm font-medium mb-6">
+<span class="material-icons-round text-base mr-1">trending_up</span>
+<span>+12% vs last week</span>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex items-center justify-center bg-black text-white py-3 px-4 rounded-xl font-medium text-sm hover:bg-gray-900 transition-colors shadow-sm active:scale-95 transform transition-transform">
+<span class="material-icons-round mr-2 text-lg">payments</span>
+                        Withdraw
+                    </button>
+<button class="flex items-center justify-center bg-white/30 backdrop-blur-sm text-accent-black border border-black/10 py-3 px-4 rounded-xl font-medium text-sm hover:bg-white/40 transition-colors active:scale-95 transform transition-transform">
+<span class="material-icons-round mr-2 text-lg">history</span>
+                        History
+                    </button>
+</div>
+</div>
+</div>
+<div class="mb-8">
+<div class="flex justify-between items-end mb-4">
+<h3 class="font-bold text-lg">Weekly Overview</h3>
+<div class="bg-gray-100 dark:bg-surface-dark rounded-lg p-1 flex text-xs font-medium">
+<button class="px-3 py-1 bg-white dark:bg-gray-600 rounded-md shadow-sm text-accent-black dark:text-white">Week</button>
+<button class="px-3 py-1 text-gray-500 dark:text-gray-400">Month</button>
+</div>
+</div>
+<div class="bg-white dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+<div class="flex items-end justify-between h-32 gap-2 mt-2">
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+<div class="w-full bg-primary/40 h-[40%] rounded-t-lg transition-all duration-500"></div>
+</div>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark font-medium">Mon</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+<div class="w-full bg-primary/60 h-[65%] rounded-t-lg transition-all duration-500"></div>
+</div>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark font-medium">Tue</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+<div class="w-full bg-primary/30 h-[30%] rounded-t-lg transition-all duration-500"></div>
+</div>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark font-medium">Wed</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden">
+<div class="w-full bg-primary h-[85%] rounded-t-lg shadow-[0_0_15px_rgba(255,215,0,0.5)] transition-all duration-500"></div>
+</div>
+<span class="text-xs text-accent-black dark:text-white font-bold">Thu</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+<div class="w-full bg-primary/50 h-[50%] rounded-t-lg transition-all duration-500"></div>
+</div>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark font-medium">Fri</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+<div class="w-full bg-primary/80 h-[90%] rounded-t-lg transition-all duration-500"></div>
+</div>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark font-medium">Sat</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+<div class="w-full bg-gray-100 dark:bg-gray-700 rounded-t-lg relative h-full flex items-end overflow-hidden group-hover:bg-gray-200 dark:group-hover:bg-gray-600 transition-colors">
+<div class="w-full bg-primary/20 h-[20%] rounded-t-lg transition-all duration-500"></div>
+</div>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark font-medium">Sun</span>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-between text-sm">
+<div>
+<p class="text-text-sub-light dark:text-text-sub-dark text-xs mb-1">Total Trips</p>
+<p class="font-bold text-lg">42</p>
+</div>
+<div class="text-right">
+<p class="text-text-sub-light dark:text-text-sub-dark text-xs mb-1">Online Hours</p>
+<p class="font-bold text-lg">34h 12m</p>
+</div>
+</div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-bold text-lg">Recent Trips</h3>
+<a class="text-primary dark:text-primary font-semibold text-sm hover:underline" href="#">See All</a>
+</div>
+<div class="space-y-3">
+<div class="bg-white dark:bg-surface-dark p-4 rounded-2xl flex items-center justify-between shadow-sm border border-gray-100 dark:border-gray-800">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-center text-primary">
+<span class="material-icons-round">person</span>
+</div>
+<div>
+<h4 class="font-semibold text-sm">Trip to Downtown</h4>
+<p class="text-xs text-text-sub-light dark:text-text-sub-dark mt-0.5">Today, 10:23 AM • 5.2 km</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold text-base text-green-600 dark:text-green-400">+$24.50</p>
+<p class="text-xs text-text-sub-light dark:text-text-sub-dark mt-0.5">Cash</p>
+</div>
+</div>
+<div class="bg-white dark:bg-surface-dark p-4 rounded-2xl flex items-center justify-between shadow-sm border border-gray-100 dark:border-gray-800">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-yellow-50 dark:bg-yellow-900/20 flex items-center justify-center text-primary">
+<span class="material-icons-round">credit_card</span>
+</div>
+<div>
+<h4 class="font-semibold text-sm">Trip to Airport</h4>
+<p class="text-xs text-text-sub-light dark:text-text-sub-dark mt-0.5">Yesterday, 4:15 PM • 18.4 km</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold text-base text-green-600 dark:text-green-400">+$62.00</p>
+<p class="text-xs text-text-sub-light dark:text-text-sub-dark mt-0.5">Card</p>
+</div>
+</div>
+<div class="bg-white dark:bg-surface-dark p-4 rounded-2xl flex items-center justify-between shadow-sm border border-gray-100 dark:border-gray-800">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-black">
+<span class="material-icons-round">emoji_events</span>
+</div>
+<div>
+<h4 class="font-semibold text-sm">Weekly Quest Bonus</h4>
+<p class="text-xs text-text-sub-light dark:text-text-sub-dark mt-0.5">Yesterday, 9:00 PM</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold text-base text-primary dark:text-primary">+$50.00</p>
+<p class="text-xs text-text-sub-light dark:text-text-sub-dark mt-0.5">Reward</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-8 mb-6">
+<h3 class="font-bold text-lg mb-4">Payment Method</h3>
+<div class="bg-gradient-to-r from-gray-900 to-gray-800 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-5 text-white flex items-center justify-between shadow-lg">
+<div class="flex items-center gap-4">
+<div class="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
+<img alt="Mastercard Logo" class="h-6 w-auto opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcmwWfKfndi7QrGKDs4Btq2N0iMEr-czTCIR5QEKZeqi5xGpcge6KgfwNZVpxOGSov6o91eCdaFtnmeh6WEIgvlKkk7DMlAXTkiUO2NenL0icL93VJmowI9F6WH-2tpbXhCF2VJkpk9TBsSIh7tJprft-52v8deEnAs0byfWFmlrshwBPleDExgg4GVU4fD4khiddGKOOjWMNA8JrCf93SrNUGgSDFvVCMRY2bb7Y3cVpLQDiH9MD-H4X2heEVE7JAaBmab6wcmvDq"/>
+</div>
+<div>
+<p class="font-medium text-sm">Mastercard **** 4829</p>
+<p class="text-xs text-gray-400">Primary Payout Method</p>
+</div>
+</div>
+<button class="text-gray-400 hover:text-white transition-colors">
+<span class="material-icons-round">edit</span>
+</button>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 w-full bg-surface-light dark:bg-surface-dark border-t border-gray-100 dark:border-gray-800 pb-safe-area-inset-bottom z-50">
+<div class="flex justify-around items-center h-16 px-2">
+<a class="flex flex-col items-center justify-center w-full h-full text-text-sub-light dark:text-text-sub-dark hover:text-primary transition-colors" href="#">
+<span class="material-icons-round text-2xl">home</span>
+<span class="text-[10px] font-medium mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-primary" href="#">
+<span class="material-icons-round text-2xl">account_balance_wallet</span>
+<span class="text-[10px] font-medium mt-1">Income</span>
+</a>
+<div class="relative -top-6">
+<button class="w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/40 transform transition hover:scale-105 active:scale-95 text-accent-black">
+<span class="material-icons-round text-3xl">local_taxi</span>
+</button>
+</div>
+<a class="flex flex-col items-center justify-center w-full h-full text-text-sub-light dark:text-text-sub-dark hover:text-primary transition-colors" href="#">
+<span class="material-icons-round text-2xl">bar_chart</span>
+<span class="text-[10px] font-medium mt-1">Stats</span>
+</a>
+<a class="flex flex-col items-center justify-center w-full h-full text-text-sub-light dark:text-text-sub-dark hover:text-primary transition-colors" href="#">
+<span class="material-icons-round text-2xl">person</span>
+<span class="text-[10px] font-medium mt-1">Profile</span>
+</a>
+</div>
+<div class="h-6 bg-surface-light dark:bg-surface-dark"></div>
+</nav>
+
+</body></html>
