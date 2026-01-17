@@ -5,7 +5,7 @@ build_android:
   stage: build
   tags:
     - android
-    - docker
+    - shel
   image: mingc/android-build-box:latest
   before_script:
     - node --version
