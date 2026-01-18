@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/adaptive-icon.png",
     "scheme": "beedriversapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"

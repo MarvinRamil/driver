@@ -15,10 +15,12 @@ build_android:
     - cd android
     - chmod +x gradlew
     - ./gradlew assembleRelease --no-daemon
-    - BUILD_NUM=${CI_PIPELINE_IID:-1}
-    - mv app/build/outputs/apk/release/app-release.apk \
-         app/build/outputs/apk/release/app-release[${BUILD_NUM}].apk
+    - |
+      BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
+      BUILD_NUM=${CI_PIPELINE_IID:-1}
+      mv app/build/outputs/apk/release/app-release.apk \
+         app/build/outputs/apk/release/app-release-[${BRANCH_NAME}_v${BUILD_NUM}].apk
   artifacts:
     paths:
-      - android/app/build/outputs/apk/release/app-release[*.apk
+      - android/app/build/outputs/apk/release/app-release-\[*\].apk
     expire_in: 7 days

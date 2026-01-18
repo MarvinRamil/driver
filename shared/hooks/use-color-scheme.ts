@@ -1,6 +1,8 @@
 /**
  * Hook to get the current color scheme (light/dark mode)
- * Re-exports React Native's useColorScheme hook
+ * Always returns 'light' to disable dark mode
  */
-export { useColorScheme } from 'react-native';
+export function useColorScheme(): 'light' {
+  return 'light';
+}
 
