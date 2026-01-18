@@ -1,0 +1,24 @@
+stages:
+  - build
+
+build_android:
+  stage: build
+  tags:
+    - android
+  image: mingc/android-build-box:latest
+  before_script:
+    - node --version
+    - java -version
+    - npm ci
+  script:
+    - npx expo prebuild --platform android
+    - cd android
+    - chmod +x gradlew
+    - ./gradlew assembleRelease --no-daemon
+    - BUILD_NUM=${CI_PIPELINE_IID:-1}
+    - mv app/build/outputs/apk/release/app-release.apk \
+         app/build/outputs/apk/release/app-release[${BUILD_NUM}].apk
+  artifacts:
+    paths:
+      - android/app/build/outputs/apk/release/app-release[*.apk
+    expire_in: 7 days
