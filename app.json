@@ -18,6 +18,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "userInterfaceStyle": "light",
       "infoPlist": {
         "NSUserNotificationsUsageDescription": "We need to send you notifications about new booking offers and dispatch updates.",
         "NSLocationWhenInUseUsageDescription": "We need your location to track your position during deliveries and provide real-time updates.",
@@ -29,6 +30,7 @@
       "bundleIdentifier": "com.mybeeapp.driver"
     },
     "android": {
+      "userInterfaceStyle": "light",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FFD700"
