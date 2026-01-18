@@ -1,15 +1,53 @@
 stages:
+  - lint
   - build
 
+# Lint job - runs before build
+lint:
+  stage: lint
+  tags:
+    - android
+  image: mingc/android-build-box:latest
+  only:
+    - main
+    - master
+    - dev
+    - features
+  before_script:
+    - node --version
+    - npm ci
+    # Verify babel-plugin-module-resolver is installed, install if missing
+    - |
+      if ! npm list babel-plugin-module-resolver > /dev/null 2>&1; then
+        echo "babel-plugin-module-resolver not found, installing..."
+        npm install babel-plugin-module-resolver --save-dev
+      fi
+  script:
+    - echo "Running TypeScript type checking..."
+    - npx tsc --noEmit
+    - echo "Linting passed!"
+
+# Build job - only runs on allowed branches
 build_android:
   stage: build
   tags:
     - android
   image: mingc/android-build-box:latest
+  only:
+    - main
+    - master
+    - dev
+    - features
   before_script:
     - node --version
     - java -version
     - npm ci
+    # Verify babel-plugin-module-resolver is installed, install if missing
+    - |
+      if ! npm list babel-plugin-module-resolver > /dev/null 2>&1; then
+        echo "babel-plugin-module-resolver not found, installing..."
+        npm install babel-plugin-module-resolver --save-dev
+      fi
   script:
     - npx expo prebuild --platform android
     - cd android
@@ -18,9 +56,23 @@ build_android:
     - |
       BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
       BUILD_NUM=${CI_PIPELINE_IID:-1}
-      mv app/build/outputs/apk/release/app-release.apk \
-         app/build/outputs/apk/release/app-release-[${BRANCH_NAME}_v${BUILD_NUM}].apk
+      
+      # Rename APK based on branch
+      if [ "$BRANCH_NAME" = "features" ]; then
+        mv app/build/outputs/apk/release/app-release.apk \
+           app/build/outputs/apk/release/app-release-test_v${BUILD_NUM}.apk
+      elif [ "$BRANCH_NAME" = "dev" ]; then
+        mv app/build/outputs/apk/release/app-release.apk \
+           app/build/outputs/apk/release/app-release-staging_v${BUILD_NUM}.apk
+      elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        # Keep default name for main/master
+        echo "Keeping default app-release.apk name for $BRANCH_NAME branch"
+      else
+        # Fallback for any other allowed branch
+        mv app/build/outputs/apk/release/app-release.apk \
+           app/build/outputs/apk/release/app-release-${BRANCH_NAME}_v${BUILD_NUM}.apk
+      fi
   artifacts:
     paths:
-      - android/app/build/outputs/apk/release/app-release-\[*\].apk
+      - android/app/build/outputs/apk/release/app-release*.apk
     expire_in: 7 days
