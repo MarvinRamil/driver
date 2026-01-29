@@ -10,6 +10,8 @@ import { useDriverStatusContext } from '@/features/driver/context/DriverStatusCo
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
+import { biometricAuth } from '@/shared/services/biometricAuth';
+import { biometricStorage } from '@/shared/services/biometricStorage';
 
 /**
  * Profile screen
@@ -39,8 +41,56 @@ export default function ProfileScreen() {
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricType, setBiometricType] = useState<string>('Biometric');
+  const [isCheckingBiometric, setIsCheckingBiometric] = useState(true);
 
   const isSoloDriver = user?.isSoloDriver || false;
+
+  // Check biometric status on mount
+  React.useEffect(() => {
+    const checkBiometric = async () => {
+      try {
+        const available = await biometricAuth.isAvailable();
+        const hasCredentials = await biometricStorage.hasStoredCredentials();
+        const type = await biometricAuth.getBiometricTypeName();
+        
+        setBiometricAvailable(available);
+        setBiometricEnabled(available && hasCredentials);
+        setBiometricType(type);
+      } catch (error) {
+        console.warn('[ProfileScreen] Error checking biometric:', error);
+        setBiometricAvailable(false);
+        setBiometricEnabled(false);
+      } finally {
+        setIsCheckingBiometric(false);
+      }
+    };
+
+    checkBiometric();
+  }, []);
+
+  const handleBiometricToggle = async (value: boolean) => {
+    if (value) {
+      // Enable biometric - need to store credentials
+      // This should prompt user to login again to store credentials
+      Alert.alert(
+        'Enable Biometric Login',
+        `To enable ${biometricType}, please logout and login again. Your credentials will be securely stored for biometric login.`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      // Disable biometric - clear stored credentials
+      try {
+        await biometricStorage.clearCredentials();
+        setBiometricEnabled(false);
+        Alert.alert('Success', 'Biometric login has been disabled.');
+      } catch (error) {
+        Alert.alert('Error', 'Failed to disable biometric login. Please try again.');
+      }
+    }
+  };
 
   const handleUpdateProfile = async () => {
     try {
@@ -253,6 +303,40 @@ export default function ProfileScreen() {
             disabled={statusLoading}
           />
         </View>
+
+        {/* Biometric Settings */}
+        {biometricAvailable && (
+          <View style={styles.section}>
+            <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
+              Security Settings
+            </ThemedText>
+            <View style={[styles.onlineStatusCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={styles.onlineStatusLeft}>
+                <View style={[styles.onlineIcon, { backgroundColor: theme.primary + '20' }]}>
+                  <Ionicons name="fingerprint-outline" size={20} color={theme.primary} />
+                </View>
+                <View>
+                  <ThemedText style={[styles.onlineStatusTitle, { color: theme.text }]}>
+                    {biometricType} Login
+                  </ThemedText>
+                  <ThemedText style={[styles.onlineStatusSubtitle, { color: theme.textSecondary }]}>
+                    {biometricEnabled ? `Use ${biometricType} to login quickly` : 'Enable quick login with biometric'}
+                  </ThemedText>
+                </View>
+              </View>
+              {isCheckingBiometric ? (
+                <ActivityIndicator size="small" color={theme.textSecondary} />
+              ) : (
+                <Switch
+                  value={biometricEnabled}
+                  onValueChange={handleBiometricToggle}
+                  trackColor={{ false: theme.toggleOffTrack, true: theme.toggleOnTrack }}
+                  thumbColor={biometricEnabled ? theme.toggleOnKnob : theme.toggleOffKnob}
+                />
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Personal Details Section */}
         <View style={styles.section}>

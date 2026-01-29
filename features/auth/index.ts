@@ -14,6 +14,7 @@ export { useLogin } from './hooks/useLogin';
 // Export services
 export { authService } from './services/authService';
 export { tokenService } from './services/tokenService';
+export { registrationService } from './services/registrationService';
 
 // Export types
 export type {
@@ -24,9 +25,14 @@ export type {
   LoginRequest,
   LoginResponse,
   RefreshTokenResponse,
+  RegisterRequest,
+  RegisterResponse,
   User,
   UserRole
 } from './types';
+
+// Export registration types
+export type { RegistrationStatus } from './services/registrationService';
 
 // Export utilities
 export { isAllowedRole, getRoleRestrictionMessage } from './utils/roleValidation';

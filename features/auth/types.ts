@@ -140,5 +140,26 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   /** Success message */
   message: string;
+  /** Whether email verification is required */
+  requiresEmailVerification?: boolean;
+  /** Email address that was registered */
+  email?: string;
+}
+
+/**
+ * Complete driver registration request
+ * Used after email verification to complete registration with documents
+ */
+export interface CompleteDriverRegistrationRequest {
+  /** License image file (FormData) */
+  licenseImage: File | Blob | string;
+  /** Selfie image file (FormData) */
+  selfieImage: File | Blob | string;
+  /** Additional driver information (optional) */
+  licenseNumber?: string;
+  /** License expiry date (optional) */
+  licenseExpiryDate?: string;
+  /** Address (optional) */
+  address?: string;
 }
 

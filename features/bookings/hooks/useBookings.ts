@@ -53,6 +53,35 @@ function filterBookingsByStatus(
     );
   }
 
+  if (filter === 'Incoming') {
+    // Bookings that are assigned but not yet started
+    const incomingStatuses = [
+      'Pending',
+      'Confirmed',
+      'DriverAssigned',
+    ];
+    return bookings.filter((booking) => incomingStatuses.includes(booking.status));
+  }
+
+  if (filter === 'Ongoing') {
+    // Bookings that are in progress
+    const ongoingStatuses = [
+      'OnTheWayToPickup',
+      'InProgress',
+      'PickedUp',
+    ];
+    return bookings.filter((booking) => ongoingStatuses.includes(booking.status));
+  }
+
+  if (filter === 'Done') {
+    // Completed deliveries
+    const doneStatuses = [
+      'Completed',
+      'Delivered',
+    ];
+    return bookings.filter((booking) => doneStatuses.includes(booking.status));
+  }
+
   return bookings;
 }
 

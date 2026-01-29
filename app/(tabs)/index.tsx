@@ -25,7 +25,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const stats = useDashboardStats();
-  const { bookings, isLoading, refresh } = useBookings('Active');
+  const { bookings, isLoading, refresh, filter, setFilter } = useBookings('Incoming');
   const { isOnline, toggleOnlineStatus, isLoading: statusLoading, isInitialLoading } = useDriverStatusContext();
   const locationStatus = useLocationTrackingStatus();
 
@@ -167,25 +167,25 @@ export default function DashboardScreen() {
           {/* Stats Cards */}
           <View style={styles.statsGrid}>
             <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <View style={[styles.statIcon, { backgroundColor: theme.primary + '20' }]}>
-                <Ionicons name="time-outline" size={20} color={theme.primary} />
-              </View>
-              <ThemedText style={[styles.statValue, { color: theme.text }]}>6.5h</ThemedText>
-              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Online</ThemedText>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <View style={[styles.statIcon, { backgroundColor: theme.info + '20' }]}>
-                <Ionicons name="cube-outline" size={20} color={theme.info} />
+                <Ionicons name="arrow-down-circle-outline" size={20} color={theme.info} />
               </View>
-              <ThemedText style={[styles.statValue, { color: theme.text }]}>{stats?.totalBookings ?? 0}</ThemedText>
-              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Trips</ThemedText>
+              <ThemedText style={[styles.statValue, { color: theme.text }]}>{stats?.incomingDeliveries ?? 0}</ThemedText>
+              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Incoming</ThemedText>
             </View>
             <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <View style={[styles.statIcon, { backgroundColor: theme.warning + '20' }]}>
-                <Ionicons name="star-outline" size={20} color={theme.warning} />
+                <Ionicons name="hourglass-outline" size={20} color={theme.warning} />
               </View>
-              <ThemedText style={[styles.statValue, { color: theme.text }]}>4.9</ThemedText>
-              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Rating</ThemedText>
+              <ThemedText style={[styles.statValue, { color: theme.text }]}>{stats?.ongoingDeliveries ?? 0}</ThemedText>
+              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Ongoing</ThemedText>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={[styles.statIcon, { backgroundColor: theme.success + '20' }]}>
+                <Ionicons name="checkmark-circle-outline" size={20} color={theme.success} />
+              </View>
+              <ThemedText style={[styles.statValue, { color: theme.text }]}>{stats?.doneDeliveries ?? 0}</ThemedText>
+              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Done</ThemedText>
             </View>
           </View>
 
@@ -213,11 +213,44 @@ export default function DashboardScreen() {
 
 
 
+          {/* Delivery Filters */}
+          <View style={styles.filtersSection}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Deliveries
+            </ThemedText>
+            <View style={styles.filtersContainer}>
+              {(['Incoming', 'Ongoing', 'Done'] as const).map((filterOption) => (
+                <TouchableOpacity
+                  key={filterOption}
+                  style={[
+                    styles.filterButton,
+                    filter === filterOption
+                      ? { backgroundColor: theme.primary }
+                      : { backgroundColor: theme.surface, borderColor: theme.border },
+                  ]}
+                  onPress={() => setFilter(filterOption)}>
+                  <ThemedText
+                    style={[
+                      styles.filterText,
+                      {
+                        color: filter === filterOption ? theme.primaryText : theme.text,
+                      },
+                    ]}>
+                    {filterOption}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           {/* Assigned Bookings (Operator Driver) or Active Bookings (Solo) */}
           <View style={styles.bookingsSection}>
             <View style={styles.sectionHeader}>
               <ThemedText type="subtitle" style={styles.sectionTitle}>
-                {isSoloDriver ? 'Active Bookings' : 'Assigned Bookings'}
+                {filter === 'Incoming' ? 'Incoming Deliveries' :
+                 filter === 'Ongoing' ? 'Ongoing Deliveries' :
+                 filter === 'Done' ? 'Completed Deliveries' :
+                 isSoloDriver ? 'Active Bookings' : 'Assigned Bookings'}
               </ThemedText>
               <View style={[styles.badge, { backgroundColor: theme.border }]}>
                 <ThemedText style={[styles.badgeText, { color: theme.textSecondary }]}>Today</ThemedText>
@@ -227,7 +260,10 @@ export default function DashboardScreen() {
             {bookings.length === 0 ? (
               <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
                 <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  No active bookings
+                  {filter === 'Incoming' ? 'No incoming deliveries' :
+                   filter === 'Ongoing' ? 'No ongoing deliveries' :
+                   filter === 'Done' ? 'No completed deliveries' :
+                   'No active bookings'}
                 </ThemedText>
               </View>
             ) : (
@@ -770,5 +806,26 @@ const styles = StyleSheet.create({
   questProgressText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  filtersSection: {
+    gap: 12,
+  },
+  filtersContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
