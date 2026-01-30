@@ -8,6 +8,7 @@ import type {
   RegisterResponse,
   User,
   SendOtpRequest,
+  VerifyOtpRequest,
   VerifyOtpAndRegisterRequest,
   VerifyOtpAndRegisterResponse,
 } from '../types';
@@ -392,6 +393,25 @@ class AuthService {
       throw new Error(response.message || 'Failed to send verification code.');
     }
     return { success: true, message: response.message || 'Verification code sent.' };
+  }
+
+  /**
+   * Verify OTP only (single responsibility). Does not create account.
+   * Call register(email, fullName, password, role) next, then login.
+   * POST /api/auth/verify-otp
+   */
+  async verifyOtp(request: VerifyOtpRequest): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/verify-otp', {
+      body: {
+        email: request.email.trim().toLowerCase(),
+        otp: request.otp.trim(),
+      },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Invalid or expired code. Please try again.');
+    }
+    return { success: true, message: response.message || 'Email verified.' };
   }
 
   /**

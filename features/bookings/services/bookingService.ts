@@ -347,7 +347,12 @@ class BookingService {
         console.log('[BookingService] Mapped bookings count:', uniqueBookings.length);
         return uniqueBookings;
       } else {
-        // Driver/Operator: Get all bookings for operator
+        // Solo Driver: GET /api/bookings is only for SuperAdmin,Admin,Owner,Dispatcher - return [] to avoid 403
+        if (user.role === 'Driver') {
+          console.log('[BookingService] Solo driver - not calling GET /api/bookings (forbidden for Driver role). Returning empty list.');
+          return [];
+        }
+        // Owner/Dispatcher/Operator: Get all bookings for operator
         console.log('[BookingService] ===== FETCHING ALL BOOKINGS FOR OPERATOR =====');
         console.log('[BookingService] Driver ID:', user.id);
         console.log('[BookingService] Driver Role:', user.role);

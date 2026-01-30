@@ -151,7 +151,13 @@ export interface SendOtpRequest {
   email: string;
 }
 
-/** OTP verify and register request - POST /api/auth/verify-otp-and-register */
+/** OTP verify only - POST /api/auth/verify-otp (then call register) */
+export interface VerifyOtpRequest {
+  email: string;
+  otp: string;
+}
+
+/** OTP verify and register request - POST /api/auth/verify-otp-and-register (deprecated: use verify-otp + register + login) */
 export interface VerifyOtpAndRegisterRequest {
   email: string;
   otp: string;

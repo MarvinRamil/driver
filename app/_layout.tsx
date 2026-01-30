@@ -96,29 +96,54 @@ function NavigationGuard() {
       const needsRegistration = isAuthenticated && user && user.role === 'Driver' && !user.isOnboarded;
       const isCompleteRegistrationPage = currentRoute === "complete-registration";
 
-      // Check if user has a pending driver application
-      let hasPendingApplication = false;
+      // When we need to check for pending driver application, run async and then decide redirect
       if (needsRegistration && isAuthenticated) {
-        try {
-          const { apiClient } = await import('@/shared/services/apiClient');
-          const response = await apiClient.get('/api/driver-applications/my-application', {
-            requiresAuth: true,
-          });
-          if (response.success && response.data) {
-            const status = response.data.status;
-            // If application exists and is pending, don't redirect to complete-registration
-            if (status === 'Pending' || status === 'pending') {
-              hasPendingApplication = true;
+        (async () => {
+          let hasPendingApplication = false;
+          try {
+            const { apiClient } = await import('@/shared/services/apiClient');
+            const response = await apiClient.get('/api/driver-applications/my-application', {
+              requiresAuth: true,
+            });
+            // Backend returns { success, data: { id, fullName, status, ... } }; apiClient puts that in response.data
+            const payload = (response.data as any)?.data ?? response.data;
+            if (response.success && payload) {
+              // Backend may return status as Status (PascalCase) or status (camelCase); enum may be number (0=Pending)
+              const status = (payload.status ?? payload.Status ?? '').toString();
+              const statusLower = status.toLowerCase();
+              if (statusLower === 'pending' || status === '0') {
+                hasPendingApplication = true;
+              }
+            }
+          } catch (error) {
+            // If we can't check (404, 403, network), assume pending so we don't force "complete registration" again
+            console.log('[NavigationGuard] Error checking driver application (treating as pending):', error);
+            hasPendingApplication = true;
+          }
+          if (needsRegistration && !hasPendingApplication && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
+            router.replace("/complete-registration");
+            return;
+          }
+          // When application is pending, show pending-approval screen instead of tabs or complete-registration
+          if (hasPendingApplication && (currentRoute === "(tabs)" || currentRoute === "complete-registration")) {
+            router.replace("/pending-approval");
+            return;
+          }
+          if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
+            if (needsRegistration && !hasPendingApplication) {
+              router.replace("/complete-registration");
+            } else if (hasPendingApplication) {
+              router.replace("/pending-approval");
+            } else {
+              router.replace("/(tabs)");
             }
           }
-        } catch (error) {
-          // If endpoint returns 404, no application exists - allow registration
-          // If other error, log but don't block
-          console.log('Error checking driver application:', error);
-        }
+        })();
+        return;
       }
 
       // If user needs to complete registration AND doesn't have pending application, redirect
+      let hasPendingApplication = false;
       if (needsRegistration && !hasPendingApplication && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
         router.replace("/complete-registration");
         return;
@@ -126,7 +151,6 @@ function NavigationGuard() {
 
       // If user is authenticated with allowed role and on login or signup page, redirect appropriately
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-        // If needs registration, go to complete-registration, otherwise go to tabs
         if (needsRegistration) {
           router.replace("/complete-registration");
         } else {
@@ -145,7 +169,8 @@ function NavigationGuard() {
          currentRoute === "rating" ||
          currentRoute === "support" ||
          currentRoute === "booking" ||
-         currentRoute === "complete-registration")
+         currentRoute === "complete-registration" ||
+         currentRoute === "pending-approval")
       ) {
         // User is authenticated with allowed role and accessing protected routes - allow
         return;
@@ -208,6 +233,7 @@ function RootLayoutNav() {
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="signup" options={{ headerShown: false }} />
             <Stack.Screen name="complete-registration" options={{ headerShown: false }} />
+            <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />

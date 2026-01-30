@@ -24,11 +24,12 @@ import { ResumeRegistrationScreen } from './ResumeRegistrationScreen';
 import { DriverLicenseScanner } from './DriverLicenseScanner';
 import { SelfieCapture } from './SelfieCapture';
 import { apiClient } from '@/shared/services/apiClient';
-import { useAuth } from '../context/AuthContext';
+import { useAuthContext } from '../context/AuthContext';
 
 type RegistrationStep =
   | 'enter-email'
   | 'enter-otp'
+  | 'enter-details'
   | 'basic-info'
   | 'check-status'
   | 'email-verification'
@@ -68,7 +69,7 @@ export function RegistrationSteps() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
-  const { refreshUser } = useAuth();
+  const { refreshUser } = useAuthContext();
 
   // Registration status is checked once when user clicks Continue (see handleSubmitBasicInfo).
   // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
@@ -135,31 +136,69 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Step 2: Verify OTP and create account (OTP-first flow) */
-  const handleVerifyOtpAndRegister = async () => {
+  /** Step 2: Verify OTP only. Show clear success or invalid feedback, then proceed to details. */
+  const handleContinueFromOtp = async () => {
+    setError(null);
+    if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
+      setError('Please enter the 6-digit code from your email');
+      Alert.alert('Invalid code', 'Please enter the full 6-digit code from your email.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await authService.verifyOtp({
+        email: registrationData.email.trim(),
+        otp: registrationData.otp.trim(),
+      });
+      Alert.alert(
+        'Code verified',
+        'Your email is verified. Enter your name and password to create your account.',
+        [{ text: 'Continue', onPress: () => setCurrentStep('enter-details') }]
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid or expired code. Please try again.';
+      setError(message);
+      Alert.alert('Invalid code', message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** Step 3: Create account using existing Register endpoint (email already verified via OTP), then login. */
+  const handleCreateAccountAfterOtp = async () => {
     const validationError = validateForm();
     if (validationError) {
       setError(validationError);
       return;
     }
-    if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
-      setError('Please enter the 6-digit code from your email');
-      return;
-    }
     setIsLoading(true);
     setError(null);
     try {
-      await authService.verifyOtpAndRegister({
+      await authService.register({
         email: registrationData.email.trim(),
-        otp: registrationData.otp.trim(),
         password: registrationData.password,
         fullName: registrationData.fullName.trim(),
         role: 'Driver',
       });
+      await authService.login({
+        email: registrationData.email.trim(),
+        password: registrationData.password,
+      });
       await refreshUser();
-      router.replace('/(tabs)');
+      Alert.alert(
+        'Account created',
+        'Please log in to continue with your driver registration and submit your documents.',
+        [
+          {
+            text: 'Continue',
+            onPress: () => router.replace('/(tabs)'),
+          },
+        ]
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed. Please check the code and try again.');
+      const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      setError(message);
+      Alert.alert('Error', message);
     } finally {
       setIsLoading(false);
     }
@@ -365,11 +404,11 @@ export function RegistrationSteps() {
             </View>
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Email Address</Text>
-                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.label, { color: theme.text }]}>Email address</Text>
+                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
-                    style={[styles.input, { color: theme.text }]}
-                    placeholder="Enter your email"
+                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
+                    placeholder="e.g. you@example.com"
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.email}
                     onChangeText={(text) => {
@@ -420,7 +459,7 @@ export function RegistrationSteps() {
     );
   }
 
-  // OTP flow: Step 2 - Enter OTP + full name + password and create account
+  // OTP flow: Step 2 – Code only (email already in state)
   if (currentStep === 'enter-otp') {
     return (
       <KeyboardAvoidingView
@@ -435,17 +474,17 @@ export function RegistrationSteps() {
               <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-email')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Verify & create account</Text>
+              <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
               <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
                 We sent a 6-digit code to {registrationData.email}
               </Text>
             </View>
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Verification code</Text>
-                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={[styles.form, styles.formCentered]}>
+              <View style={styles.otpInputWrap}>
+                <Text style={[styles.label, { color: theme.text }]}>Enter the code from your email</Text>
+                <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
-                    style={[styles.input, { color: theme.text }]}
+                    style={[styles.otpInput, { color: theme.text }]}
                     placeholder="000000"
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.otp}
@@ -462,12 +501,68 @@ export function RegistrationSteps() {
                   <Text style={[styles.resendText, { color: theme.primary }]}>Resend code</Text>
                 </TouchableOpacity>
               </View>
+              {error && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  isLoading && styles.submitButtonDisabled,
+                  { backgroundColor: theme.primary },
+                ]}
+                onPress={handleContinueFromOtp}
+                disabled={isLoading}>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={theme.primaryText} />
+                ) : (
+                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
+                )}
+              </TouchableOpacity>
+              <View style={styles.loginContainer}>
+                <Text style={[styles.loginText, { color: theme.textMuted }]}>
+                  Already have an account?{' '}
+                  <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
+                    Log In
+                  </Text>
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // OTP flow: Step 3 – Full name + password (email and OTP already in state)
+  if (currentStep === 'enter-details') {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+            keyboardShouldPersistTaps="handled">
+            <View style={styles.headerContainer}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-otp')}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.headline, { color: theme.text }]}>Create your account</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                Use the email we sent the code to: {registrationData.email}
+              </Text>
+            </View>
+            <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Full Name</Text>
-                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.label, { color: theme.text }]}>Full name</Text>
+                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
-                    style={[styles.input, { color: theme.text }]}
-                    placeholder="Enter your full name"
+                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
+                    placeholder="As it appears on your ID"
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.fullName}
                     onChangeText={(text) => {
@@ -481,10 +576,10 @@ export function RegistrationSteps() {
               </View>
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: theme.text }]}>Password</Text>
-                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
-                    style={[styles.input, { color: theme.text }]}
-                    placeholder="At least 8 characters, with upper, lower, number, special"
+                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
+                    placeholder="Min. 8 characters, include uppercase, number & symbol"
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.password}
                     onChangeText={(text) => {
@@ -501,11 +596,11 @@ export function RegistrationSteps() {
                 </View>
               </View>
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Confirm Password</Text>
-                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.label, { color: theme.text }]}>Confirm password</Text>
+                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
-                    style={[styles.input, { color: theme.text }]}
-                    placeholder="Confirm your password"
+                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
+                    placeholder="Re-enter your password"
                     placeholderTextColor={theme.placeholder}
                     value={confirmPassword}
                     onChangeText={(text) => {
@@ -539,7 +634,7 @@ export function RegistrationSteps() {
                   isLoading && styles.submitButtonDisabled,
                   { backgroundColor: theme.primary },
                 ]}
-                onPress={handleVerifyOtpAndRegister}
+                onPress={handleCreateAccountAfterOtp}
                 disabled={isLoading}>
                 {isLoading ? (
                   <ActivityIndicator size="small" color={theme.primaryText} />
@@ -890,26 +985,71 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 24,
   },
+  formCentered: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    marginTop: 24,
+    alignItems: 'center',
+  },
   inputGroup: {
-    marginBottom: 12,
+    marginBottom: 20,
     paddingHorizontal: 16,
+    width: '100%',
   },
   label: {
     fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
+    fontWeight: '600',
+    marginBottom: 10,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    minHeight: 56,
     height: 56,
+  },
+  inputContainerLarge: {
+    minHeight: 64,
+    height: 64,
+    borderRadius: 14,
+    paddingHorizontal: 20,
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 17,
+    paddingVertical: 4,
+  },
+  inputLarge: {
+    fontSize: 19,
+  },
+  otpInputWrap: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  otpInputContainer: {
+    width: '100%',
+    maxWidth: 280,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    minHeight: 72,
+    height: 72,
+  },
+  otpInput: {
+    flex: 1,
+    fontSize: 32,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 8,
+    paddingVertical: 8,
   },
   visibilityButton: {
     padding: 4,
