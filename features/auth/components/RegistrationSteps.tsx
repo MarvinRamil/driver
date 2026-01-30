@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -63,23 +63,8 @@ export function RegistrationSteps() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
 
-  // Check registration status when email is entered
-  useEffect(() => {
-    const checkStatus = async () => {
-      if (registrationData.email && registrationData.email.includes('@')) {
-        try {
-          const status = await registrationService.checkRegistrationStatus(registrationData.email);
-          setRegistrationStatus(status);
-        } catch (error) {
-          // Ignore errors - user can still proceed
-          console.error('[RegistrationSteps] Error checking status:', error);
-        }
-      }
-    };
-
-    const timeoutId = setTimeout(checkStatus, 500); // Debounce
-    return () => clearTimeout(timeoutId);
-  }, [registrationData.email]);
+  // Registration status is checked once when user clicks Continue (see handleSubmitBasicInfo).
+  // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
 
   const isValidEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -121,9 +106,24 @@ export function RegistrationSteps() {
     setError(null);
 
     try {
-      // Check if email already exists
-      if (registrationStatus) {
-        if (registrationStatus.registrationComplete) {
+      // Check registration status once when user submits (not on every keystroke).
+      // Backend should rate-limit this endpoint to prevent email enumeration.
+      // NOTE: Backend returns same structure whether user exists or not, so we can't distinguish
+      // between "user doesn't exist" vs "user exists but not verified". We'll try registration
+      // and handle "already exists" error if it occurs.
+      let status: RegistrationStatus | null = null;
+      try {
+        status = await registrationService.checkRegistrationStatus(registrationData.email.trim());
+        setRegistrationStatus(status);
+      } catch (statusErr) {
+        console.warn('[RegistrationSteps] Status check failed, proceeding to register:', statusErr);
+      }
+
+      // Only handle status if we have clear indicators that user exists
+      if (status) {
+        // User is fully registered - redirect to login
+        if (status.registrationComplete) {
+          console.log('[RegistrationSteps] Email already registered, showing alert');
           Alert.alert(
             'Account Exists',
             'This email is already registered. Please login instead.',
@@ -138,38 +138,86 @@ export function RegistrationSteps() {
           return;
         }
 
-        if (registrationStatus.emailVerified && !registrationStatus.registrationComplete) {
-          // Email verified but registration incomplete - show resume prompt
+        // User exists, email verified, but registration incomplete - resume
+        if (status.emailVerified && !status.registrationComplete && status.canResume) {
+          console.log('[RegistrationSteps] Resuming incomplete registration');
           setCurrentStep('resume-prompt');
           setIsLoading(false);
           return;
         }
 
-        if (!registrationStatus.emailVerified) {
-          // Email exists but not verified - show verification screen
-          setCurrentStep('email-verification');
-          setIsLoading(false);
-          return;
-        }
+        // If status shows emailVerified=false, it could mean:
+        // 1. User doesn't exist (backend returns all false)
+        // 2. User exists but not verified
+        // We can't distinguish, so we'll try registration and handle errors
       }
 
-      // Register new account
-      const response = await authService.register({
-        email: registrationData.email.trim(),
-        password: registrationData.password,
-        fullName: registrationData.fullName.trim(),
-        role: 'Driver',
-      });
+      // Try to register new account
+      // If user already exists, backend will return "Email already registered" error
+      console.log('[RegistrationSteps] Calling auth/register for', registrationData.email.trim());
+      try {
+        const response = await authService.register({
+          email: registrationData.email.trim(),
+          password: registrationData.password,
+          fullName: registrationData.fullName.trim(),
+          role: 'Driver',
+        });
 
-      // Check if email verification is required
-      if (response.requiresEmailVerification || response.message?.includes('verify')) {
-        setCurrentStep('email-verification');
-      } else {
-        // If verification not required (shouldn't happen), proceed to license scan
-        setCurrentStep('license-scan');
+        console.log('[RegistrationSteps] Register response:', JSON.stringify(response, null, 2));
+
+        // Registration successful - proceed to email verification
+        if (response.requiresEmailVerification || response.message?.includes('verify')) {
+          console.log('[RegistrationSteps] Registration successful, moving to email-verification step');
+          setCurrentStep('email-verification');
+        } else {
+          console.log('[RegistrationSteps] Registration successful, moving to license-scan step');
+          setCurrentStep('license-scan');
+        }
+      } catch (registerErr) {
+        // Registration failed - check if it's because email already exists
+        const errorMessage = registerErr instanceof Error ? registerErr.message : String(registerErr);
+        console.log('[RegistrationSteps] Register failed:', errorMessage);
+
+        // If email already exists, check status again to see if we can resume or need verification
+        // Backend returns: "This email is already registered. Please use a different email or sign in."
+        if (
+          errorMessage.toLowerCase().includes('already registered') ||
+          errorMessage.toLowerCase().includes('already exists')
+        ) {
+          // Re-check status now that we know user exists
+          try {
+            const existingStatus = await registrationService.checkRegistrationStatus(
+              registrationData.email.trim()
+            );
+            setRegistrationStatus(existingStatus);
+
+            if (existingStatus.emailVerified && !existingStatus.registrationComplete) {
+              console.log('[RegistrationSteps] User exists and email verified, resuming registration');
+              setCurrentStep('resume-prompt');
+              setIsLoading(false);
+              return;
+            } else if (!existingStatus.emailVerified) {
+              console.log('[RegistrationSteps] User exists but email not verified, showing verification step');
+              setCurrentStep('email-verification');
+              setIsLoading(false);
+              return;
+            }
+          } catch (statusErr) {
+            // Status check failed, show generic error
+            console.error('[RegistrationSteps] Failed to check status after registration error:', statusErr);
+            setError(errorMessage);
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // Other registration errors - show error message
+        setError(errorMessage);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      console.error('[RegistrationSteps] Submit error:', errorMessage, err);
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -177,7 +225,18 @@ export function RegistrationSteps() {
   };
 
   const handleEmailVerified = () => {
-    setCurrentStep('license-scan');
+    // After email verification, redirect to login
+    // User will complete registration after logging in
+    Alert.alert(
+      'Email Verified',
+      'Your email has been verified successfully. Please login to continue with your registration.',
+      [
+        {
+          text: 'Go to Login',
+          onPress: () => router.replace('/login'),
+        },
+      ]
+    );
   };
 
   const handleResumeRegistration = () => {

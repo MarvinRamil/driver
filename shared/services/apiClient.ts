@@ -166,6 +166,9 @@ class ApiClient {
     try {
       const headers = await this.getHeaders(config, endpoint);
 
+      // Log every API call so you can confirm we're hitting the API
+      console.log(`[API] ${method} ${fullUrl}`);
+
       // Create fetch options
       const fetchOptions: RequestInit = {
         method,

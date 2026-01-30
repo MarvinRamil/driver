@@ -6,6 +6,7 @@ import type { User } from '../types';
  * Allowed roles:
  * 1. Solo drivers/owner-drivers: isSoloDriver === true (includes solo drivers and owners who also drive)
  * 2. Drivers under company/tenant: role === "Driver" AND tenantId !== null AND isSoloDriver === false
+ * 3. Drivers in registration process: role === "Driver" AND not yet onboarded (allows completion of registration)
  * 
  * Note: Fleet owners who are NOT drivers (role === "Owner" AND isSoloDriver === false) are NOT allowed
  * 
@@ -37,9 +38,21 @@ export function isAllowedRole(user: User | null): boolean {
     return true;
   }
 
+  // Case 3: Drivers in registration process (not yet onboarded)
+  // - Must be Driver role
+  // - Not yet onboarded (allows them to complete registration even without company)
+  // This allows drivers who just registered to complete their onboarding
+  if (
+    user.role === 'Driver' &&
+    !user.isOnboarded
+  ) {
+    return true;
+  }
+
   // All other roles are not allowed, including:
   // - Fleet owners who don't drive (role === "Owner" AND isSoloDriver === false)
   // - Admin, Dispatcher, Client, BusinessClient, SuperAdmin, etc.
+  // - Drivers who are onboarded but have no company and are not solo drivers
   return false;
 }
 
@@ -72,9 +85,11 @@ export function getRoleRestrictionMessage(user: User | null): string {
 
   // For Driver role without proper setup
   if (user.role === 'Driver') {
-    if (user.isSoloDriver && user.tenantId === null) {
-      return 'Your account setup is incomplete. Please contact support.';
+    // Drivers in registration process are allowed (handled by isAllowedRole)
+    if (!user.isOnboarded) {
+      return 'Please complete your registration to continue.';
     }
+    // Onboarded drivers should have either solo driver status or company
     if (!user.isSoloDriver && user.tenantId === null) {
       return 'Your driver account is not associated with a company. Please contact support.';
     }

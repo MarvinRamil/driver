@@ -312,18 +312,29 @@ class AuthService {
         requiresAuth: false, // Register endpoint doesn't require authentication
       });
 
+      console.log('[AuthService] Register API response:', {
+        success: response.success,
+        statusCode: response.statusCode,
+        message: response.message,
+        data: response.data,
+        fullResponse: JSON.stringify(response, null, 2),
+      });
+
       // Check if request was successful
       if (!response.success) {
         const errorMessage = response.message || 'Registration failed';
         
         // Handle 400 Bad Request (validation errors, email already exists, etc.)
         if (response.statusCode === 400) {
+          console.error('[AuthService] Registration failed with 400:', errorMessage);
           throw new Error(errorMessage || 'Validation error. Please check your input.');
         }
         
+        console.error('[AuthService] Registration failed:', errorMessage);
         throw new Error(errorMessage);
       }
 
+      console.log('[AuthService] Registration successful, returning:', response.data);
       return response.data || { message: 'User registered successfully' };
     } catch (error) {
       // Log the actual error for debugging

@@ -11,11 +11,15 @@ export interface RegistrationStatus {
 }
 
 /**
- * Registration service for checking status and resuming incomplete registrations
+ * Registration service for checking status and resuming incomplete registrations.
+ *
+ * Security note: checkRegistrationStatus reveals whether an email is registered.
+ * The backend should rate-limit this endpoint and consider returning generic
+ * responses to reduce email enumeration risk.
  */
 class RegistrationService {
   /**
-   * Check registration status for an email
+   * Check registration status for an email (called once on signup submit, not on keystroke).
    * @param email - Email address to check
    * @returns Promise resolving to RegistrationStatus
    */
@@ -26,9 +30,18 @@ class RegistrationService {
         requiresAuth: false,
       });
 
+      console.log('[RegistrationService] Registration-status API response:', {
+        success: response.success,
+        statusCode: response.statusCode,
+        message: response.message,
+        data: response.data,
+        fullResponse: JSON.stringify(response, null, 2),
+      });
+
       if (!response.success || !response.data) {
         // If endpoint doesn't exist yet, return default status
         if (response.statusCode === 404) {
+          console.log('[RegistrationService] Endpoint not found (404), returning default status');
           return {
             emailVerified: false,
             registrationComplete: false,
@@ -38,6 +51,7 @@ class RegistrationService {
         throw new Error(response.message || 'Failed to check registration status');
       }
 
+      console.log('[RegistrationService] Returning status:', response.data);
       return response.data;
     } catch (error) {
       console.error('[RegistrationService] Error checking status:', error);

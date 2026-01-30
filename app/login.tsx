@@ -335,7 +335,7 @@ export default function LoginScreen() {
             <View style={styles.loginButtonContainer}>
               <TouchableOpacity
                 style={[styles.loginButton, isLoading && styles.loginButtonDisabled, { backgroundColor: theme.primary }]}
-                onPress={onLoginPress}
+                onPress={handleLogin}
                 disabled={isLoading}
                 activeOpacity={0.98}
               >
@@ -348,6 +348,18 @@ export default function LoginScreen() {
                     Log In
                   </Text>
                 )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Sign up link */}
+            <View style={styles.signupContainer}>
+              <Text style={[styles.signupPrompt, { color: theme.textSecondary }]}>
+                Don't have an account?{" "}
+              </Text>
+              <TouchableOpacity onPress={() => router.push("/signup")}>
+                <Text style={[styles.signupLink, { color: theme.primary }]}>
+                  Sign up
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -487,6 +499,27 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     width: "100%",
     alignItems: "center",
+  },
+  signupContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  signupPrompt: {
+    fontSize: 18,
+    fontWeight: "500",
+    lineHeight: 26,
+  },
+  signupLink: {
+    fontSize: 19,
+    fontWeight: "700",
+    lineHeight: 26,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   loginButton: {
     width: "100%",

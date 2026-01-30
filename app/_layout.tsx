@@ -92,9 +92,24 @@ function NavigationGuard() {
         return;
       }
 
-      // If user is authenticated with allowed role and on login or signup page, redirect to tabs
+      // Check if user needs to complete registration (not onboarded)
+      const needsRegistration = isAuthenticated && user && user.role === 'Driver' && !user.isOnboarded;
+      const isCompleteRegistrationPage = currentRoute === "complete-registration";
+
+      // If user needs to complete registration, redirect to complete-registration page
+      if (needsRegistration && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
+        router.replace("/complete-registration");
+        return;
+      }
+
+      // If user is authenticated with allowed role and on login or signup page, redirect appropriately
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-        router.replace("/(tabs)");
+        // If needs registration, go to complete-registration, otherwise go to tabs
+        if (needsRegistration) {
+          router.replace("/complete-registration");
+        } else {
+          router.replace("/(tabs)");
+        }
         return;
       }
 
@@ -107,7 +122,8 @@ function NavigationGuard() {
          currentRoute === "in-ride" || 
          currentRoute === "rating" ||
          currentRoute === "support" ||
-         currentRoute === "booking")
+         currentRoute === "booking" ||
+         currentRoute === "complete-registration")
       ) {
         // User is authenticated with allowed role and accessing protected routes - allow
         return;
@@ -169,6 +185,7 @@ function RootLayoutNav() {
           <Stack>
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="signup" options={{ headerShown: false }} />
+            <Stack.Screen name="complete-registration" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />
@@ -189,10 +206,35 @@ function RootLayoutNav() {
 }
 
 /**
+ * Check API health on app load and log to console.
+ * Uses EXPO_PUBLIC_API_URL + /health (same base works for staging and production).
+ */
+function checkApiHealth() {
+  const base = process.env.EXPO_PUBLIC_API_URL || '';
+  if (!base) {
+    console.log('[API Health] No EXPO_PUBLIC_API_URL set, skipping health check');
+    return;
+  }
+  const url = `${base.replace(/\/+$/, '')}/health`;
+  console.log('[API Health] Checking:', url);
+  fetch(url)
+    .then((res) => res.json())
+    .then((data) => {
+      console.log('[API Health] Response:', JSON.stringify(data, null, 2));
+    })
+    .catch((err) => {
+      console.warn('[API Health] Failed:', url, err?.message ?? err);
+    });
+}
+
+/**
  * Component to initialize app services (notifications, OTA updates)
  */
 function AppInitializer() {
   useNotifications();
   useOTAUpdates();
+  useEffect(() => {
+    checkApiHealth();
+  }, []);
   return null;
 }
