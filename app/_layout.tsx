@@ -115,10 +115,19 @@ function NavigationGuard() {
                 hasPendingApplication = true;
               }
             }
-          } catch (error) {
-            // If we can't check (404, 403, network), assume pending so we don't force "complete registration" again
-            console.log('[NavigationGuard] Error checking driver application (treating as pending):', error);
-            hasPendingApplication = true;
+            // If no payload or success false: no application yet → hasPendingApplication stays false → go to complete-registration
+          } catch (error: any) {
+            // 404 "No application found" = fresh account, must complete registration (do not treat as pending)
+            const status = error?.status ?? error?.details?.status;
+            const message = (error?.details?.message ?? error?.message ?? '').toString().toLowerCase();
+            if (status === 404 || message.includes('no application found')) {
+              hasPendingApplication = false;
+              console.log('[NavigationGuard] No application found (404) → complete registration');
+            } else {
+              // Other errors (403, network): don't assume pending; send to complete-registration so fresh users aren't stuck on "under review"
+              hasPendingApplication = false;
+              console.log('[NavigationGuard] Error checking driver application (sending to complete-registration):', error);
+            }
           }
           if (needsRegistration && !hasPendingApplication && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
             router.replace("/complete-registration");
