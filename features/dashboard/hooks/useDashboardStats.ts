@@ -35,7 +35,7 @@ export function useDashboardStats(): DashboardStats {
   const { allBookings } = useBookings();
   const { wallet } = useWallet();
 
-  const canAccessWallet = user?.isSoloDriver || user?.role === 'Owner' || user?.role === 'Admin';
+  const canAccessWallet = user?.role === 'Driver';
 
   const stats = useMemo(() => {
     // Safe defaults if bookings haven't loaded yet

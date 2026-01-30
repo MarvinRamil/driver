@@ -34,8 +34,7 @@ SplashScreen.preventAutoHideAsync();
  * Handles protected routes and redirects based on authentication state
  * Ensures unauthenticated users are redirected to login immediately
  * Also enforces role restrictions - only allows:
- * - Solo drivers/owners (isSoloDriver === true OR role === "Owner")
- * - Drivers under company/tenant (role === "Driver" AND tenantId !== null AND isSoloDriver === false)
+ * Only role "Driver" is accepted. All drivers are independent (no company/tenant).
  */
 function NavigationGuard() {
   const { user, isLoading, logout } = useAuth();
@@ -74,11 +73,7 @@ function NavigationGuard() {
       // ROLE RESTRICTION: If user is authenticated but doesn't have an allowed role,
       // log them out and redirect to login with error message
       if (isAuthenticated && !hasAllowedRole) {
-        console.warn('[NavigationGuard] User has unauthorized role:', {
-          role: user?.role,
-          isSoloDriver: user?.isSoloDriver,
-          tenantId: user?.tenantId,
-        });
+        console.warn('[NavigationGuard] User has unauthorized role:', user?.role);
         
         // Logout user to clear session
         logout().catch((err) => {

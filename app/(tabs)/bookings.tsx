@@ -20,7 +20,7 @@ export default function BookingsScreen() {
   const { user } = useAuth();
   const { bookings, isLoading, error, refresh, filter, setFilter } = useBookings();
 
-  const isSoloDriver = user?.isSoloDriver || false;
+  const isSoloDriver = user?.role === 'Driver';
   const filters: BookingFilter[] = ['All', 'Active', 'Completed'];
 
   const getStatusColor = (status: string) => {

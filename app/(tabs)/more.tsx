@@ -22,7 +22,7 @@ export default function MoreScreen() {
   const { isOnline, toggleOnlineStatus, isLoading: isStatusLoading } = useDriverStatusContext();
   const { stats } = useDashboardStats();
 
-  const canAccessWallet = user?.isSoloDriver || user?.role === 'Owner' || user?.role === 'Admin';
+  const canAccessWallet = user?.role === 'Driver';
   
   // Safe defaults for stats
   const safeStats = stats || {

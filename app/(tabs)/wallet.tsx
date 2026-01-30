@@ -18,7 +18,7 @@ export default function WalletScreen() {
   const { wallet, isLoading, error, refresh } = useWallet(user?.id || '');
   const { transactions, isLoading: transactionsLoading } = useWalletTransactions(user?.id || '');
 
-  const canAccessWallet = user?.isSoloDriver || user?.role === 'Owner' || user?.role === 'Admin';
+  const canAccessWallet = user?.role === 'Driver';
 
   if (!canAccessWallet) {
     return (

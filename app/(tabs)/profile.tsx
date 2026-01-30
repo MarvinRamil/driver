@@ -46,7 +46,7 @@ export default function ProfileScreen() {
   const [biometricType, setBiometricType] = useState<string>('Biometric');
   const [isCheckingBiometric, setIsCheckingBiometric] = useState(true);
 
-  const isSoloDriver = user?.isSoloDriver || false;
+  const isSoloDriver = user?.role === 'Driver';
 
   // Check biometric status on mount
   React.useEffect(() => {

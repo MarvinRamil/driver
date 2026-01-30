@@ -38,7 +38,7 @@ export function useWalletTransactions(
   /**
    * Check if user can access wallet
    */
-  const canAccessWallet = user?.isSoloDriver || user?.role === 'Owner' || user?.role === 'Admin';
+  const canAccessWallet = user?.role === 'Driver';
 
   /**
    * Fetch transactions from API

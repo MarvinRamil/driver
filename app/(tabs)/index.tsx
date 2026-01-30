@@ -30,7 +30,8 @@ export default function DashboardScreen() {
   const locationStatus = useLocationTrackingStatus();
 
   // Determine if solo driver or operator driver
-  const isSoloDriver = user?.isSoloDriver || false;
+  // All drivers are independent (solo)
+  const isSoloDriver = user?.role === 'Driver';
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>

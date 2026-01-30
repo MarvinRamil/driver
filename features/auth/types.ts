@@ -50,14 +50,14 @@ export interface User {
   fullName: string;
   /** User's role (Admin, Owner, Driver, Client, etc.) */
   role: UserRole;
-  /** Company/Tenant ID (Guid | null, null for customers) */
-  tenantId: string | null;
+  /** @deprecated Not used. All drivers are independent. Kept for API response shape. */
+  tenantId?: string | null;
   /** Whether user has completed onboarding */
   isOnboarded: boolean;
-  /** Business type: "Fleet" or "Individual" (null if not set) */
-  businessType: BusinessType | null;
-  /** Whether driver is a solo/independent driver */
-  isSoloDriver: boolean;
+  /** @deprecated Not used. Kept for API response shape. */
+  businessType?: BusinessType | null;
+  /** @deprecated Not used. All drivers are independent. Kept for API response shape. */
+  isSoloDriver?: boolean;
   /** Whether driver is currently online (for drivers only) */
   isOnline?: boolean;
   /** Profile picture URL (optional) */
@@ -128,6 +128,7 @@ export interface RegisterRequest {
   /** User role - must be "Driver" for drivers app */
   role: "Driver";
   /** Company ID (optional, for drivers under operators) */
+  /** @deprecated Not used. Kept for API response shape. */
   companyId?: string | null;
   /** Referral code (optional) */
   referralCode?: string | null;
