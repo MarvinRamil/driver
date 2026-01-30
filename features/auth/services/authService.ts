@@ -1,7 +1,16 @@
 import { apiClient } from '@/shared/services/apiClient';
 import { tokenStorage } from '@/shared/services/tokenStorage';
 import { isAllowedRole, getRoleRestrictionMessage } from '../utils/roleValidation';
-import type { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, User } from '../types';
+import type {
+  LoginRequest,
+  LoginResponse,
+  RegisterRequest,
+  RegisterResponse,
+  User,
+  SendOtpRequest,
+  VerifyOtpAndRegisterRequest,
+  VerifyOtpAndRegisterResponse,
+} from '../types';
 
 /**
  * Authentication service for handling login, logout, and user session management
@@ -368,6 +377,79 @@ class AuthService {
       console.error('[AuthService] Unknown error type:', error);
       throw new Error('Registration failed. Please try again.');
     }
+  }
+
+  /**
+   * Send OTP to email for verification (OTP-first registration)
+   * POST /api/auth/send-otp
+   */
+  async sendOtp(request: SendOtpRequest): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/send-otp', {
+      body: { email: request.email.trim().toLowerCase() },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to send verification code.');
+    }
+    return { success: true, message: response.message || 'Verification code sent.' };
+  }
+
+  /**
+   * Resend OTP to email
+   * POST /api/auth/resend-otp
+   */
+  async resendOtp(email: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/resend-otp', {
+      body: { email: email.trim().toLowerCase() },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to resend verification code.');
+    }
+    return { success: true, message: response.message || 'New verification code sent.' };
+  }
+
+  /**
+   * Verify OTP and create account (OTP-first registration)
+   * On success: stores token and returns user (same as login).
+   * POST /api/auth/verify-otp-and-register
+   */
+  async verifyOtpAndRegister(
+    request: VerifyOtpAndRegisterRequest
+  ): Promise<VerifyOtpAndRegisterResponse> {
+    const response = await apiClient.post<{ data: VerifyOtpAndRegisterResponse }>(
+      'api/auth/verify-otp-and-register',
+      {
+        body: {
+          email: request.email.trim().toLowerCase(),
+          otp: request.otp.trim(),
+          password: request.password,
+          fullName: request.fullName.trim(),
+          role: request.role ?? 'Driver',
+          referralCode: request.referralCode ?? undefined,
+        },
+        requiresAuth: false,
+      }
+    );
+
+    const payload = (response.data as any)?.data ?? response.data;
+    if (!response.success || !payload?.token || !payload?.user) {
+      throw new Error(response.message || 'Verification failed. Please check the code and try again.');
+    }
+
+    const { token, user, expiration, refreshToken, refreshTokenExpiration } = payload;
+    if (!isAllowedRole(user)) {
+      throw new Error(getRoleRestrictionMessage(user));
+    }
+
+    await tokenStorage.setAccessToken(token);
+    return {
+      token,
+      expiration: expiration ?? '',
+      refreshToken,
+      refreshTokenExpiration,
+      user,
+    };
   }
 }
 

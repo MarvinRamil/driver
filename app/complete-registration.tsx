@@ -100,7 +100,7 @@ export default function CompleteRegistrationScreen() {
 
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
+                allowsEditing: false, // Disable editing for documents - use photo as-is
                 quality: 0.8,
               });
 
@@ -109,6 +109,7 @@ export default function CompleteRegistrationScreen() {
                   ...prev,
                   [docKey]: { ...prev[docKey], uri: result.assets[0].uri },
                 }));
+                setError(null); // Clear error when document is uploaded
               }
             },
           },
@@ -117,7 +118,7 @@ export default function CompleteRegistrationScreen() {
             onPress: async () => {
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
+                allowsEditing: false, // Disable editing for documents - use photo as-is
                 quality: 0.8,
               });
 
@@ -126,6 +127,7 @@ export default function CompleteRegistrationScreen() {
                   ...prev,
                   [docKey]: { ...prev[docKey], uri: result.assets[0].uri },
                 }));
+                setError(null); // Clear error when document is uploaded
               }
             },
           },
@@ -137,10 +139,18 @@ export default function CompleteRegistrationScreen() {
   };
 
   const handleRemoveDocument = (docKey: string) => {
-    setDocuments((prev) => ({
-      ...prev,
-      [docKey]: { ...prev[docKey], uri: null },
-    }));
+    setDocuments((prev) => {
+      const updated = {
+        ...prev,
+        [docKey]: { ...prev[docKey], uri: null },
+      };
+      // Clear error if there are still documents uploaded
+      const hasAnyDocument = Object.values(updated).some((doc) => doc.uri !== null);
+      if (hasAnyDocument) {
+        setError(null);
+      }
+      return updated;
+    });
   };
 
   const handleCompleteRegistration = async () => {
@@ -152,7 +162,7 @@ export default function CompleteRegistrationScreen() {
         throw new Error('User information not found. Please login again.');
       }
 
-      // Check if at least one document is provided
+      // Validate that at least one document is provided (should already be validated, but double-check)
       const hasAnyDocument = Object.values(documents).some((doc) => doc.uri !== null);
       if (!hasAnyDocument) {
         throw new Error('Please upload at least one document');
@@ -273,9 +283,25 @@ export default function CompleteRegistrationScreen() {
               ))}
             </View>
 
+            {error && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
             <TouchableOpacity
               style={[styles.continueButton, { backgroundColor: theme.primary }]}
-              onPress={() => setCurrentStep('review')}>
+              onPress={() => {
+                // Validate that at least one document is uploaded
+                const hasAnyDocument = Object.values(documents).some((doc) => doc.uri !== null);
+                if (!hasAnyDocument) {
+                  setError('Please upload at least one document before continuing');
+                  return;
+                }
+                setError(null);
+                setCurrentStep('review');
+              }}>
               <Text style={[styles.continueButtonText, { color: theme.primaryText }]}>Continue to Review</Text>
             </TouchableOpacity>
           </ScrollView>

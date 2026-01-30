@@ -96,8 +96,30 @@ function NavigationGuard() {
       const needsRegistration = isAuthenticated && user && user.role === 'Driver' && !user.isOnboarded;
       const isCompleteRegistrationPage = currentRoute === "complete-registration";
 
-      // If user needs to complete registration, redirect to complete-registration page
-      if (needsRegistration && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
+      // Check if user has a pending driver application
+      let hasPendingApplication = false;
+      if (needsRegistration && isAuthenticated) {
+        try {
+          const { apiClient } = await import('@/shared/services/apiClient');
+          const response = await apiClient.get('/api/driver-applications/my-application', {
+            requiresAuth: true,
+          });
+          if (response.success && response.data) {
+            const status = response.data.status;
+            // If application exists and is pending, don't redirect to complete-registration
+            if (status === 'Pending' || status === 'pending') {
+              hasPendingApplication = true;
+            }
+          }
+        } catch (error) {
+          // If endpoint returns 404, no application exists - allow registration
+          // If other error, log but don't block
+          console.log('Error checking driver application:', error);
+        }
+      }
+
+      // If user needs to complete registration AND doesn't have pending application, redirect
+      if (needsRegistration && !hasPendingApplication && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
         router.replace("/complete-registration");
         return;
       }

@@ -146,6 +146,30 @@ export interface RegisterResponse {
   email?: string;
 }
 
+/** OTP send request - POST /api/auth/send-otp */
+export interface SendOtpRequest {
+  email: string;
+}
+
+/** OTP verify and register request - POST /api/auth/verify-otp-and-register */
+export interface VerifyOtpAndRegisterRequest {
+  email: string;
+  otp: string;
+  password: string;
+  fullName: string;
+  role?: "Driver";
+  referralCode?: string | null;
+}
+
+/** Response from verify-otp-and-register (same shape as login: token + user) */
+export interface VerifyOtpAndRegisterResponse {
+  token: string;
+  expiration: string;
+  refreshToken?: string;
+  refreshTokenExpiration?: string;
+  user: User;
+}
+
 /**
  * Complete driver registration request
  * Used after email verification to complete registration with documents
