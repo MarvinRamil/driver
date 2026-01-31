@@ -112,11 +112,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         }
       } catch (err) {
-        // Session is invalid or error occurred
+        // Session is invalid or error occurred (e.g. 401 after deploy - token from different API)
         setUser(null);
-        setError(
-          err instanceof Error ? err.message : "Failed to initialize auth"
-        );
+        const message =
+          err instanceof Error
+            ? err.message
+            : err && typeof err === "object" && "status" in err && (err as { status: number }).status === 401
+              ? "Session expired or invalid. Please sign in again."
+              : "Failed to initialize auth";
+        setError(message);
       } finally {
         setIsLoading(false);
       }
