@@ -113,6 +113,12 @@ export interface RefreshTokenResponse {
   expiresIn?: number;
 }
 
+/** Security question request - one question + answer (matches API SecurityQuestionRequest) */
+export interface SecurityQuestionRequest {
+  questionId: number;
+  answer: string;
+}
+
 /**
  * Register request payload
  * Matches API POST /api/auth/register request body
@@ -132,6 +138,12 @@ export interface RegisterRequest {
   companyId?: string | null;
   /** Referral code (optional) */
   referralCode?: string | null;
+  /** Security question 1 (required for account recovery) */
+  securityQuestion1?: SecurityQuestionRequest;
+  /** Security question 2 (required for account recovery) */
+  securityQuestion2?: SecurityQuestionRequest;
+  /** Security question 3 (required for account recovery) */
+  securityQuestion3?: SecurityQuestionRequest;
 }
 
 /**

@@ -381,6 +381,20 @@ class AuthService {
   }
 
   /**
+   * Get available security questions for registration (account recovery)
+   * GET /api/auth/security-questions
+   */
+  async getSecurityQuestions(): Promise<Array<{ id: number; question: string }>> {
+    const response = await apiClient.get<{ success?: boolean; questions?: Array<{ id: number; question: string }> }>(
+      '/api/auth/security-questions',
+      { requiresAuth: false }
+    );
+    const data = response.data as { success?: boolean; questions?: Array<{ id: number; question: string }> };
+    const questions = data?.questions ?? (Array.isArray(data) ? data : []);
+    return questions;
+  }
+
+  /**
    * Send OTP to email for verification (OTP-first registration)
    * POST /api/auth/send-otp
    */

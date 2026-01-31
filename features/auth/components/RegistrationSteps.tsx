@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -71,6 +73,16 @@ export function RegistrationSteps() {
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
   const { refreshUser } = useAuthContext();
 
+  // Security questions (required for account recovery)
+  const [securityQuestionsList, setSecurityQuestionsList] = useState<Array<{ id: number; question: string }>>([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<[number | null, number | null, number | null]>([null, null, null]);
+  const [questionAnswers, setQuestionAnswers] = useState<[string, string, string]>(['', '', '']);
+  const [questionPickerIndex, setQuestionPickerIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    authService.getSecurityQuestions().then(setSecurityQuestionsList).catch(() => {});
+  }, []);
+
   // Registration status is checked once when user clicks Continue (see handleSubmitBasicInfo).
   // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
 
@@ -100,8 +112,26 @@ export function RegistrationSteps() {
     if (registrationData.password !== confirmPassword) {
       return 'Passwords do not match';
     }
+    for (let i = 0; i < 3; i++) {
+      if (!selectedQuestionIds[i]) return `Please select security question ${i + 1}`;
+      if (!questionAnswers[i] || questionAnswers[i].trim().length < 3) {
+        return `Please provide an answer for security question ${i + 1} (at least 3 characters)`;
+      }
+    }
     return null;
   };
+
+  const buildSecurityQuestionsPayload = () => ({
+    securityQuestion1: selectedQuestionIds[0] && questionAnswers[0]
+      ? { questionId: selectedQuestionIds[0], answer: questionAnswers[0].trim() }
+      : undefined,
+    securityQuestion2: selectedQuestionIds[1] && questionAnswers[1]
+      ? { questionId: selectedQuestionIds[1], answer: questionAnswers[1].trim() }
+      : undefined,
+    securityQuestion3: selectedQuestionIds[2] && questionAnswers[2]
+      ? { questionId: selectedQuestionIds[2], answer: questionAnswers[2].trim() }
+      : undefined,
+  });
 
   /** Step 1: Send OTP to email (OTP-first flow) */
   const handleSendOtp = async () => {
@@ -179,6 +209,7 @@ export function RegistrationSteps() {
         password: registrationData.password,
         fullName: registrationData.fullName.trim(),
         role: 'Driver',
+        ...buildSecurityQuestionsPayload(),
       });
       await authService.login({
         email: registrationData.email.trim(),
@@ -245,6 +276,7 @@ export function RegistrationSteps() {
           password: registrationData.password,
           fullName: registrationData.fullName.trim(),
           role: 'Driver',
+          ...buildSecurityQuestionsPayload(),
         });
         if (response.requiresEmailVerification || response.message?.includes('verify')) {
           setCurrentStep('email-verification');
@@ -536,13 +568,95 @@ export function RegistrationSteps() {
     );
   }
 
+  // Reusable security questions block + picker modal
+  const securityQuestionsBlock = (
+    <View style={[styles.securityQuestionsSection, { borderTopColor: theme.border }]}>
+      <Text style={[styles.securityQuestionsTitle, { color: theme.text }]}>
+        Security questions <Text style={styles.required}>*</Text>
+      </Text>
+      <Text style={[styles.securityQuestionsSubtitle, { color: theme.textSecondary }]}>
+        All 3 are required for account recovery (e.g. forgot password)
+      </Text>
+      {([0, 1, 2] as const).map((index) => {
+        const selectedId = selectedQuestionIds[index];
+        const selectedQuestion = selectedId ? securityQuestionsList.find((q) => q.id === selectedId) : null;
+        return (
+          <View key={index} style={styles.securityQuestionRow}>
+            <Text style={[styles.label, { color: theme.text }]}>Security question {index + 1}</Text>
+            <TouchableOpacity
+              style={[styles.pickerButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => setQuestionPickerIndex(index)}
+              disabled={isLoading}>
+              <Text style={[styles.pickerButtonText, { color: selectedQuestion ? theme.text : theme.textSecondary }]} numberOfLines={1}>
+                {selectedQuestion ? selectedQuestion.question : 'Select a question'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, styles.inputLarge, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }, styles.securityAnswerInput]}
+              placeholder="Your answer"
+              placeholderTextColor={theme.placeholder}
+              value={questionAnswers[index]}
+              onChangeText={(text) => {
+                const next = [...questionAnswers] as [string, string, string];
+                next[index] = text;
+                setQuestionAnswers(next);
+                setError(null);
+              }}
+              editable={!isLoading}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+
+  const questionPickerModal = questionPickerIndex !== null && (
+    <Modal visible transparent animationType="slide">
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setQuestionPickerIndex(null)} />
+        <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>Select question {questionPickerIndex + 1}</Text>
+          <FlatList
+            data={securityQuestionsList.filter(
+              (q) =>
+                selectedQuestionIds[questionPickerIndex] === q.id ||
+                !selectedQuestionIds.some((id, i) => i !== questionPickerIndex && id === q.id)
+            )}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.modalOption, { borderBottomColor: theme.border }]}
+                onPress={() => {
+                  const next = [...selectedQuestionIds];
+                  next[questionPickerIndex] = item.id;
+                  setSelectedQuestionIds(next);
+                  setQuestionPickerIndex(null);
+                }}>
+                <Text style={[styles.modalOptionText, { color: theme.text }]}>{item.question}</Text>
+              </TouchableOpacity>
+            )}
+          />
+          <TouchableOpacity style={[styles.modalCancel, { borderColor: theme.border }]} onPress={() => setQuestionPickerIndex(null)}>
+            <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // OTP flow: Step 3 – Full name + password (email and OTP already in state)
   if (currentStep === 'enter-details') {
     return (
+      <>
+        {questionPickerModal}
       <KeyboardAvoidingView
         style={[styles.container, { backgroundColor: theme.background }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        {questionPickerModal}
         <View style={[styles.content, { paddingTop: insets.top }]}>
           <ScrollView
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
@@ -622,6 +736,7 @@ export function RegistrationSteps() {
                   </TouchableOpacity>
                 </View>
               </View>
+              {securityQuestionsBlock}
               {error && (
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
@@ -654,6 +769,7 @@ export function RegistrationSteps() {
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      </>
     );
   }
 
@@ -773,28 +889,30 @@ export function RegistrationSteps() {
 
   // Basic Info Step (default)
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-      <View style={[styles.content, { paddingTop: insets.top }]}>
-        <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
-          {/* Header */}
-          <View style={styles.headerContainer}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color={theme.text} />
-            </TouchableOpacity>
-            <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
-            <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-              Sign up to start accepting bookings
-            </Text>
-          </View>
+    <>
+      {questionPickerModal}
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled">
+            {/* Header */}
+            <View style={styles.headerContainer}>
+              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                Sign up to start accepting bookings
+              </Text>
+            </View>
 
-          {/* Form */}
-          <View style={styles.form}>
+            {/* Form */}
+            <View style={styles.form}>
             {/* Full Name */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.text }]}>Full Name</Text>
@@ -907,6 +1025,8 @@ export function RegistrationSteps() {
               </View>
             </View>
 
+            {securityQuestionsBlock}
+
             {/* Error Message */}
             {error && (
               <View style={styles.errorContainer}>
@@ -944,6 +1064,7 @@ export function RegistrationSteps() {
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
+    </>
   );
 }
 
@@ -1156,5 +1277,88 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 8,
     marginTop: 8,
+  },
+  securityQuestionsSection: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    width: '100%',
+  },
+  securityQuestionsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  required: {
+    color: BeeColors.red[600],
+  },
+  securityQuestionsSubtitle: {
+    fontSize: 12,
+    marginBottom: 16,
+  },
+  securityQuestionRow: {
+    marginBottom: 16,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 52,
+    marginBottom: 8,
+  },
+  pickerButtonText: {
+    flex: 1,
+    fontSize: 16,
+    marginRight: 8,
+  },
+  securityAnswerInput: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 52,
+    marginTop: 0,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  modalOption: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+  },
+  modalOptionText: {
+    fontSize: 16,
+  },
+  modalCancel: {
+    marginTop: 12,
+    marginHorizontal: 20,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
