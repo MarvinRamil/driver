@@ -14,11 +14,18 @@ class OfferService {
 
   /**
    * Get pending offers for current driver
-   * GET /api/driver-offers/pending
+   * GET /api/driver-offers/pending?limit={limit}
+   * 
+   * @param limit - Maximum number of offers to return (default: 3, max: 10)
+   * @returns Promise resolving to array of driver offers
    */
-  async getPendingOffers(): Promise<DriverOffer[]> {
+  async getPendingOffers(limit: number = 3): Promise<DriverOffer[]> {
     try {
-      const response = await apiClient.get<{ data: any[] }>('/api/driver-offers/pending', {
+      // Ensure limit is within valid range (1-10)
+      const validLimit = Math.max(1, Math.min(10, limit));
+      
+      const response = await apiClient.get<DriverOffer[]>('/api/driver-offers/pending', {
+        params: { limit: validLimit },
         requiresAuth: true,
       });
 
@@ -26,31 +33,82 @@ class OfferService {
         return [];
       }
 
-      const data = response.data.data || response.data;
-      const offers = Array.isArray(data) ? data : [];
+      // Handle both array response and wrapped response
+      const offers = Array.isArray(response.data) ? response.data : [];
+      
+      return offers.map((offer: any) => {
+        // Parse dates
+        const expiresAt = this.parseDate(offer.expiresAt);
+        const offeredAt = this.parseDate(offer.offeredAt);
+        const respondedAt = offer.respondedAt ? this.parseDate(offer.respondedAt) : null;
+        const scheduleDate = this.parseDate(offer.scheduleDate);
 
-      return offers.map((offer: any) => ({
+        // Parse stops array (multi-stop support)
+        const stops: any[] = Array.isArray(offer.stops) ? offer.stops : [];
+
+        // Extract pickup and dropoff from stops for backward compatibility
+        const pickupStop = stops.find(s => s.type === 'Pickup' || s.sequence === 0);
+        const dropoffStops = stops.filter(s => s.type === 'Dropoff' || s.sequence > 0);
+        const lastDropoff = dropoffStops[dropoffStops.length - 1];
+
+        return {
         id: offer.id,
         bookingId: offer.bookingId,
         driverId: offer.driverId,
+          tenantId: offer.tenantId || null,
         status: offer.status || 'Pending',
-        expiresAt: this.parseDate(offer.expiresAt) || new Date(),
-        estimatedFare: offer.estimatedFare || offer.fare || 0,
-        estimatedDistance: offer.estimatedDistance || offer.distance || 0,
-        estimatedDuration: offer.estimatedDuration || offer.duration || 0,
-        pickupLocation: offer.pickupLocation || offer.pickupAddress || '',
-        dropoffLocation: offer.dropoffLocation || offer.dropoffAddress || '',
-        pickupCoordinates: offer.pickupCoordinates,
-        dropoffCoordinates: offer.dropoffCoordinates,
-        paymentMethod: offer.paymentMethod || 'Cash',
-        specialRequests: offer.specialRequests || [],
-        customerRating: offer.customerRating || offer.riderRating, // Support both for backward compatibility
+          offeredAt: offeredAt || new Date(),
+          respondedAt: respondedAt,
+          expiresAt: expiresAt || new Date(),
+          sequenceNumber: offer.sequenceNumber || 0,
+          distanceKm: offer.distanceKm ?? null,
+          isFavouriteDriver: offer.isFavouriteDriver || false,
+          driverRating: offer.driverRating ?? null,
+          estimatedArrivalMinutes: offer.estimatedArrivalMinutes ?? null,
+          bookingNumber: offer.bookingNumber || `BKG-${offer.bookingId?.slice(0, 8) || 'UNKNOWN'}`,
+          customerId: offer.customerId || '',
+          customerName: offer.customerName || 'Customer',
+          vehicleType: offer.vehicleType || offer.truckType || 'Medium',
         cargoDescription: offer.cargoDescription || offer.cargo || '',
-        truckType: offer.truckType || offer.requiredTruckType || '',
-        createdAt: this.parseDate(offer.createdAt) || new Date(),
-      }));
+          scheduleDate: scheduleDate || new Date(),
+          bookingStatus: offer.bookingStatus || offer.status || 'Pending',
+          notes: offer.notes || null,
+          weightKg: offer.weightKg ?? null,
+          itemImagePath: offer.itemImagePath || null,
+          estimatedFare: offer.estimatedFare ?? offer.fare ?? 0,
+          finalFare: offer.finalFare ?? null,
+          distanceKmTotal: offer.distanceKmTotal ?? offer.distanceKm ?? null,
+          stops: stops.map((stop: any) => ({
+            sequence: stop.sequence ?? 0,
+            address: stop.address || '',
+            type: stop.type || (stop.sequence === 0 ? 'Pickup' : 'Dropoff'),
+            latitude: stop.latitude ?? null,
+            longitude: stop.longitude ?? null,
+            contactName: stop.contactName || null,
+            contactPhone: stop.contactPhone || null,
+            notes: stop.notes || null,
+          })),
+          
+          // Legacy fields for backward compatibility
+          pickupLocation: pickupStop?.address || offer.pickupLocation || offer.pickupAddress || '',
+          dropoffLocation: lastDropoff?.address || offer.dropoffLocation || offer.dropoffAddress || '',
+          pickupCoordinates: pickupStop?.latitude && pickupStop?.longitude ? {
+            latitude: pickupStop.latitude,
+            longitude: pickupStop.longitude,
+          } : offer.pickupCoordinates,
+          dropoffCoordinates: lastDropoff?.latitude && lastDropoff?.longitude ? {
+            latitude: lastDropoff.latitude,
+            longitude: lastDropoff.longitude,
+          } : offer.dropoffCoordinates,
+          truckType: offer.vehicleType || offer.truckType || offer.requiredTruckType || '',
+          estimatedDistance: offer.distanceKmTotal ?? offer.distanceKm ?? offer.estimatedDistance ?? 0,
+          estimatedDuration: offer.estimatedArrivalMinutes ?? offer.estimatedDuration ?? offer.duration ?? 0,
+          customerRating: offer.customerRating ?? offer.riderRating ?? null,
+          createdAt: offeredAt || new Date(),
+        };
+      });
     } catch (error) {
-      console.error('Failed to fetch pending offers:', error);
+      console.error('[OfferService] Failed to fetch pending offers:', error);
       throw new Error(
         `Failed to fetch offers: ${error instanceof Error ? error.message : 'Unknown error'}`
       );

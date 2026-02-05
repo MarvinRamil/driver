@@ -11,7 +11,15 @@ interface UseOffersReturn {
   rejectOffer: (offerId: string) => Promise<void>;
 }
 
-export function useOffers(): UseOffersReturn {
+interface UseOffersOptions {
+  /** Maximum number of offers to fetch (default: 3, max: 10) */
+  limit?: number;
+  /** Polling interval in milliseconds (default: 5000, set to 0 to disable) */
+  pollingInterval?: number;
+}
+
+export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
+  const { limit = 3, pollingInterval = 5000 } = options;
   const [offers, setOffers] = useState<DriverOffer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,16 +28,16 @@ export function useOffers(): UseOffersReturn {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await offerService.getPendingOffers();
+      const data = await offerService.getPendingOffers(limit);
       setOffers(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch offers';
       setError(errorMessage);
-      console.error('Error fetching offers:', err);
+      console.error('[useOffers] Error fetching offers:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [limit]);
 
   const acceptOffer = useCallback(
     async (offerId: string) => {
@@ -63,10 +71,12 @@ export function useOffers(): UseOffersReturn {
 
   useEffect(() => {
     fetchOffers();
-    // Poll for new offers every 5 seconds
-    const interval = setInterval(fetchOffers, 5000);
+    // Poll for new offers if polling interval is set
+    if (pollingInterval > 0) {
+      const interval = setInterval(fetchOffers, pollingInterval);
     return () => clearInterval(interval);
-  }, [fetchOffers]);
+    }
+  }, [fetchOffers, pollingInterval]);
 
   return {
     offers,
