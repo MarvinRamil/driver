@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { offerService } from '../services/offerService';
 import type { DriverOffer } from '../types';
 
@@ -23,6 +23,10 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
   const [offers, setOffers] = useState<DriverOffer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Track polling interval and whether polling should continue
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldPollRef = useRef<boolean>(true);
 
   const fetchOffers = useCallback(async () => {
     setIsLoading(true);
@@ -30,10 +34,21 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
     try {
       const data = await offerService.getPendingOffers(limit);
       setOffers(data);
+      // On success, clear error and allow polling to continue
+      setError(null);
+      shouldPollRef.current = true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch offers';
       setError(errorMessage);
       console.error('[useOffers] Error fetching offers:', err);
+      
+      // Stop polling on error - user must manually refresh
+      shouldPollRef.current = false;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      console.log('[useOffers] Polling stopped due to error. User must manually refresh.');
     } finally {
       setIsLoading(false);
     }
@@ -69,20 +84,60 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
     []
   );
 
-  useEffect(() => {
-    fetchOffers();
-    // Poll for new offers if polling interval is set
-    if (pollingInterval > 0) {
-      const interval = setInterval(fetchOffers, pollingInterval);
-    return () => clearInterval(interval);
+  // Manual refresh function that can restart polling on success
+  const refresh = useCallback(async () => {
+    await fetchOffers();
+    // If polling was enabled and we successfully fetched, restart polling
+    if (pollingInterval > 0 && shouldPollRef.current && !pollingIntervalRef.current) {
+      pollingIntervalRef.current = setInterval(() => {
+        // Only poll if shouldPollRef is still true
+        if (shouldPollRef.current) {
+          fetchOffers();
+        } else {
+          // Stop polling if flag is false
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+        }
+      }, pollingInterval);
     }
+  }, [fetchOffers, pollingInterval]);
+
+  useEffect(() => {
+    // Initial fetch
+    fetchOffers();
+    
+    // Start polling if interval is set and no error occurred
+    if (pollingInterval > 0 && shouldPollRef.current) {
+      pollingIntervalRef.current = setInterval(() => {
+        // Only poll if shouldPollRef is still true
+        if (shouldPollRef.current) {
+          fetchOffers();
+        } else {
+          // Stop polling if flag is false
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+        }
+      }, pollingInterval);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
   }, [fetchOffers, pollingInterval]);
 
   return {
     offers,
     isLoading,
     error,
-    refresh: fetchOffers,
+    refresh,
     acceptOffer,
     rejectOffer,
   };

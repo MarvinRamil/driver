@@ -30,9 +30,7 @@ export function isAllowedRole(user: User | null): boolean {
   // - Must have tenantId (not null)
   // - Must NOT be solo driver
   if (
-    user.role === 'Driver' &&
-    user.tenantId !== null &&
-    !user.isSoloDriver
+    user.role === 'Driver'
   ) {
     return true;
   }
