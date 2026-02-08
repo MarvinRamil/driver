@@ -7,6 +7,7 @@ import { useOffers } from '@/features/offers';
 import { useAuth } from '@/features/auth';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
+import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
@@ -236,18 +237,23 @@ export default function AcceptBookingScreen() {
         </View>
       </View>
 
-      {/* Action Buttons */}
+      {/* Swipe to accept */}
       <View style={[styles.actionsContainer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+        <SwipeToAccept
+          label="Swipe to accept booking"
+          trackColor={theme.border}
+          thumbColor={theme.primary}
+          textColor={theme.text}
+          style={styles.swipeToAcceptFull}
+          onAccept={handleAccept}
+        />
         <TouchableOpacity
-          style={[styles.declineButton, { borderColor: theme.border }]}
+          style={[styles.declineButtonLink, { borderColor: theme.border }]}
           onPress={handleReject}>
-          <ThemedText style={[styles.declineButtonText, { color: theme.text }]}>Decline</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.acceptButton, { backgroundColor: theme.primary }]}
-          onPress={handleAccept}>
-          <ThemedText style={[styles.acceptButtonText, { color: theme.primaryText }]}>Accept Booking</ThemedText>
-          <Ionicons name="checkmark-circle" size={24} color={theme.primaryText} />
+          <Ionicons name="close-outline" size={18} color={theme.textSecondary} />
+          <ThemedText style={[styles.declineButtonLinkText, { color: theme.textSecondary }]}>
+            Decline
+          </ThemedText>
         </TouchableOpacity>
       </View>
     </ThemedView>
@@ -416,10 +422,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   actionsContainer: {
-    flexDirection: 'row',
-    gap: 12,
     padding: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
+    gap: 12,
+  },
+  swipeToAcceptFull: {
+    width: '100%',
+    minHeight: 48,
+  },
+  declineButtonLink: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  declineButtonLinkText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   declineButton: {
     flex: 1,
@@ -445,6 +470,10 @@ const styles = StyleSheet.create({
   acceptButtonText: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  acceptSwitchContainer: {
+    flex: 2,
+    borderRadius: 12,
   },
   emptyContainer: {
     flex: 1,
