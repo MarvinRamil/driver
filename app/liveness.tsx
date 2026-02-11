@@ -1,9 +1,8 @@
 import { BeeColors } from "@/constants/theme";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth";
 import { livenessService } from "@/features/liveness";
+import { CameraView, useCameraPermissions } from "expo-camera";
 
 const DIRECTION_LABELS: Record<string, string> = {
   left: "Look left",
@@ -33,12 +33,15 @@ export default function LivenessScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { refreshUser } = useAuth();
+  const [permission, requestPermission] = useCameraPermissions();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [directions, setDirections] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const cameraRef = useRef<CameraView>(null);
 
   const currentDirection = directions[currentIndex];
 
@@ -61,11 +64,37 @@ export default function LivenessScreen() {
     startSession();
   }, [startSession]);
 
-  const handleCapture = async () => {
-    if (!sessionId || !currentDirection) return;
+  // Auto-capture countdown when direction changes
+  useEffect(() => {
+    if (!sessionId || !currentDirection || submitting || !permission?.granted) {
+      setCountdown(null);
+      return;
+    }
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
+    // Reset countdown when direction changes
+    setCountdown(3); // 3 second countdown
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          // Auto-capture when countdown reaches 0
+          if (prev === 1) {
+            handleCapture();
+          }
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentIndex, sessionId, submitting, permission?.granted, currentDirection, handleCapture]);
+
+  const handleCapture = useCallback(async () => {
+    if (!sessionId || !currentDirection || !cameraRef.current || submitting) return;
+
+    if (!permission?.granted) {
       Alert.alert(
         "Camera required",
         "Please allow camera access to complete face verification."
@@ -73,21 +102,22 @@ export default function LivenessScreen() {
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-
     setSubmitting(true);
     setError(null);
     try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+        base64: false,
+      });
+
+      if (!photo?.uri) {
+        throw new Error("Failed to capture photo");
+      }
+
       const data = await livenessService.submitImage(
         sessionId,
         currentDirection,
-        result.assets[0].uri
+        photo.uri
       );
 
       if (data.allPassed) {
@@ -110,7 +140,7 @@ export default function LivenessScreen() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [sessionId, currentDirection, submitting, permission?.granted, refreshUser, router]);
 
   if (loading) {
     return (
@@ -136,6 +166,38 @@ export default function LivenessScreen() {
             Try again
           </Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!permission) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
+        <View style={styles.content}>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Camera Permission Required
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            We need access to your camera to verify your identity.
+          </Text>
+          <TouchableOpacity
+            style={[styles.captureButton, { backgroundColor: theme.primary }]}
+            onPress={requestPermission}
+          >
+            <Ionicons name="camera" size={24} color={theme.primaryText} />
+            <Text style={[styles.captureButtonText, { color: theme.primaryText }]}>
+              Grant Permission
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -167,26 +229,47 @@ export default function LivenessScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={[
-            styles.captureButton,
-            { backgroundColor: theme.primary },
-            submitting && styles.buttonDisabled,
-          ]}
-          onPress={handleCapture}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color={theme.primaryText} />
-          ) : (
-            <>
-              <Ionicons name="camera" size={24} color={theme.primaryText} />
-              <Text style={[styles.captureButtonText, { color: theme.primaryText }]}>
-                Take photo
+        {/* Camera Preview */}
+        <View style={styles.cameraContainer}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing="front"
+            mode="picture"
+          >
+            {/* Overlay guide */}
+            <View style={styles.overlay}>
+              <View style={styles.guideFrameContainer}>
+                <View style={[styles.guideFrame, { borderColor: theme.primary }]} />
+                {countdown !== null && countdown > 0 && (
+                  <View style={styles.countdownContainer}>
+                    <Text style={styles.countdownText}>{countdown}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.guideText}>
+                {countdown !== null && countdown > 0
+                  ? "Get ready..."
+                  : "Position your face within the frame"}
               </Text>
-            </>
-          )}
-        </TouchableOpacity>
+            </View>
+          </CameraView>
+        </View>
+
+        {submitting ? (
+          <View style={[styles.captureButton, { backgroundColor: theme.primary }]}>
+            <ActivityIndicator color={theme.primaryText} />
+            <Text style={[styles.captureButtonText, { color: theme.primaryText, marginLeft: 10 }]}>
+              Processing...
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.infoContainer}>
+            <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+              Photo will be captured automatically
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -250,6 +333,67 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
+  cameraContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 24,
+    minHeight: 400,
+  },
+  camera: {
+    flex: 1,
+  },
+  overlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guideFrameContainer: {
+    width: 280,
+    height: 280,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  guideFrame: {
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    borderWidth: 3,
+  },
+  guideText: {
+    marginTop: 16,
+    fontSize: 14,
+    fontWeight: "600",
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    color: "white",
+  },
+  countdownContainer: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countdownText: {
+    fontSize: 64,
+    fontWeight: "700",
+    color: "white",
+    textShadowColor: "rgba(0,0,0,0.75)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  infoContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    marginBottom: 24,
+  },
+  infoText: {
+    fontSize: 14,
+    textAlign: "center",
+  },
   captureButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -257,7 +401,6 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 52,
     borderRadius: 12,
-    marginTop: "auto",
     marginBottom: 24,
   },
   captureButtonText: {
