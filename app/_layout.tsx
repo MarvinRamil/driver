@@ -57,6 +57,14 @@ function NavigationGuard() {
       const inTabsGroup = currentRoute === "(tabs)";
       const isLoginPage = currentRoute === "login";
       const isSignupPage = currentRoute === "signup";
+      const isLivenessPage = currentRoute === "liveness";
+      const isDriverCompletePage = currentRoute === "driver-complete";
+
+      // Driver onboarding: after email verification, require liveness then document submit
+      const isDriver = user?.role === "Driver";
+      const livenessVerifiedAt = user?.livenessVerifiedAt ?? (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
+      const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
+      const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
 
       // CRITICAL: If no user, redirect to login immediately
       // This ensures home page never loads when there's no authenticated user
@@ -67,6 +75,16 @@ function NavigationGuard() {
         }
         // Otherwise, redirect to login
         router.replace("/login");
+        return;
+      }
+
+      // Driver onboarding: redirect to liveness or driver-complete if needed
+      if (needsLiveness && !isLivenessPage) {
+        router.replace("/liveness");
+        return;
+      }
+      if (needsDriverComplete && !isDriverCompletePage) {
+        router.replace("/driver-complete");
         return;
       }
 
@@ -87,79 +105,17 @@ function NavigationGuard() {
         return;
       }
 
-      // Check if user needs to complete registration (not onboarded)
-      const needsRegistration = isAuthenticated && user && user.role === 'Driver' && !user.isOnboarded;
-      const isCompleteRegistrationPage = currentRoute === "complete-registration";
-
-      // When we need to check for pending driver application, run async and then decide redirect
-      if (needsRegistration && isAuthenticated) {
-        (async () => {
-          let hasPendingApplication = false;
-          try {
-            const { apiClient } = await import('@/shared/services/apiClient');
-            const response = await apiClient.get('/api/driver-applications/my-application', {
-              requiresAuth: true,
-            });
-            // Backend returns { success, data: { id, fullName, status, ... } }; apiClient puts that in response.data
-            const payload = (response.data as any)?.data ?? response.data;
-            if (response.success && payload) {
-              // Backend may return status as Status (PascalCase) or status (camelCase); enum may be number (0=Pending)
-              const status = (payload.status ?? payload.Status ?? '').toString();
-              const statusLower = status.toLowerCase();
-              if (statusLower === 'pending' || status === '0') {
-                hasPendingApplication = true;
-              }
-            }
-            // If no payload or success false: no application yet → hasPendingApplication stays false → go to complete-registration
-          } catch (error: any) {
-            // 404 "No application found" = fresh account, must complete registration (do not treat as pending)
-            const status = error?.status ?? error?.details?.status;
-            const message = (error?.details?.message ?? error?.message ?? '').toString().toLowerCase();
-            if (status === 404 || message.includes('no application found')) {
-              hasPendingApplication = false;
-              console.log('[NavigationGuard] No application found (404) → complete registration');
-            } else {
-              // Other errors (403, network): don't assume pending; send to complete-registration so fresh users aren't stuck on "under review"
-              hasPendingApplication = false;
-              console.log('[NavigationGuard] Error checking driver application (sending to complete-registration):', error);
-            }
-          }
-          if (needsRegistration && !hasPendingApplication && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
-            router.replace("/complete-registration");
-            return;
-          }
-          // When application is pending, show pending-approval screen instead of tabs or complete-registration
-          if (hasPendingApplication && (currentRoute === "(tabs)" || currentRoute === "complete-registration")) {
-            router.replace("/pending-approval");
-            return;
-          }
-          if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-            if (needsRegistration && !hasPendingApplication) {
-              router.replace("/complete-registration");
-            } else if (hasPendingApplication) {
-              router.replace("/pending-approval");
-            } else {
-              router.replace("/(tabs)");
-            }
-          }
-        })();
-        return;
-      }
-
-      // If user needs to complete registration AND doesn't have pending application, redirect
-      let hasPendingApplication = false;
-      if (needsRegistration && !hasPendingApplication && !isCompleteRegistrationPage && !isLoginPage && !isSignupPage) {
-        router.replace("/complete-registration");
-        return;
-      }
-
-      // If user is authenticated with allowed role and on login or signup page, redirect appropriately
+      // If user is authenticated with allowed role and on login or signup page, redirect (tabs or onboarding)
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-        if (needsRegistration) {
-          router.replace("/complete-registration");
-        } else {
-          router.replace("/(tabs)");
+        if (needsLiveness) {
+          router.replace("/liveness");
+          return;
         }
+        if (needsDriverComplete) {
+          router.replace("/driver-complete");
+          return;
+        }
+        router.replace("/(tabs)");
         return;
       }
 
@@ -167,9 +123,11 @@ function NavigationGuard() {
       if (
         isAuthenticated &&
         hasAllowedRole &&
-        (inTabsGroup || 
-         currentRoute === "accept-booking" || 
-         currentRoute === "in-ride" || 
+        (inTabsGroup ||
+         currentRoute === "liveness" ||
+         currentRoute === "driver-complete" ||
+         currentRoute === "accept-booking" ||
+         currentRoute === "in-ride" ||
          currentRoute === "rating" ||
          currentRoute === "support" ||
          currentRoute === "booking" ||
@@ -236,8 +194,8 @@ function RootLayoutNav() {
           <Stack>
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="signup" options={{ headerShown: false }} />
-            <Stack.Screen name="complete-registration" options={{ headerShown: false }} />
-            <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
+            <Stack.Screen name="liveness" options={{ headerShown: false }} />
+            <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />

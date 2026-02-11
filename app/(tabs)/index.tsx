@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
@@ -8,6 +8,7 @@ import { useBookings } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { useLocationTrackingStatus } from '@/features/driver/hooks/useLocationTracking';
+import { useOffers, getPickupAddress, getDropoffAddress, isMultiStopOffer, getTimeRemaining, filterValidOffers } from '@/features/offers';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 
@@ -28,6 +29,25 @@ export default function DashboardScreen() {
   const { bookings, isLoading, refresh, filter, setFilter } = useBookings('Incoming');
   const { isOnline, toggleOnlineStatus, isLoading: statusLoading, isInitialLoading } = useDriverStatusContext();
   const locationStatus = useLocationTrackingStatus();
+  const { offers, isLoading: offersLoading, refresh: refreshOffers, acceptOffer, rejectOffer } = useOffers({ limit: 3, pollingInterval: 5000 });
+  
+  // Filter valid (non-expired) offers
+  const validOffers = filterValidOffers(offers);
+  
+  // Countdown timer state for offers
+  const [timeRemaining, setTimeRemaining] = useState<Record<string, number>>({});
+  
+  // Update countdown timers every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const timers: Record<string, number> = {};
+      validOffers.forEach(offer => {
+        timers[offer.id] = getTimeRemaining(offer);
+      });
+      setTimeRemaining(timers);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [validOffers]);
 
   // Determine if solo driver or operator driver
   // All drivers are independent (solo)
@@ -40,10 +60,10 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
+            refreshing={isLoading || offersLoading}
             onRefresh={async () => {
               try {
-                await refresh();
+                await Promise.all([refresh(), refreshOffers()]);
               } catch (error) {
                 console.error('Error refreshing dashboard:', error);
               }
@@ -212,7 +232,167 @@ export default function DashboardScreen() {
             </View>
           )}
 
+          {/* New Offers Section */}
+          {isOnline && (
+            <View style={styles.offersSection}>
+              <View style={styles.sectionHeader}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>
+                  New Offers
+                </ThemedText>
+                {validOffers.length > 0 && (
+                  <View style={[styles.badge, { backgroundColor: theme.primary + '20' }]}>
+                    <ThemedText style={[styles.badgeText, { color: theme.primary }]}>
+                      {validOffers.length}
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
 
+              {offersLoading && validOffers.length === 0 ? (
+                <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <ThemedText style={[styles.emptyText, { color: theme.textSecondary, marginTop: 8 }]}>
+                    Loading offers...
+                  </ThemedText>
+                </View>
+              ) : validOffers.length === 0 ? (
+                <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+                  <Ionicons name="megaphone-outline" size={32} color={theme.textSecondary} />
+                  <ThemedText style={[styles.emptyText, { color: theme.textSecondary, marginTop: 8 }]}>
+                    No new offers available
+                  </ThemedText>
+                </View>
+              ) : (
+                validOffers.map((offer) => {
+                  const remaining = timeRemaining[offer.id] ?? getTimeRemaining(offer);
+                  const minutes = Math.floor(remaining / 60);
+                  const seconds = remaining % 60;
+                  const isExpiringSoon = remaining < 60; // Less than 1 minute
+                  
+                  return (
+                    <View
+                      key={offer.id}
+                      style={[styles.offerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                      <View style={[styles.offerIndicator, { backgroundColor: isExpiringSoon ? theme.error : theme.warning }]} />
+                      <View style={styles.offerHeader}>
+                        <View style={styles.offerHeaderLeft}>
+                          <View style={[styles.statusBadge, { backgroundColor: theme.primary + '20' }]}>
+                            <ThemedText style={[styles.statusBadgeText, { color: theme.primary }]}>
+                              NEW
+                            </ThemedText>
+                          </View>
+                          <ThemedText style={[styles.bookingNumber, { color: theme.textSecondary }]}>
+                            {offer.bookingNumber}
+                          </ThemedText>
+                        </View>
+                        <View style={styles.offerAmountContainer}>
+                          <ThemedText style={[styles.offerAmount, { color: theme.text }]}>
+                            ₱{offer.estimatedFare.toFixed(2)}
+                          </ThemedText>
+                          {offer.distanceKm && (
+                            <ThemedText style={[styles.offerDistance, { color: theme.textSecondary }]}>
+                              {offer.distanceKm.toFixed(1)} km
+                            </ThemedText>
+                          )}
+                        </View>
+                      </View>
+                      
+                      {/* Countdown Timer */}
+                      <View style={[styles.countdownContainer, { backgroundColor: isExpiringSoon ? theme.error + '10' : theme.border + '40' }]}>
+                        <Ionicons 
+                          name="time-outline" 
+                          size={14} 
+                          color={isExpiringSoon ? theme.error : theme.textSecondary} 
+                        />
+                        <ThemedText style={[styles.countdownText, { color: isExpiringSoon ? theme.error : theme.textSecondary }]}>
+                          {remaining > 0 
+                            ? `Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`
+                            : 'Expired'}
+                        </ThemedText>
+                      </View>
+
+                      <View style={styles.offerTimeline}>
+                        <View style={[styles.timelineLine, { backgroundColor: theme.border }]} />
+                        <View style={styles.timelineItem}>
+                          <View style={[styles.timelineDot, { backgroundColor: theme.surface, borderColor: theme.primary }]} />
+                          <View style={styles.timelineContent}>
+                            <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
+                              Pickup • {new Date(offer.scheduleDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </ThemedText>
+                            <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
+                              {getPickupAddress(offer)}
+                            </ThemedText>
+                          </View>
+                        </View>
+                        {isMultiStopOffer(offer) ? (
+                          <View style={styles.timelineItem}>
+                            <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
+                            <View style={styles.timelineContent}>
+                              <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
+                                Multi-stop ({offer.stops.filter(s => s.type === 'Dropoff').length} stops)
+                              </ThemedText>
+                              <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
+                                {getDropoffAddress(offer)}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.timelineItem}>
+                            <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
+                            <View style={styles.timelineContent}>
+                              <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
+                                Delivery
+                              </ThemedText>
+                              <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
+                                {getDropoffAddress(offer)}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                      
+                      {offer.cargoDescription && (
+                        <View style={styles.cargoInfo}>
+                          <Ionicons name="cube-outline" size={14} color={theme.textSecondary} />
+                          <ThemedText style={[styles.cargoText, { color: theme.textSecondary }]}>
+                            {offer.cargoDescription}
+                          </ThemedText>
+                        </View>
+                      )}
+
+                      <View style={[styles.offerActions, { borderTopColor: theme.border }]}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: theme.border }]}
+                          onPress={async () => {
+                            try {
+                              await rejectOffer(offer.id);
+                            } catch (error) {
+                              Alert.alert('Error', 'Failed to reject offer. Please try again.');
+                            }
+                          }}>
+                          <Ionicons name="close-outline" size={16} color={theme.text} />
+                          <ThemedText style={[styles.actionButtonText, { color: theme.text }]}>Reject</ThemedText>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                          onPress={async () => {
+                            try {
+                              await acceptOffer(offer.id);
+                              Alert.alert('Success', 'Offer accepted! Check your bookings.');
+                            } catch (error) {
+                              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to accept offer. Please try again.');
+                            }
+                          }}>
+                          <Ionicons name="checkmark-outline" size={16} color={theme.primaryText} />
+                          <ThemedText style={[styles.actionButtonText, { color: theme.primaryText }]}>Accept</ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
 
           {/* Delivery Filters */}
           <View style={styles.filtersSection}>
@@ -808,25 +988,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  filtersSection: {
+  offersSection: {
     gap: 12,
   },
-  filtersContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+  offerCard: {
+    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  filterText: {
-    fontSize: 14,
+  offerIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 6,
+  },
+  offerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  offerHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  offerAmountContainer: {
+    alignItems: 'flex-end',
+  },
+  offerAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  offerDistance: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  countdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  countdownText: {
+    fontSize: 12,
     fontWeight: '600',
+  },
+  cargoInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  cargoText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  offerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
   },
 });
