@@ -58,6 +58,14 @@ function NavigationGuard() {
       const inTabsGroup = currentRoute === "(tabs)";
       const isLoginPage = currentRoute === "login";
       const isSignupPage = currentRoute === "signup";
+      const isLivenessPage = currentRoute === "liveness";
+      const isDriverCompletePage = currentRoute === "driver-complete";
+
+      // Driver onboarding: after email verification, require liveness then document submit
+      const isDriver = user?.role === "Driver";
+      const livenessVerifiedAt = user?.livenessVerifiedAt ?? (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
+      const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
+      const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
 
       // CRITICAL: If no user, redirect to login immediately
       // This ensures home page never loads when there's no authenticated user
@@ -68,6 +76,16 @@ function NavigationGuard() {
         }
         // Otherwise, redirect to login
         router.replace("/login");
+        return;
+      }
+
+      // Driver onboarding: redirect to liveness or driver-complete if needed
+      if (needsLiveness && !isLivenessPage) {
+        router.replace("/liveness");
+        return;
+      }
+      if (needsDriverComplete && !isDriverCompletePage) {
+        router.replace("/driver-complete");
         return;
       }
 
@@ -92,8 +110,16 @@ function NavigationGuard() {
         return;
       }
 
-      // If user is authenticated with allowed role and on login or signup page, redirect to tabs
+      // If user is authenticated with allowed role and on login or signup page, redirect (tabs or onboarding)
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
+        if (needsLiveness) {
+          router.replace("/liveness");
+          return;
+        }
+        if (needsDriverComplete) {
+          router.replace("/driver-complete");
+          return;
+        }
         router.replace("/(tabs)");
         return;
       }
@@ -102,9 +128,11 @@ function NavigationGuard() {
       if (
         isAuthenticated &&
         hasAllowedRole &&
-        (inTabsGroup || 
-         currentRoute === "accept-booking" || 
-         currentRoute === "in-ride" || 
+        (inTabsGroup ||
+         currentRoute === "liveness" ||
+         currentRoute === "driver-complete" ||
+         currentRoute === "accept-booking" ||
+         currentRoute === "in-ride" ||
          currentRoute === "rating" ||
          currentRoute === "support" ||
          currentRoute === "booking")
@@ -169,6 +197,8 @@ function RootLayoutNav() {
           <Stack>
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="signup" options={{ headerShown: false }} />
+            <Stack.Screen name="liveness" options={{ headerShown: false }} />
+            <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />

@@ -62,6 +62,8 @@ export interface User {
   isOnline?: boolean;
   /** Profile picture URL (optional) */
   profilePictureUrl?: string | null;
+  /** When the user completed face liveness verification (ISO date string, optional) */
+  livenessVerifiedAt?: string | null;
 }
 
 /**
