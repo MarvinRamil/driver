@@ -5,7 +5,7 @@ import { biometricAuth } from "@/shared/services/biometricAuth";
 import { biometricStorage } from "@/shared/services/biometricStorage";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -17,6 +17,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -49,6 +51,26 @@ export default function LoginScreen() {
   const [isBiometricReady, setIsBiometricReady] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometric');
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  const [hasAutoPrompted, setHasAutoPrompted] = useState(false);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  /**
+   * Attempt auto biometric login
+   */
+  const attemptAutoBiometricLogin = async () => {
+    if (isBiometricLoading || isLoading || hasAutoPrompted) {
+      return;
+    }
+
+    try {
+      setHasAutoPrompted(true);
+      await handleTouchIDLogin();
+    } catch (err) {
+      // Silently fail - user can login manually
+      console.log('[LoginScreen] Auto biometric login skipped');
+      setHasAutoPrompted(false); // Allow retry
+    }
+  };
 
   /**
    * Check biometric availability on mount
@@ -63,6 +85,14 @@ export default function LoginScreen() {
         setIsBiometricAvailable(available);
         setIsBiometricReady(ready);
         setBiometricType(type);
+
+        // Auto-prompt biometric login if ready and user hasn't been prompted
+        if (ready && !hasAutoPrompted && !isLoading) {
+          // Small delay to ensure UI is ready
+          setTimeout(() => {
+            attemptAutoBiometricLogin();
+          }, 800);
+        }
       } catch (err) {
         console.warn('[LoginScreen] Error checking biometric:', err);
         setIsBiometricAvailable(false);
@@ -71,28 +101,32 @@ export default function LoginScreen() {
     };
 
     checkBiometric();
-  }, []);
+  }, [hasAutoPrompted, isLoading]);
 
   /**
-   * Handle login button press
-   * Navigation will be handled automatically by NavigationGuard when auth state updates
+   * Handle app state changes for auto-biometric on resume
    */
-  const onLoginPress = async () => {
-    try {
-      await handleLogin();
-      // Login successful - NavigationGuard will automatically redirect to /(tabs)
-      // Update biometric ready state after successful login
-      const ready = await biometricAuth.isReady();
-      setIsBiometricReady(ready);
-    } catch (err) {
-      // Error is already handled by useLogin hook
-      console.error("Login error:", err);
-      // Ensure error is displayed to user
-      if (!error && err instanceof Error) {
-        // Error state is managed by useLogin hook, this is just a safety check
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      // When app comes to foreground and user is not authenticated
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active' &&
+        !isLoading &&
+        isBiometricReady &&
+        !hasAutoPrompted
+      ) {
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          attemptAutoBiometricLogin();
+        }, 500);
       }
-    }
-  };
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [isLoading, isBiometricReady, hasAutoPrompted]);
 
   /**
    * Handle biometric login
@@ -130,6 +164,7 @@ export default function LoginScreen() {
       if (!credentials) {
         // User cancelled or authentication failed
         setIsBiometricLoading(false);
+        setHasAutoPrompted(false); // Allow retry if user cancelled
         return;
       }
 
@@ -141,6 +176,7 @@ export default function LoginScreen() {
       await handleLogin();
       
       // Login successful - NavigationGuard will automatically redirect to /(tabs)
+      setHasAutoPrompted(false); // Reset for next session
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Biometric login failed';
       console.error('[LoginScreen] Biometric login error:', errorMessage);
@@ -299,7 +335,7 @@ export default function LoginScreen() {
             <View style={styles.loginButtonContainer}>
               <TouchableOpacity
                 style={[styles.loginButton, isLoading && styles.loginButtonDisabled, { backgroundColor: theme.primary }]}
-                onPress={onLoginPress}
+                onPress={handleLogin}
                 disabled={isLoading}
                 activeOpacity={0.98}
               >
@@ -312,6 +348,18 @@ export default function LoginScreen() {
                     Log In
                   </Text>
                 )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Sign up link */}
+            <View style={styles.signupContainer}>
+              <Text style={[styles.signupPrompt, { color: theme.textSecondary }]}>
+                Don't have an account?{" "}
+              </Text>
+              <TouchableOpacity onPress={() => router.push("/signup")}>
+                <Text style={[styles.signupLink, { color: theme.primary }]}>
+                  Sign up
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -451,6 +499,27 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     width: "100%",
     alignItems: "center",
+  },
+  signupContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  signupPrompt: {
+    fontSize: 18,
+    fontWeight: "500",
+    lineHeight: 26,
+  },
+  signupLink: {
+    fontSize: 19,
+    fontWeight: "700",
+    lineHeight: 26,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   loginButton: {
     width: "100%",

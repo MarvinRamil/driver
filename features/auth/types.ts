@@ -50,14 +50,14 @@ export interface User {
   fullName: string;
   /** User's role (Admin, Owner, Driver, Client, etc.) */
   role: UserRole;
-  /** Company/Tenant ID (Guid | null, null for customers) */
-  tenantId: string | null;
+  /** @deprecated Not used. All drivers are independent. Kept for API response shape. */
+  tenantId?: string | null;
   /** Whether user has completed onboarding */
   isOnboarded: boolean;
-  /** Business type: "Fleet" or "Individual" (null if not set) */
-  businessType: BusinessType | null;
-  /** Whether driver is a solo/independent driver */
-  isSoloDriver: boolean;
+  /** @deprecated Not used. Kept for API response shape. */
+  businessType?: BusinessType | null;
+  /** @deprecated Not used. All drivers are independent. Kept for API response shape. */
+  isSoloDriver?: boolean;
   /** Whether driver is currently online (for drivers only) */
   isOnline?: boolean;
   /** Profile picture URL (optional) */
@@ -115,6 +115,12 @@ export interface RefreshTokenResponse {
   expiresIn?: number;
 }
 
+/** Security question request - one question + answer (matches API SecurityQuestionRequest) */
+export interface SecurityQuestionRequest {
+  questionId: number;
+  answer: string;
+}
+
 /**
  * Register request payload
  * Matches API POST /api/auth/register request body
@@ -130,9 +136,16 @@ export interface RegisterRequest {
   /** User role - must be "Driver" for drivers app */
   role: "Driver";
   /** Company ID (optional, for drivers under operators) */
+  /** @deprecated Not used. Kept for API response shape. */
   companyId?: string | null;
   /** Referral code (optional) */
   referralCode?: string | null;
+  /** Security question 1 (required for account recovery) */
+  securityQuestion1?: SecurityQuestionRequest;
+  /** Security question 2 (required for account recovery) */
+  securityQuestion2?: SecurityQuestionRequest;
+  /** Security question 3 (required for account recovery) */
+  securityQuestion3?: SecurityQuestionRequest;
 }
 
 /**
@@ -142,5 +155,56 @@ export interface RegisterRequest {
 export interface RegisterResponse {
   /** Success message */
   message: string;
+  /** Whether email verification is required */
+  requiresEmailVerification?: boolean;
+  /** Email address that was registered */
+  email?: string;
+}
+
+/** OTP send request - POST /api/auth/send-otp */
+export interface SendOtpRequest {
+  email: string;
+}
+
+/** OTP verify only - POST /api/auth/verify-otp (then call register) */
+export interface VerifyOtpRequest {
+  email: string;
+  otp: string;
+}
+
+/** OTP verify and register request - POST /api/auth/verify-otp-and-register (deprecated: use verify-otp + register + login) */
+export interface VerifyOtpAndRegisterRequest {
+  email: string;
+  otp: string;
+  password: string;
+  fullName: string;
+  role?: "Driver";
+  referralCode?: string | null;
+}
+
+/** Response from verify-otp-and-register (same shape as login: token + user) */
+export interface VerifyOtpAndRegisterResponse {
+  token: string;
+  expiration: string;
+  refreshToken?: string;
+  refreshTokenExpiration?: string;
+  user: User;
+}
+
+/**
+ * Complete driver registration request
+ * Used after email verification to complete registration with documents
+ */
+export interface CompleteDriverRegistrationRequest {
+  /** License image file (FormData) */
+  licenseImage: File | Blob | string;
+  /** Selfie image file (FormData) */
+  selfieImage: File | Blob | string;
+  /** Additional driver information (optional) */
+  licenseNumber?: string;
+  /** License expiry date (optional) */
+  licenseExpiryDate?: string;
+  /** Address (optional) */
+  address?: string;
 }
 

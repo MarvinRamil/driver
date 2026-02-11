@@ -34,8 +34,7 @@ SplashScreen.preventAutoHideAsync();
  * Handles protected routes and redirects based on authentication state
  * Ensures unauthenticated users are redirected to login immediately
  * Also enforces role restrictions - only allows:
- * - Solo drivers/owners (isSoloDriver === true OR role === "Owner")
- * - Drivers under company/tenant (role === "Driver" AND tenantId !== null AND isSoloDriver === false)
+ * Only role "Driver" is accepted. All drivers are independent (no company/tenant).
  */
 function NavigationGuard() {
   const { user, isLoading, logout } = useAuth();
@@ -92,11 +91,7 @@ function NavigationGuard() {
       // ROLE RESTRICTION: If user is authenticated but doesn't have an allowed role,
       // log them out and redirect to login with error message
       if (isAuthenticated && !hasAllowedRole) {
-        console.warn('[NavigationGuard] User has unauthorized role:', {
-          role: user?.role,
-          isSoloDriver: user?.isSoloDriver,
-          tenantId: user?.tenantId,
-        });
+        console.warn('[NavigationGuard] User has unauthorized role:', user?.role);
         
         // Logout user to clear session
         logout().catch((err) => {
@@ -135,7 +130,9 @@ function NavigationGuard() {
          currentRoute === "in-ride" ||
          currentRoute === "rating" ||
          currentRoute === "support" ||
-         currentRoute === "booking")
+         currentRoute === "booking" ||
+         currentRoute === "complete-registration" ||
+         currentRoute === "pending-approval")
       ) {
         // User is authenticated with allowed role and accessing protected routes - allow
         return;
@@ -219,10 +216,35 @@ function RootLayoutNav() {
 }
 
 /**
+ * Check API health on app load and log to console.
+ * Uses EXPO_PUBLIC_API_URL + /health (same base works for staging and production).
+ */
+function checkApiHealth() {
+  const base = process.env.EXPO_PUBLIC_API_URL || '';
+  if (!base) {
+    console.log('[API Health] No EXPO_PUBLIC_API_URL set, skipping health check');
+    return;
+  }
+  const url = `${base.replace(/\/+$/, '')}/health`;
+  console.log('[API Health] Checking:', url);
+  fetch(url)
+    .then((res) => res.json())
+    .then((data) => {
+      console.log('[API Health] Response:', JSON.stringify(data, null, 2));
+    })
+    .catch((err) => {
+      console.warn('[API Health] Failed:', url, err?.message ?? err);
+    });
+}
+
+/**
  * Component to initialize app services (notifications, OTA updates)
  */
 function AppInitializer() {
   useNotifications();
   useOTAUpdates();
+  useEffect(() => {
+    checkApiHealth();
+  }, []);
   return null;
 }

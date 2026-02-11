@@ -166,6 +166,9 @@ class ApiClient {
     try {
       const headers = await this.getHeaders(config, endpoint);
 
+      // Log every API call so you can confirm we're hitting the API
+      console.log(`[API] ${method} ${fullUrl}`);
+
       // Create fetch options
       const fetchOptions: RequestInit = {
         method,
@@ -312,12 +315,16 @@ class ApiClient {
         statusCode: response.status,
       };
     } catch (error) {
-      // Log network/fetch errors for debugging
+      // Log network/fetch errors for debugging (avoid [object Object] for ApiError)
+      const errMsg =
+        error instanceof Error
+          ? error.message
+          : error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string'
+            ? (error as { message: string }).message
+            : String(error);
       console.error(`[API] Request failed: ${method} ${fullUrl}`, {
-        error,
-        errorType: typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorName: error instanceof Error ? error.name : undefined,
+        errorMessage: errMsg,
+        status: error && typeof error === 'object' && 'status' in error ? (error as { status: number }).status : undefined,
       });
 
       // Re-throw ApiError as-is
