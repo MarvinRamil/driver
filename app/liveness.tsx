@@ -6,12 +6,13 @@ import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth";
 import { livenessService } from "@/features/liveness";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -38,12 +39,15 @@ export default function LivenessScreen() {
   const [directions, setDirections] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [cameraStarted, setCameraStarted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   const currentDirection = directions[currentIndex];
+  const isReadyToCapture = countdown !== null && countdown > 0;
+  const isCapturing = countdown === 1 || submitting;
 
   const startSession = useCallback(async () => {
     setError(null);
@@ -64,21 +68,19 @@ export default function LivenessScreen() {
     startSession();
   }, [startSession]);
 
-  // Auto-capture countdown when direction changes
+  // Auto-capture countdown when direction changes (only after user started camera)
   useEffect(() => {
-    if (!sessionId || !currentDirection || submitting || !permission?.granted) {
+    if (!cameraStarted || !sessionId || !currentDirection || submitting || !permission?.granted) {
       setCountdown(null);
       return;
     }
 
-    // Reset countdown when direction changes
-    setCountdown(3); // 3 second countdown
+    setCountdown(3);
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev === null || prev <= 1) {
           clearInterval(timer);
-          // Auto-capture when countdown reaches 0
           if (prev === 1) {
             handleCapture();
           }
@@ -89,7 +91,7 @@ export default function LivenessScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentIndex, sessionId, submitting, permission?.granted, currentDirection, handleCapture]);
+  }, [cameraStarted, currentIndex, sessionId, submitting, permission?.granted, currentDirection, handleCapture]);
 
   const handleCapture = useCallback(async () => {
     if (!sessionId || !currentDirection || !cameraRef.current || submitting) return;
@@ -144,18 +146,18 @@ export default function LivenessScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.center, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Starting verification...
         </Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (error && !sessionId) {
     return (
-      <View style={[styles.center, styles.padded, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.center, styles.padded, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
         <Ionicons name="alert-circle" size={48} color={BeeColors.red[500]} />
         <Text style={[styles.errorText, { color: theme.text }]}>{error}</Text>
         <TouchableOpacity
@@ -166,22 +168,22 @@ export default function LivenessScreen() {
             Try again
           </Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!permission) {
     return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.center, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
         <ActivityIndicator size="large" color={theme.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!permission.granted) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-        <View style={styles.content}>
+      <SafeAreaView style={[styles.container, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
+        <View style={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
           <Text style={[styles.title, { color: theme.text }]}>
             Camera Permission Required
           </Text>
@@ -198,80 +200,112 @@ export default function LivenessScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-      <View style={styles.content}>
-        <Text style={[styles.title, { color: theme.text }]}>
-          Verify your identity
-        </Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          We need to confirm you're a real person. Follow the instruction and take a photo.
-        </Text>
-
-        {currentDirection && (
-          <View style={[styles.directionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.directionLabel, { color: theme.text }]}>
-              {DIRECTION_LABELS[currentDirection] ?? currentDirection}
-            </Text>
-            <Text style={[styles.stepText, { color: theme.textSecondary }]}>
-              Step {currentIndex + 1} of {directions.length}
-            </Text>
-          </View>
-        )}
-
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
-        {/* Camera Preview */}
-        <View style={styles.cameraContainer}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing="front"
-            mode="picture"
+  // Intro: session ready but camera not started — user must tap to begin
+  if (sessionId && directions.length > 0 && !cameraStarted) {
+    return (
+      <SafeAreaView style={[styles.container, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
+        <View style={[styles.content, styles.introContent, { paddingBottom: insets.bottom + 24 }]}>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Verify your identity
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            We need to confirm you're a real person. You'll follow on-screen directions and take a photo for each.
+          </Text>
+          <TouchableOpacity
+            style={[styles.captureButton, styles.startButton, { backgroundColor: theme.primary }]}
+            onPress={() => setCameraStarted(true)}
           >
-            {/* Overlay guide */}
-            <View style={styles.overlay}>
-              <View style={styles.guideFrameContainer}>
-                <View style={[styles.guideFrame, { borderColor: theme.primary }]} />
-                {countdown !== null && countdown > 0 && (
-                  <View style={styles.countdownContainer}>
-                    <Text style={styles.countdownText}>{countdown}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.guideText}>
-                {countdown !== null && countdown > 0
-                  ? "Get ready..."
-                  : "Position your face within the frame"}
+            <Ionicons name="camera" size={24} color={theme.primaryText} />
+            <Text style={[styles.captureButtonText, { color: theme.primaryText }]}>
+              Start verification
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const frameColor = isReadyToCapture || isCapturing ? BeeColors.green[500] : theme.primary;
+
+  return (
+    <SafeAreaView style={[styles.container, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Verify your identity
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            We need to confirm you're a real person. Follow the instruction and take a photo.
+          </Text>
+
+          {currentDirection && (
+            <View style={[styles.directionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.directionLabel, { color: theme.text }]}>
+                {DIRECTION_LABELS[currentDirection] ?? currentDirection}
+              </Text>
+              <Text style={[styles.stepText, { color: theme.textSecondary }]}>
+                Step {currentIndex + 1} of {directions.length}
               </Text>
             </View>
-          </CameraView>
-        </View>
+          )}
 
-        {submitting ? (
-          <View style={[styles.captureButton, { backgroundColor: theme.primary }]}>
-            <ActivityIndicator color={theme.primaryText} />
-            <Text style={[styles.captureButtonText, { color: theme.primaryText, marginLeft: 10 }]}>
-              Processing...
-            </Text>
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          {/* Camera Preview */}
+          <View style={styles.cameraContainer}>
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing="front"
+              mode="picture"
+            >
+              <View style={styles.overlay}>
+                <View style={styles.guideFrameContainer}>
+                  <View style={[styles.guideFrame, { borderColor: frameColor }]} />
+                  {countdown !== null && countdown > 0 && (
+                    <View style={styles.countdownContainer}>
+                      <Text style={[styles.countdownText, { color: BeeColors.green[500] }]}>{countdown}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.guideText}>
+                  {countdown !== null && countdown > 0
+                    ? "Get ready..."
+                    : "Position your face within the frame"}
+                </Text>
+              </View>
+            </CameraView>
           </View>
-        ) : (
-          <View style={styles.infoContainer}>
-            <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-              Photo will be captured automatically
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
+
+          {submitting ? (
+            <View style={[styles.captureButton, { backgroundColor: theme.primary }]}>
+              <ActivityIndicator color={theme.primaryText} />
+              <Text style={[styles.captureButtonText, { color: theme.primaryText, marginLeft: 10 }]}>
+                Processing...
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.infoContainer}>
+              <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+                Photo will be captured automatically
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -280,9 +314,26 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
   },
+  safeContainer: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
+  },
   content: {
     flex: 1,
     paddingTop: 24,
+  },
+  introContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  startButton: {
+    marginTop: 24,
   },
   center: {
     flex: 1,

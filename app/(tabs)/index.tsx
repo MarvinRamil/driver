@@ -394,17 +394,22 @@ export default function DashboardScreen() {
             </View>
           )}
 
-          {/* Delivery Filters */}
-          <View style={styles.filtersSection}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>
-              Deliveries
-            </ThemedText>
-            <View style={styles.filtersContainer}>
+          {/* Deliveries — tab layout like Bookings */}
+          <View style={styles.deliveriesSection}>
+            <View style={styles.deliveriesSectionHeader}>
+              <ThemedText type="subtitle" style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                Deliveries
+              </ThemedText>
+              <View style={[styles.badge, { backgroundColor: theme.border }]}>
+                <ThemedText style={[styles.badgeText, { color: theme.textSecondary }]}>Today</ThemedText>
+              </View>
+            </View>
+            <View style={styles.deliveriesTabs}>
               {(['Incoming', 'Ongoing', 'Done'] as const).map((filterOption) => (
                 <TouchableOpacity
                   key={filterOption}
                   style={[
-                    styles.filterButton,
+                    styles.deliveriesTab,
                     filter === filterOption
                       ? { backgroundColor: theme.primary }
                       : { backgroundColor: theme.surface, borderColor: theme.border },
@@ -412,7 +417,7 @@ export default function DashboardScreen() {
                   onPress={() => setFilter(filterOption)}>
                   <ThemedText
                     style={[
-                      styles.filterText,
+                      styles.deliveriesTabText,
                       {
                         color: filter === filterOption ? theme.primaryText : theme.text,
                       },
@@ -421,21 +426,6 @@ export default function DashboardScreen() {
                   </ThemedText>
                 </TouchableOpacity>
               ))}
-            </View>
-          </View>
-
-          {/* Assigned Bookings (Operator Driver) or Active Bookings (Solo) */}
-          <View style={styles.bookingsSection}>
-            <View style={styles.sectionHeader}>
-              <ThemedText type="subtitle" style={styles.sectionTitle}>
-                {filter === 'Incoming' ? 'Incoming Deliveries' :
-                 filter === 'Ongoing' ? 'Ongoing Deliveries' :
-                 filter === 'Done' ? 'Completed Deliveries' :
-                 isSoloDriver ? 'Active Bookings' : 'Assigned Bookings'}
-              </ThemedText>
-              <View style={[styles.badge, { backgroundColor: theme.border }]}>
-                <ThemedText style={[styles.badgeText, { color: theme.textSecondary }]}>Today</ThemedText>
-              </View>
             </View>
 
             {bookings.length === 0 ? (
@@ -784,6 +774,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 12,
+  },
+  deliveriesSection: {
+    gap: 12,
+  },
+  deliveriesSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  deliveriesTabs: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  deliveriesTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveriesTabText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   quickActionsGrid: {
     flexDirection: 'row',
