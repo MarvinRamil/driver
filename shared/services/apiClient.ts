@@ -312,13 +312,15 @@ class ApiClient {
         statusCode: response.status,
       };
     } catch (error) {
-      // Log network/fetch errors for debugging
-      console.error(`[API] Request failed: ${method} ${fullUrl}`, {
-        error,
-        errorType: typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorName: error instanceof Error ? error.name : undefined,
-      });
+      // Log request failures only when API debug is enabled
+      if (API_DEBUG) {
+        console.error(`[API] Request failed: ${method} ${fullUrl}`, {
+          error,
+          errorType: typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorName: error instanceof Error ? error.name : undefined,
+        });
+      }
 
       // Re-throw ApiError as-is
       if (error && typeof error === 'object' && 'message' in error && 'status' in error) {

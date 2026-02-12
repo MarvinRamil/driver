@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ import { useLocationTrackingStatus } from '@/features/driver/hooks/useLocationTr
 import { useOffers, getPickupAddress, getDropoffAddress, isMultiStopOffer, getTimeRemaining, filterValidOffers } from '@/features/offers';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
+import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
 
 import { Ionicons } from '@expo/vector-icons';
 import { BeeColors } from '@/constants/theme';
@@ -33,21 +34,26 @@ export default function DashboardScreen() {
   
   // Filter valid (non-expired) offers
   const validOffers = filterValidOffers(offers);
-  
+  const validOffersRef = useRef(validOffers);
+  validOffersRef.current = validOffers;
+
   // Countdown timer state for offers
   const [timeRemaining, setTimeRemaining] = useState<Record<string, number>>({});
-  
-  // Update countdown timers every second
+  // Track which offer is being accepted (disable switch while request in flight)
+  const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
+
+  // Update countdown timers every second (single interval, read latest offers from ref to avoid effect re-running every render)
   useEffect(() => {
     const interval = setInterval(() => {
+      const current = validOffersRef.current;
       const timers: Record<string, number> = {};
-      validOffers.forEach(offer => {
+      current.forEach((offer) => {
         timers[offer.id] = getTimeRemaining(offer);
       });
       setTimeRemaining(timers);
     }, 1000);
     return () => clearInterval(interval);
-  }, [validOffers]);
+  }, []);
 
   // Determine if solo driver or operator driver
   const isSoloDriver = user?.isSoloDriver || false;
@@ -360,8 +366,26 @@ export default function DashboardScreen() {
                       )}
 
                       <View style={[styles.offerActions, { borderTopColor: theme.border }]}>
+                        <SwipeToAccept
+                          label="Swipe to accept"
+                          disabled={acceptingOfferId !== null && acceptingOfferId !== offer.id}
+                          trackColor={theme.border}
+                          thumbColor={theme.primary}
+                          textColor={theme.text}
+                          style={styles.swipeToAcceptFull}
+                          onAccept={async () => {
+                            setAcceptingOfferId(offer.id);
+                            try {
+                              await acceptOffer(offer.id);
+                              Alert.alert('Success', 'Offer accepted! Check your bookings.');
+                            } catch (error) {
+                              setAcceptingOfferId(null);
+                              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to accept offer. Please try again.');
+                            }
+                          }}
+                        />
                         <TouchableOpacity
-                          style={[styles.actionButton, { backgroundColor: theme.border }]}
+                          style={[styles.rejectButton, { borderColor: theme.border }]}
                           onPress={async () => {
                             try {
                               await rejectOffer(offer.id);
@@ -369,21 +393,10 @@ export default function DashboardScreen() {
                               Alert.alert('Error', 'Failed to reject offer. Please try again.');
                             }
                           }}>
-                          <Ionicons name="close-outline" size={16} color={theme.text} />
-                          <ThemedText style={[styles.actionButtonText, { color: theme.text }]}>Reject</ThemedText>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                          onPress={async () => {
-                            try {
-                              await acceptOffer(offer.id);
-                              Alert.alert('Success', 'Offer accepted! Check your bookings.');
-                            } catch (error) {
-                              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to accept offer. Please try again.');
-                            }
-                          }}>
-                          <Ionicons name="checkmark-outline" size={16} color={theme.primaryText} />
-                          <ThemedText style={[styles.actionButtonText, { color: theme.primaryText }]}>Accept</ThemedText>
+                          <Ionicons name="close-outline" size={18} color={theme.textSecondary} />
+                          <ThemedText style={[styles.rejectButtonText, { color: theme.textSecondary }]}>
+                            Not for me
+                          </ThemedText>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1019,10 +1032,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   offerActions: {
-    flexDirection: 'row',
-    gap: 12,
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
+    gap: 10,
+  },
+  swipeToAcceptFull: {
+    width: '100%',
+    minHeight: 48,
+  },
+  rejectButton: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  rejectButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

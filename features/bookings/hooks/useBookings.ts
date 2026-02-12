@@ -71,6 +71,9 @@ export function useBookings(initialFilter: BookingFilter = 'All'): UseBookingsRe
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<BookingFilter>(initialFilter);
 
+  /** Stable user id so we only refetch when the logged-in user changes, not on every context re-render */
+  const userId = user?.id ?? null;
+
   /**
    * Fetch bookings from API
    * Uses role-based endpoint selection
@@ -131,10 +134,10 @@ export function useBookings(initialFilter: BookingFilter = 'All'): UseBookingsRe
     return filterBookingsByStatus(allBookings, filter);
   }, [allBookings, filter]);
 
-  // Fetch bookings on mount and when user changes
+  // Fetch bookings on mount and when logged-in user id changes (stable dependency to avoid refetch loops)
   useEffect(() => {
     fetchBookings();
-  }, [fetchBookings]);
+  }, [userId]);
 
   return {
     bookings: filteredBookings,
