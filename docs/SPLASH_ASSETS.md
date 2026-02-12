@@ -35,6 +35,18 @@ So you must **rebuild** to see the new transparent image.
 
 3. **Reinstall** the app on the device/simulator so the new binary (with the new splash) is installed.
 
+## Android: circular clip (cannot be removed)
+
+On **Android 12 and later**, the system Splash Screen API **always** shows the splash image inside a **circular mask**. This is a platform rule from Google and cannot be turned off in Expo or in the native project.
+
+**Workaround:** Design your `splash-icon.png` so the important part (logo + “BEE ON-DEMAND”) fits inside a circle:
+
+- Use a **square** image (e.g. 1024×1024 px).
+- Put the logo and text **centered** so the circular crop doesn’t cut them off.
+- Keep the outer corners simple or transparent; they will be clipped by the circle.
+
+On **iOS**, the splash is not forced into a circle; the full image is shown with your `resizeMode` and background color.
+
 ## Removed: second (in-app) splash
 
 The old in-app splash screen (`_splash.tsx`) was removed so there is only one splash: the native one. That avoids two different splash experiences and ensures the transparent image and yellow background from `app.json` are the only ones used.

@@ -3,11 +3,14 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { Image } from 'expo-image';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View, Text } from 'react-native';
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { BeeColors, BRAND_YELLOW } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/features/auth';
 import { isAllowedRole, getRoleRestrictionMessage } from '@/features/auth/utils/roleValidation';
 import { DriverStatusProvider } from '@/features/driver/context/DriverStatusContext';
@@ -180,8 +183,16 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
+const IN_APP_SPLASH_DURATION_MS = 2200;
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const [showInAppSplash, setShowInAppSplash] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowInAppSplash(false), IN_APP_SPLASH_DURATION_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <SafeAreaProvider>
@@ -191,22 +202,36 @@ function RootLayoutNav() {
             <AppInitializer />
             <BiometricPromptManager />
             <NavigationGuard />
-          <Stack>
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="signup" options={{ headerShown: false }} />
-            <Stack.Screen name="liveness" options={{ headerShown: false }} />
-            <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
-            <Stack.Screen name="in-ride" options={{ headerShown: false }} />
-            <Stack.Screen name="rating" options={{ headerShown: false }} />
-            <Stack.Screen name="support" options={{ headerShown: false }} />
-            <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="modal"
-              options={{ presentation: 'modal', title: 'Modal' }}
-            />
-          </Stack>
+            <View style={styles.root}>
+              <Stack>
+                <Stack.Screen name="login" options={{ headerShown: false }} />
+                <Stack.Screen name="signup" options={{ headerShown: false }} />
+                <Stack.Screen name="liveness" options={{ headerShown: false }} />
+                <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
+                <Stack.Screen name="in-ride" options={{ headerShown: false }} />
+                <Stack.Screen name="rating" options={{ headerShown: false }} />
+                <Stack.Screen name="support" options={{ headerShown: false }} />
+                <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="modal"
+                  options={{ presentation: 'modal', title: 'Modal' }}
+                />
+              </Stack>
+              {showInAppSplash && (
+                <View style={styles.inAppSplash} pointerEvents="box-none">
+                  <View style={styles.inAppSplashContent}>
+                    <Image
+                      source={require('@/assets/images/splash-icon.png')}
+                      style={styles.inAppSplashLogo}
+                      contentFit="contain"
+                    />
+                    <Text style={styles.inAppSplashText}>BEE ON-DEMAND</Text>
+                  </View>
+                </View>
+              )}
+            </View>
             <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           </DriverStatusProvider>
         </AuthProvider>
@@ -214,6 +239,32 @@ function RootLayoutNav() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  inAppSplash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: BRAND_YELLOW,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inAppSplashContent: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  inAppSplashLogo: {
+    width: 120,
+    height: 120,
+  },
+  inAppSplashText: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: BeeColors.gray[900],
+    letterSpacing: 2,
+  },
+});
 
 /**
  * Check API health on app load and log to console.
