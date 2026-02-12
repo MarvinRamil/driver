@@ -1,5 +1,7 @@
 # URGENT: Fix bee_logo.png to Complete Build
 
+> **Note:** The app now has a single native splash (see `app.json` and `docs/SPLASH_ASSETS.md`). The in-app splash (`app/_splash.tsx`) was removed.
+
 ## Problem
 The build is failing because `bee_logo.png` is actually a JPG file with a `.png` extension. Android's resource compiler cannot process it.
 
