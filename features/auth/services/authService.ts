@@ -1,7 +1,17 @@
 import { apiClient } from '@/shared/services/apiClient';
 import { tokenStorage } from '@/shared/services/tokenStorage';
 import { isAllowedRole, getRoleRestrictionMessage } from '../utils/roleValidation';
-import type { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, User } from '../types';
+import type {
+  LoginRequest,
+  LoginResponse,
+  RegisterRequest,
+  RegisterResponse,
+  User,
+  SendOtpRequest,
+  VerifyOtpRequest,
+  VerifyOtpAndRegisterRequest,
+  VerifyOtpAndRegisterResponse,
+} from '../types';
 
 /**
  * Authentication service for handling login, logout, and user session management
@@ -312,18 +322,29 @@ class AuthService {
         requiresAuth: false, // Register endpoint doesn't require authentication
       });
 
+      console.log('[AuthService] Register API response:', {
+        success: response.success,
+        statusCode: response.statusCode,
+        message: response.message,
+        data: response.data,
+        fullResponse: JSON.stringify(response, null, 2),
+      });
+
       // Check if request was successful
       if (!response.success) {
         const errorMessage = response.message || 'Registration failed';
         
         // Handle 400 Bad Request (validation errors, email already exists, etc.)
         if (response.statusCode === 400) {
+          console.error('[AuthService] Registration failed with 400:', errorMessage);
           throw new Error(errorMessage || 'Validation error. Please check your input.');
         }
         
+        console.error('[AuthService] Registration failed:', errorMessage);
         throw new Error(errorMessage);
       }
 
+      console.log('[AuthService] Registration successful, returning:', response.data);
       return response.data || { message: 'User registered successfully' };
     } catch (error) {
       // Log the actual error for debugging
@@ -357,6 +378,112 @@ class AuthService {
       console.error('[AuthService] Unknown error type:', error);
       throw new Error('Registration failed. Please try again.');
     }
+  }
+
+  /**
+   * Get available security questions for registration (account recovery)
+   * GET /api/auth/security-questions
+   */
+  async getSecurityQuestions(): Promise<Array<{ id: number; question: string }>> {
+    const response = await apiClient.get<{ success?: boolean; questions?: Array<{ id: number; question: string }> }>(
+      '/api/auth/security-questions',
+      { requiresAuth: false }
+    );
+    const data = response.data as { success?: boolean; questions?: Array<{ id: number; question: string }> };
+    const questions = data?.questions ?? (Array.isArray(data) ? data : []);
+    return questions;
+  }
+
+  /**
+   * Send OTP to email for verification (OTP-first registration)
+   * POST /api/auth/send-otp
+   */
+  async sendOtp(request: SendOtpRequest): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/send-otp', {
+      body: { email: request.email.trim().toLowerCase() },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to send verification code.');
+    }
+    return { success: true, message: response.message || 'Verification code sent.' };
+  }
+
+  /**
+   * Verify OTP only (single responsibility). Does not create account.
+   * Call register(email, fullName, password, role) next, then login.
+   * POST /api/auth/verify-otp
+   */
+  async verifyOtp(request: VerifyOtpRequest): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/verify-otp', {
+      body: {
+        email: request.email.trim().toLowerCase(),
+        otp: request.otp.trim(),
+      },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Invalid or expired code. Please try again.');
+    }
+    return { success: true, message: response.message || 'Email verified.' };
+  }
+
+  /**
+   * Resend OTP to email
+   * POST /api/auth/resend-otp
+   */
+  async resendOtp(email: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/resend-otp', {
+      body: { email: email.trim().toLowerCase() },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to resend verification code.');
+    }
+    return { success: true, message: response.message || 'New verification code sent.' };
+  }
+
+  /**
+   * Verify OTP and create account (OTP-first registration)
+   * On success: stores token and returns user (same as login).
+   * POST /api/auth/verify-otp-and-register
+   */
+  async verifyOtpAndRegister(
+    request: VerifyOtpAndRegisterRequest
+  ): Promise<VerifyOtpAndRegisterResponse> {
+    const response = await apiClient.post<{ data: VerifyOtpAndRegisterResponse }>(
+      'api/auth/verify-otp-and-register',
+      {
+        body: {
+          email: request.email.trim().toLowerCase(),
+          otp: request.otp.trim(),
+          password: request.password,
+          fullName: request.fullName.trim(),
+          role: request.role ?? 'Driver',
+          referralCode: request.referralCode ?? undefined,
+        },
+        requiresAuth: false,
+      }
+    );
+
+    const payload = (response.data as any)?.data ?? response.data;
+    if (!response.success || !payload?.token || !payload?.user) {
+      throw new Error(response.message || 'Verification failed. Please check the code and try again.');
+    }
+
+    const { token, user, expiration, refreshToken, refreshTokenExpiration } = payload;
+    if (!isAllowedRole(user)) {
+      throw new Error(getRoleRestrictionMessage(user));
+    }
+
+    await tokenStorage.setAccessToken(token);
+    return {
+      token,
+      expiration: expiration ?? '',
+      refreshToken,
+      refreshTokenExpiration,
+      user,
+    };
   }
 }
 

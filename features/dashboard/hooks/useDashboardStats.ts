@@ -13,6 +13,12 @@ export interface DashboardStats {
   activeBookings: number;
   /** Completed bookings */
   completedBookings: number;
+  /** Incoming deliveries count */
+  incomingDeliveries: number;
+  /** Ongoing deliveries count */
+  ongoingDeliveries: number;
+  /** Done deliveries count */
+  doneDeliveries: number;
   /** Wallet balance (only for Driver/Operator) */
   walletBalance: number | null;
   /** Can access wallet */
@@ -29,7 +35,7 @@ export function useDashboardStats(): DashboardStats {
   const { allBookings } = useBookings();
   const { wallet } = useWallet();
 
-  const canAccessWallet = user?.isSoloDriver || user?.role === 'Owner' || user?.role === 'Admin';
+  const canAccessWallet = user?.role === 'Driver';
 
   const stats = useMemo(() => {
     // Safe defaults if bookings haven't loaded yet
@@ -47,11 +53,38 @@ export function useDashboardStats(): DashboardStats {
     const completedBookings = bookings.filter(
       (booking) => booking.status === 'Completed'
     ).length;
+    
+    // Incoming/Ongoing/Done counts
+    // Incoming: Bookings assigned but driver hasn't started working on yet
+    const incomingDeliveries = bookings.filter(
+      (booking) =>
+        booking.status === 'Pending' ||
+        booking.status === 'Confirmed'
+    ).length;
+    // Ongoing: Bookings actively in progress (driver is working on them)
+    const ongoingDeliveries = bookings.filter(
+      (booking) =>
+        booking.status === 'DriverAssigned' ||
+        booking.status === 'PickedUp' ||
+        booking.status === 'InTransit' ||
+        // Legacy statuses
+        booking.status === 'OnTheWayToPickup' ||
+        booking.status === 'InProgress'
+    ).length;
+    // Done: Completed deliveries
+    const doneDeliveries = bookings.filter(
+      (booking) =>
+        booking.status === 'Completed' ||
+        booking.status === 'Delivered'
+    ).length;
 
     return {
       totalBookings,
       activeBookings,
       completedBookings,
+      incomingDeliveries,
+      ongoingDeliveries,
+      doneDeliveries,
       walletBalance: canAccessWallet ? wallet?.balance ?? null : null,
       canAccessWallet,
     };

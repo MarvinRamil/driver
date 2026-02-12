@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { offerService } from '../services/offerService';
 import type { DriverOffer } from '../types';
 
+const RATE_LIMIT_BACKOFF_MS = 2 * 60 * 1000;  // 2 minutes
+const RATE_LIMIT_POLL_MS = 30 * 1000;         // poll every 30s while in backoff
+
 interface UseOffersReturn {
   offers: DriverOffer[];
   isLoading: boolean;
@@ -18,17 +21,28 @@ interface UseOffersOptions {
   pollingInterval?: number;
 }
 
+function isRateLimitError(err: unknown): boolean {
+  if (err && typeof err === 'object' && 'status' in err) return (err as { status?: number }).status === 429;
+  if (err && typeof err === 'object' && 'details' in err) {
+    const d = (err as { details?: { statusCode?: number } }).details;
+    return d?.statusCode === 429;
+  }
+  return false;
+}
+
 export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
   const { limit = 3, pollingInterval = 5000 } = options;
   const [offers, setOffers] = useState<DriverOffer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rateLimitBackoffUntil, setRateLimitBackoffUntil] = useState<number | null>(null);
+  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Track polling interval and whether polling should continue
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPollRef = useRef<boolean>(true);
 
-  /** @param silent - if true, do not set loading state (used for background polling so the page doesn’t show refresh spinner) */
+  /** @param silent - if true, do not set loading state (used for background polling so the page doesn't show refresh spinner) */
   const fetchOffers = useCallback(async (silent = false) => {
     if (!silent) {
       setIsLoading(true);
@@ -40,8 +54,19 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
       setError(null);
       shouldPollRef.current = true;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch offers';
-      setError(errorMessage);
+      if (isRateLimitError(err)) {
+        const until = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        setRateLimitBackoffUntil(until);
+        setError('Too many requests. Slowing down; you\'ll still receive offers.');
+        if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
+        backoffTimerRef.current = setTimeout(() => {
+          setRateLimitBackoffUntil(null);
+          setError(null);
+        }, RATE_LIMIT_BACKOFF_MS);
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch offers';
+        setError(errorMessage);
+      }
       console.error('[useOffers] Error fetching offers:', err);
       shouldPollRef.current = false;
       if (pollingIntervalRef.current) {
@@ -53,6 +78,10 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
       if (!silent) setIsLoading(false);
     }
   }, [limit]);
+
+  useEffect(() => () => {
+    if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
+  }, []);
 
   const acceptOffer = useCallback(
     async (offerId: string) => {
@@ -101,12 +130,16 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
     }
   }, [fetchOffers, pollingInterval]);
 
+  const isInBackoff = rateLimitBackoffUntil !== null && Date.now() < rateLimitBackoffUntil;
+  const effectiveInterval = isInBackoff ? RATE_LIMIT_POLL_MS : pollingInterval;
+
   useEffect(() => {
     // Initial fetch (show loading)
     fetchOffers(false);
 
-    // Background polling: do not set loading so the page doesn’t show refresh spinner
-    if (pollingInterval > 0 && shouldPollRef.current) {
+    // Background polling: do not set loading so the page doesn't show refresh spinner
+    // Use effectiveInterval (slower when rate limited)
+    if (effectiveInterval > 0 && shouldPollRef.current) {
       pollingIntervalRef.current = setInterval(() => {
         if (shouldPollRef.current) {
           fetchOffers(true);
@@ -116,7 +149,7 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
             pollingIntervalRef.current = null;
           }
         }
-      }, pollingInterval);
+      }, effectiveInterval);
     }
 
     return () => {
@@ -125,7 +158,7 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
         pollingIntervalRef.current = null;
       }
     };
-  }, [fetchOffers, pollingInterval]);
+  }, [fetchOffers, effectiveInterval]);
 
   return {
     offers,
@@ -136,4 +169,3 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
     rejectOffer,
   };
 }
-

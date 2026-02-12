@@ -34,18 +34,61 @@ class OfferService {
       }
 
       // Extract list from common API response shapes: array, { items }, { data }, { data: { items } }
+      // Handle nested ApiResponse wrapper: { success, data, message, errors }
       const raw = response.data;
       let list: any[] = [];
-      if (Array.isArray(raw)) {
+      
+      // Check if raw is a nested ApiResponse wrapper: { success, data, message, errors }
+      if (raw && typeof raw === 'object' && 'success' in raw && 'data' in raw) {
+        const nestedSuccess = (raw as any).success;
+        const nestedData = (raw as any).data;
+        
+        // If nested response indicates failure, return empty (no offers or error)
+        if (nestedSuccess === false) {
+          return [];
+        }
+        
+        // If nested data is an array, use it
+        if (Array.isArray(nestedData)) {
+          list = nestedData;
+        } else {
+          // nestedData is null, undefined, or non-array (e.g., empty object) = no offers
+          return [];
+        }
+      } else if (Array.isArray(raw)) {
+        // Direct array response
         list = raw;
       } else if (raw && typeof raw === 'object') {
-        if (Array.isArray((raw as any).items)) list = (raw as any).items;
-        else if (Array.isArray((raw as any).data)) list = (raw as any).data;
-        else if ((raw as any).data && Array.isArray((raw as any).data.items)) list = (raw as any).data.items;
+        // Try other common shapes
+        if (Array.isArray((raw as any).items)) {
+          list = (raw as any).items;
+        } else if (Array.isArray((raw as any).data)) {
+          list = (raw as any).data;
+        } else if ((raw as any).data && Array.isArray((raw as any).data.items)) {
+          list = (raw as any).data.items;
+        }
+      } else if (raw === null || raw === undefined) {
+        // No data - return empty array (no offers)
+        return [];
       }
 
-      if (list.length === 0 && raw != null) {
-        console.warn('[OfferService] Pending offers response had no array. Shape:', typeof raw, raw && typeof raw === 'object' ? Object.keys(raw) : raw);
+      // Only warn if we got an unexpected structure (not null/undefined/empty array)
+      if (list.length === 0 && raw != null && raw !== undefined && !Array.isArray(raw)) {
+        const keys = raw && typeof raw === 'object' ? Object.keys(raw) : [];
+        // Check if it's a nested response with null data (this is fine - no offers)
+        if ('success' in raw && 'data' in raw && (raw as any).data === null) {
+          return [];
+        }
+        console.warn('[OfferService] Pending offers response had no array. Shape:', typeof raw, keys);
+        // If it's an error response nested in data, log the message
+        if ('message' in raw || 'errors' in raw) {
+          console.warn('[OfferService] Response may be an error:', {
+            message: (raw as any).message,
+            errors: (raw as any).errors,
+            success: (raw as any).success,
+          });
+        }
+        return [];
       }
 
       return list.map((offer: any) => {

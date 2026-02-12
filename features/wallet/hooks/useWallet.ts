@@ -32,7 +32,7 @@ export function useWallet(): UseWalletReturn {
    * Check if user can access wallet
    * Only Driver/Operator (solo drivers) can access wallet
    */
-  const canAccessWallet = user?.isSoloDriver || user?.role === 'Owner' || user?.role === 'Admin';
+  const canAccessWallet = user?.role === 'Driver';
 
   /**
    * Fetch wallet from API

@@ -4,9 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { bookingService, dispatchService } from '@/features/bookings';
+import { useAuth } from '@/features/auth';
 import type { Booking, Dispatch } from '@/shared/types/booking';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
+import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
@@ -17,12 +19,16 @@ export default function BookingDetailsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{ id: string }>();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Check if driver is under operator (needs dispatch)
+  const isDriverUnderOperator = user?.tenantId !== null && !user?.isSoloDriver;
 
   // Helper function to normalize status strings (handle case differences, underscores, etc.)
   const normalizeStatus = (status: string | null | undefined): string => {
@@ -48,14 +54,20 @@ export default function BookingDetailsScreen() {
     setError(null);
 
     try {
-      // Fetch booking and dispatch in parallel
-      const [bookingData, dispatchData] = await Promise.all([
-        bookingService.getBookingById(params.id),
-        dispatchService.getDispatchByBookingId(params.id),
-      ]);
-      
+      // Fetch booking
+      const bookingData = await bookingService.getBookingById(params.id);
       setBooking(bookingData);
-      setDispatch(dispatchData);
+      
+      // Only fetch dispatch if driver is under operator
+      if (isDriverUnderOperator) {
+        try {
+          const dispatchData = await dispatchService.getDispatchByBookingId(params.id);
+          setDispatch(dispatchData);
+        } catch (dispatchErr) {
+          // Dispatch fetch is optional - log but don't fail
+          console.warn('[BookingDetails] Dispatch fetch failed (non-critical):', dispatchErr);
+        }
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load booking details';
       setError(errorMessage);
@@ -106,32 +118,19 @@ export default function BookingDetailsScreen() {
       return;
     }
 
-    Alert.alert(
-      'Start Transport?',
-      'Are you ready to go to the pickup location?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'default',
-          onPress: async () => {
-            setIsUpdatingStatus(true);
-            try {
-              // Update booking status to OnTheWayToPickup - driver going to pickup location
-              const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'OnTheWayToPickup');
-              setBooking(updatedBooking);
-              
-              Alert.alert('Success', 'Transport started. Navigate to the pickup location.', [{ text: 'OK' }]);
-            } catch (err) {
-              const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
-              Alert.alert('Error', errorMessage);
-            } finally {
-              setIsUpdatingStatus(false);
-            }
-          },
-        },
-      ]
-    );
+    setIsUpdatingStatus(true);
+    try {
+      // Update booking status to DriverAssigned - driver going to pickup location
+      const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'DriverAssigned');
+      setBooking(updatedBooking);
+      
+      Alert.alert('Success', 'Transport started. Navigate to the pickup location.', [{ text: 'OK' }]);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   const handleMarkAsPickedUp = async () => {
@@ -140,46 +139,33 @@ export default function BookingDetailsScreen() {
       return;
     }
 
-    Alert.alert(
-      'Mark as Picked Up?',
-      'Have you successfully picked up the cargo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'default',
-          onPress: async () => {
-            setIsUpdatingStatus(true);
-            try {
-              // Update booking status to InProgress - backend will automatically sync dispatch to InTransit
-              const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'InProgress');
-              setBooking(updatedBooking);
-              
-              // Refresh dispatch after a short delay to allow backend sync to complete
-              // This avoids race conditions where dispatch might not be updated yet
-              setTimeout(async () => {
-                try {
-                  const updatedDispatch = await dispatchService.getDispatchByBookingId(booking.id);
-                  if (updatedDispatch) {
-                    setDispatch(updatedDispatch);
-                  }
-                } catch (dispatchErr) {
-                  // Log but don't fail - booking update succeeded and dispatch will sync eventually
-                  console.warn('Failed to refresh dispatch (non-critical):', dispatchErr);
-                }
-              }, 500); // 500ms delay to allow backend processing
-              
-              Alert.alert('Success', 'Cargo marked as picked up. You can now proceed to delivery.', [{ text: 'OK' }]);
-            } catch (err) {
-              const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
-              Alert.alert('Error', errorMessage);
-            } finally {
-              setIsUpdatingStatus(false);
+    setIsUpdatingStatus(true);
+    try {
+      // Update booking status to PickedUp
+      const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'PickedUp');
+      setBooking(updatedBooking);
+      
+      // Refresh dispatch if driver is under operator
+      if (isDriverUnderOperator) {
+        setTimeout(async () => {
+          try {
+            const updatedDispatch = await dispatchService.getDispatchByBookingId(booking.id);
+            if (updatedDispatch) {
+              setDispatch(updatedDispatch);
             }
-          },
-        },
-      ]
-    );
+          } catch (dispatchErr) {
+            console.warn('Failed to refresh dispatch (non-critical):', dispatchErr);
+          }
+        }, 500);
+      }
+      
+      Alert.alert('Success', 'Cargo marked as picked up. You can now proceed to delivery.', [{ text: 'OK' }]);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   const handleMarkAsDelivered = async () => {
@@ -196,23 +182,23 @@ export default function BookingDetailsScreen() {
           onPress: async () => {
             setIsUpdatingStatus(true);
             try {
-              // Update booking status to Delivered - backend will automatically sync dispatch to Delivered
+              // Update booking status to Delivered
               const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'Delivered');
               setBooking(updatedBooking);
               
-              // Refresh dispatch after a short delay to allow backend sync to complete
-              // This avoids race conditions where dispatch might not be updated yet
-              setTimeout(async () => {
-                try {
-                  const updatedDispatch = await dispatchService.getDispatchByBookingId(booking.id);
-                  if (updatedDispatch) {
-                    setDispatch(updatedDispatch);
+              // Refresh dispatch if driver is under operator
+              if (isDriverUnderOperator) {
+                setTimeout(async () => {
+                  try {
+                    const updatedDispatch = await dispatchService.getDispatchByBookingId(booking.id);
+                    if (updatedDispatch) {
+                      setDispatch(updatedDispatch);
+                    }
+                  } catch (dispatchErr) {
+                    console.warn('Failed to refresh dispatch (non-critical):', dispatchErr);
                   }
-                } catch (dispatchErr) {
-                  // Log but don't fail - booking update succeeded and dispatch will sync eventually
-                  console.warn('Failed to refresh dispatch (non-critical):', dispatchErr);
-                }
-              }, 500); // 500ms delay to allow backend processing
+                }, 500);
+              }
 
               Alert.alert('Success', 'Cargo delivered successfully!', [{ text: 'OK' }]);
               
@@ -508,31 +494,25 @@ export default function BookingDetailsScreen() {
 
         {/* Status Update Buttons */}
         {booking && (() => {
-          // Normalize statuses for comparison
-          const bookingStatus = normalizeStatus(booking.status);
-          const isBookingDispatched = bookingStatus === 'dispatched';
-          const isBookingOnTheWayToPickup = bookingStatus === 'onthewaytopickup' || bookingStatus === 'on_the_way_to_pickup' || bookingStatus === 'on-the-way-to-pickup';
-          const isBookingInProgress = bookingStatus === 'inprogress' || bookingStatus === 'in_progress' || bookingStatus === 'in-progress';
-          const isBookingDelivered = bookingStatus === 'delivered';
-          const isBookingCompleted = bookingStatus === 'completed';
+          // Check booking status (handle both new and legacy status names)
+          const bookingStatus = booking.status;
+          const isConfirmed = bookingStatus === 'Confirmed';
+          const isDriverAssigned = bookingStatus === 'DriverAssigned' || bookingStatus === 'OnTheWayToPickup' || bookingStatus === 'Dispatched';
+          const isPickedUp = bookingStatus === 'PickedUp';
+          const isInTransit = bookingStatus === 'InTransit' || bookingStatus === 'InProgress';
+          const isDelivered = bookingStatus === 'Delivered';
+          const isCompleted = bookingStatus === 'Completed';
 
           // Don't show buttons if already completed
-          if (isBookingCompleted) {
+          if (isCompleted) {
             return null;
           }
 
           return (
             <View style={styles.statusUpdateContainer}>
-              {/* Debug info - remove in production */}
-              {__DEV__ && (
-                <ThemedText style={{ fontSize: 10, color: theme.textSecondary, marginBottom: 8 }}>
-                  Debug: Booking={booking.status}, Dispatch={dispatch?.status || 'null'}
-                </ThemedText>
-              )}
-
-              {/* Start Transport - Show when booking is Dispatched */}
+              {/* Start Transport - Show when booking is Confirmed */}
               {/* Driver starts going to pickup location */}
-              {isBookingDispatched && (
+              {isConfirmed && (
                 <TouchableOpacity
                   style={[
                     styles.statusUpdateButton,
@@ -548,7 +528,7 @@ export default function BookingDetailsScreen() {
               )}
 
               {/* On The Way to Pickup Indicator */}
-              {isBookingOnTheWayToPickup && (
+              {isDriverAssigned && (
                 <View style={styles.inTransitIndicator}>
                   <Ionicons name="navigate-outline" size={20} color={theme.info} />
                   <ThemedText style={[styles.inTransitText, { color: theme.info }]}>
@@ -557,24 +537,23 @@ export default function BookingDetailsScreen() {
                 </View>
               )}
 
-              {/* Mark as Picked Up - Show when booking is OnTheWayToPickup */}
-              {isBookingOnTheWayToPickup && (
-                <TouchableOpacity
-                  style={[
-                    styles.statusUpdateButton,
-                    { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 },
-                  ]}
-                  onPress={handleMarkAsPickedUp}
-                  disabled={isUpdatingStatus}>
-                  <Ionicons name="checkmark-circle-outline" size={24} color={theme.surface} />
-                  <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
-                    {isUpdatingStatus ? 'Updating...' : 'Mark as Picked Up'}
-                  </ThemedText>
-                </TouchableOpacity>
+              {/* Swipe to Mark as Picked Up - Show when booking is DriverAssigned */}
+              {isDriverAssigned && (
+                <View style={styles.swipeContainer}>
+                  <SwipeToAccept
+                    label="Swipe to mark pickup complete"
+                    onAccept={handleMarkAsPickedUp}
+                    disabled={isUpdatingStatus}
+                    trackColor={theme.border}
+                    thumbColor={theme.warning}
+                    textColor={theme.text}
+                    style={styles.swipeButton}
+                  />
+                </View>
               )}
 
-              {/* In Transit Indicator - Show when booking is InProgress */}
-              {isBookingInProgress && (
+              {/* In Transit Indicator - Show when booking is PickedUp */}
+              {isPickedUp && (
                 <View style={styles.inTransitIndicator}>
                   <Ionicons name="car-outline" size={20} color={theme.info} />
                   <ThemedText style={[styles.inTransitText, { color: theme.info }]}>
@@ -583,8 +562,18 @@ export default function BookingDetailsScreen() {
                 </View>
               )}
 
-              {/* Mark as Delivered - Show when booking is InProgress */}
-              {isBookingInProgress && (
+              {/* In Transit Indicator - Show when booking is InTransit */}
+              {isInTransit && (
+                <View style={styles.inTransitIndicator}>
+                  <Ionicons name="car-outline" size={20} color={theme.info} />
+                  <ThemedText style={[styles.inTransitText, { color: theme.info }]}>
+                    Cargo Picked Up - On Transit to Delivery
+                  </ThemedText>
+                </View>
+              )}
+
+              {/* Mark as Delivered - Show when booking is PickedUp or InTransit */}
+              {(isPickedUp || isInTransit) && (
                 <TouchableOpacity
                   style={[
                     styles.statusUpdateButton,
@@ -600,7 +589,7 @@ export default function BookingDetailsScreen() {
               )}
 
               {/* Delivered Indicator - Show when booking is Delivered */}
-              {isBookingDelivered && (
+              {isDelivered && (
                 <View style={styles.inTransitIndicator}>
                   <Ionicons name="checkmark-circle" size={20} color={theme.success} />
                   <ThemedText style={[styles.inTransitText, { color: theme.success }]}>
@@ -859,6 +848,14 @@ const styles = StyleSheet.create({
   inTransitText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  swipeContainer: {
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  swipeButton: {
+    height: 56,
+    borderRadius: 28,
   },
 });
 

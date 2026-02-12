@@ -13,7 +13,7 @@
     },
     "splash": {
       "image": "./assets/images/splash-icon.png",
-      "resizeMode": "cover",
+      "resizeMode": "contain",
       "backgroundColor": "#ffcd36"
     },
     "ios": {
@@ -76,6 +76,12 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow BEE DRIVER APP to access your photos to upload your profile picture."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow BEE DRIVER APP to access your camera to scan your driver's license and take your selfie."
         }
       ]
     ],
