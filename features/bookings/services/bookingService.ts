@@ -152,9 +152,12 @@ class BookingService {
       'Broadcasting',
       'Confirmed',
       'Dispatched',
-      'OnTheWayToPickup',
-      'InProgress',
-      'Delivered',
+      'DriverAssigned',    // New status: Driver en route to pickup
+      'OnTheWayToPickup',  // Legacy status (maps to DriverAssigned)
+      'PickedUp',          // New status: Driver picked up items
+      'InTransit',         // New status: Driver delivering
+      'InProgress',        // Legacy status (maps to InTransit)
+      'Delivered',         // Legacy status (maps to Completed)
       'Completed',
       'Cancelled',
     ];
@@ -347,9 +350,72 @@ class BookingService {
         console.log('[BookingService] Mapped bookings count:', uniqueBookings.length);
         return uniqueBookings;
       } else {
-        // Driver/Operator: GET /api/bookings is disabled (was returning 403).
-        // Use dispatches only (driver under operator path) or return empty until backend allows.
-        return [];
+        // Solo driver: Get bookings assigned to this driver (by SelectedDriverId)
+        console.log('[BookingService] ===== FETCHING BOOKINGS FOR SOLO DRIVER =====');
+        console.log('[BookingService] Driver ID:', user.id);
+        console.log('[BookingService] Driver Role:', user.role);
+        console.log('[BookingService] Is Solo Driver:', user.isSoloDriver);
+        console.log('[BookingService] API Endpoint: GET /api/bookings/driver/' + user.id);
+        
+        const response = await apiClient.get<any>(
+          `/api/bookings/driver/${user.id}`,
+          { requiresAuth: true }
+        );
+        
+        console.log('[BookingService] ===== BOOKINGS API RESPONSE =====');
+        console.log('[BookingService] Response Status:', response.statusCode);
+        console.log('[BookingService] Response Success:', response.success);
+        console.log('[BookingService] Response Message:', response.message);
+
+        console.log('[BookingService] Bookings response:', {
+          success: response.success,
+          statusCode: response.statusCode,
+          hasData: !!response.data,
+          dataType: Array.isArray(response.data) ? 'array' : typeof response.data,
+          dataLength: Array.isArray(response.data) ? response.data.length : 'N/A',
+        });
+
+        if (!response.success || !response.data) {
+          console.warn('[BookingService] No bookings found or request failed');
+          return [];
+        }
+
+        // Handle API response structure
+        let bookings: any[] = [];
+        
+        if (Array.isArray(response.data)) {
+          bookings = response.data;
+        } else if (response.data && typeof response.data === 'object') {
+          if ('items' in response.data && Array.isArray((response.data as any).items)) {
+            bookings = (response.data as any).items;
+          } else if ('data' in response.data && Array.isArray((response.data as any).data)) {
+            bookings = (response.data as any).data;
+          } else {
+            console.warn('[BookingService] Unexpected response.data structure:', response.data);
+          }
+        }
+
+        console.log('[BookingService] Processed bookings count:', bookings.length);
+
+        // Map API bookings to Booking type
+        const mappedBookings = bookings
+          .map((apiBooking) => {
+            try {
+              return this.mapApiBookingToBooking(apiBooking);
+            } catch (error) {
+              console.error('[BookingService] Error mapping booking:', error, apiBooking);
+              return null;
+            }
+          })
+          .filter((booking): booking is Booking => booking !== null);
+
+        // Deduplicate bookings by ID
+        const uniqueBookings = Array.from(
+          new Map(mappedBookings.map((booking) => [booking.id, booking])).values()
+        );
+
+        console.log('[BookingService] Mapped bookings count:', uniqueBookings.length);
+        return uniqueBookings;
       }
     } catch (error) {
       console.error('Failed to fetch bookings:', error);

@@ -54,21 +54,23 @@ function filterBookingsByStatus(
   }
 
   if (filter === 'Incoming') {
-    // Bookings that are assigned but not yet started
+    // Bookings that are assigned but driver hasn't started working on yet
     const incomingStatuses = [
       'Pending',
-      'Confirmed',
-      'DriverAssigned',
+      'Confirmed',        // Driver accepted the offer but hasn't started
     ];
     return bookings.filter((booking) => incomingStatuses.includes(booking.status));
   }
 
   if (filter === 'Ongoing') {
-    // Bookings that are in progress
+    // Bookings that are actively in progress (driver is working on them)
     const ongoingStatuses = [
-      'OnTheWayToPickup',
-      'InProgress',
-      'PickedUp',
+      'DriverAssigned',   // Driver en route to pickup (actively working)
+      'PickedUp',         // Driver picked up items (actively delivering)
+      'InTransit',        // Driver delivering (actively in transit)
+      // Legacy statuses (mapped by backend)
+      'OnTheWayToPickup', // Maps to DriverAssigned (legacy)
+      'InProgress',       // Maps to InTransit (legacy)
     ];
     return bookings.filter((booking) => ongoingStatuses.includes(booking.status));
   }
@@ -76,8 +78,8 @@ function filterBookingsByStatus(
   if (filter === 'Done') {
     // Completed deliveries
     const doneStatuses = [
-      'Completed',
-      'Delivered',
+      'Completed',        // All stops completed
+      'Delivered',        // Legacy status (maps to Completed)
     ];
     return bookings.filter((booking) => doneStatuses.includes(booking.status));
   }

@@ -55,18 +55,23 @@ export function useDashboardStats(): DashboardStats {
     ).length;
     
     // Incoming/Ongoing/Done counts
+    // Incoming: Bookings assigned but driver hasn't started working on yet
     const incomingDeliveries = bookings.filter(
       (booking) =>
         booking.status === 'Pending' ||
-        booking.status === 'Confirmed' ||
-        booking.status === 'DriverAssigned'
+        booking.status === 'Confirmed'
     ).length;
+    // Ongoing: Bookings actively in progress (driver is working on them)
     const ongoingDeliveries = bookings.filter(
       (booking) =>
+        booking.status === 'DriverAssigned' ||
+        booking.status === 'PickedUp' ||
+        booking.status === 'InTransit' ||
+        // Legacy statuses
         booking.status === 'OnTheWayToPickup' ||
-        booking.status === 'InProgress' ||
-        booking.status === 'PickedUp'
+        booking.status === 'InProgress'
     ).length;
+    // Done: Completed deliveries
     const doneDeliveries = bookings.filter(
       (booking) =>
         booking.status === 'Completed' ||

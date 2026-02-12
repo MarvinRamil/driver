@@ -57,7 +57,7 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
       if (isRateLimitError(err)) {
         const until = Date.now() + RATE_LIMIT_BACKOFF_MS;
         setRateLimitBackoffUntil(until);
-        setError('Too many requests. Slowing down; you'll still receive offers.');
+        setError('Too many requests. Slowing down; you\'ll still receive offers.');
         if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
         backoffTimerRef.current = setTimeout(() => {
           setRateLimitBackoffUntil(null);
