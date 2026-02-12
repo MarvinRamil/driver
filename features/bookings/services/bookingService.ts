@@ -243,11 +243,114 @@ class BookingService {
    */
   async getBookings(user: User): Promise<Booking[]> {
     try {
-      // Driver app only has Driver role. All drivers are independent; no /api/bookings (back-office only).
-      if (user.role !== 'Driver') {
+      // Check if driver is under an operator (has tenantId and is not solo driver)
+      const isDriverUnderOperator = user.tenantId !== null && !user.isSoloDriver;
+      
+      if (isDriverUnderOperator) {
+        // Driver under operator: Get assigned dispatches only
+        console.log('[BookingService] ===== FETCHING DISPATCHES FOR DRIVER =====');
+        console.log('[BookingService] Driver ID:', user.id);
+        console.log('[BookingService] Driver Role:', user.role);
+        console.log('[BookingService] Is Solo Driver:', user.isSoloDriver);
+        console.log('[BookingService] Tenant ID:', user.tenantId);
+        console.log('[BookingService] API Endpoint: GET /api/dispatches/driver/' + user.id);
+        
+        const response = await apiClient.get<Dispatch[]>(
+          `/api/dispatches/driver/${user.id}`,
+          { requiresAuth: true }
+        );
+        
+        console.log('[BookingService] ===== DISPATCHES API RESPONSE =====');
+        console.log('[BookingService] Response Status:', response.statusCode);
+        console.log('[BookingService] Response Success:', response.success);
+        console.log('[BookingService] Response Message:', response.message);
+
+        console.log('[BookingService] Dispatches response:', {
+          success: response.success,
+          statusCode: response.statusCode,
+          hasData: !!response.data,
+          dataType: Array.isArray(response.data) ? 'array' : typeof response.data,
+          dataLength: Array.isArray(response.data) ? response.data.length : 'N/A',
+          dataKeys: response.data && typeof response.data === 'object' ? Object.keys(response.data) : [],
+        });
+
+        if (!response.success || !response.data) {
+          console.warn('[BookingService] No dispatches found or request failed');
+          return [];
+        }
+
+        // Handle API response structure - backend wraps in ApiResponse<T>
+        // Response structure: { success: true, data: DispatchDto[] }
+        let dispatches: any[] = [];
+        
+        // Check if response.data is directly an array
+        if (Array.isArray(response.data)) {
+          dispatches = response.data;
+        } 
+        // Check if response.data is wrapped in another data property
+        else if (response.data && typeof response.data === 'object') {
+          // Check for items array (paginated response)
+          if ('items' in response.data && Array.isArray((response.data as any).items)) {
+            dispatches = (response.data as any).items;
+          }
+          // Check for nested data property
+          else if ('data' in response.data && Array.isArray((response.data as any).data)) {
+            dispatches = (response.data as any).data;
+          }
+          // If it's an object but not an array, log it for debugging
+          else {
+            console.warn('[BookingService] Unexpected response.data structure:', response.data);
+          }
+        }
+
+        console.log('[BookingService] Processed dispatches count:', dispatches.length);
+
+        // Map dispatches to bookings
+        // Fetch bookings in parallel for better performance
+        console.log('[BookingService] ===== FETCHING BOOKINGS FOR DISPATCHES =====');
+        console.log('[BookingService] Total dispatches to process:', dispatches.length);
+        
+        const bookingPromises = dispatches.map(async (dispatch, index) => {
+          console.log(`[BookingService] [${index + 1}/${dispatches.length}] Processing dispatch:`, {
+            id: dispatch?.id,
+            dispatchNumber: dispatch?.dispatchNumber,
+            hasBooking: !!dispatch?.booking,
+            bookingId: dispatch?.bookingId || dispatch?.booking?.id,
+            dispatchKeys: dispatch ? Object.keys(dispatch) : [],
+          });
+          
+          console.log(`[BookingService] [${index + 1}/${dispatches.length}] Fetching booking for ID:`, dispatch?.bookingId);
+          const booking = await this.mapDispatchToBooking(dispatch);
+          if (booking) {
+            console.log(`[BookingService] [${index + 1}/${dispatches.length}] ✓ Successfully fetched booking:`, booking.id, booking.bookingNumber);
+          } else {
+            console.warn(`[BookingService] [${index + 1}/${dispatches.length}] ✗ Failed to map dispatch to booking:`, dispatch);
+          }
+          return booking;
+        });
+
+        const bookingResults = await Promise.all(bookingPromises);
+        const bookings = bookingResults.filter((booking): booking is Booking => booking !== null);
+
+        // Deduplicate bookings by ID to prevent duplicate key errors
+        // This can happen if the same booking appears in multiple dispatches
+        const uniqueBookings = Array.from(
+          new Map(bookings.map((booking) => [booking.id, booking])).values()
+        );
+
+        if (bookings.length !== uniqueBookings.length) {
+          console.warn(
+            `[BookingService] Found ${bookings.length - uniqueBookings.length} duplicate bookings, deduplicated to ${uniqueBookings.length}`
+          );
+        }
+
+        console.log('[BookingService] Mapped bookings count:', uniqueBookings.length);
+        return uniqueBookings;
+      } else {
+        // Driver/Operator: GET /api/bookings is disabled (was returning 403).
+        // Use dispatches only (driver under operator path) or return empty until backend allows.
         return [];
       }
-      return [];
     } catch (error) {
       console.error('Failed to fetch bookings:', error);
       throw new Error(

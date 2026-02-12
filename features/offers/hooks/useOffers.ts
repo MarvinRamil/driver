@@ -37,18 +37,27 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
   const [error, setError] = useState<string | null>(null);
   const [rateLimitBackoffUntil, setRateLimitBackoffUntil] = useState<number | null>(null);
   const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Track polling interval and whether polling should continue
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldPollRef = useRef<boolean>(true);
 
-  const fetchOffers = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  /** @param silent - if true, do not set loading state (used for background polling so the page doesn't show refresh spinner) */
+  const fetchOffers = useCallback(async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const data = await offerService.getPendingOffers(limit);
       setOffers(data);
+      setError(null);
+      shouldPollRef.current = true;
     } catch (err) {
       if (isRateLimitError(err)) {
         const until = Date.now() + RATE_LIMIT_BACKOFF_MS;
         setRateLimitBackoffUntil(until);
-        setError('Too many requests. Slowing down; you’ll still receive offers.');
+        setError('Too many requests. Slowing down; you'll still receive offers.');
         if (backoffTimerRef.current) clearTimeout(backoffTimerRef.current);
         backoffTimerRef.current = setTimeout(() => {
           setRateLimitBackoffUntil(null);
@@ -59,8 +68,14 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
         setError(errorMessage);
       }
       console.error('[useOffers] Error fetching offers:', err);
+      shouldPollRef.current = false;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      console.log('[useOffers] Polling stopped due to error. User must manually refresh.');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [limit]);
 
@@ -98,23 +113,59 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
     []
   );
 
+  // Manual refresh (shows loading spinner). User pull-to-refresh or explicit refresh.
+  const refresh = useCallback(async () => {
+    await fetchOffers(false);
+    if (pollingInterval > 0 && shouldPollRef.current && !pollingIntervalRef.current) {
+      pollingIntervalRef.current = setInterval(() => {
+        if (shouldPollRef.current) {
+          fetchOffers(true);
+        } else {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+        }
+      }, pollingInterval);
+    }
+  }, [fetchOffers, pollingInterval]);
+
   const isInBackoff = rateLimitBackoffUntil !== null && Date.now() < rateLimitBackoffUntil;
   const effectiveInterval = isInBackoff ? RATE_LIMIT_POLL_MS : pollingInterval;
 
   useEffect(() => {
-    fetchOffers();
-    if (effectiveInterval <= 0) return;
-    const interval = setInterval(fetchOffers, effectiveInterval);
-    return () => clearInterval(interval);
+    // Initial fetch (show loading)
+    fetchOffers(false);
+
+    // Background polling: do not set loading so the page doesn't show refresh spinner
+    // Use effectiveInterval (slower when rate limited)
+    if (effectiveInterval > 0 && shouldPollRef.current) {
+      pollingIntervalRef.current = setInterval(() => {
+        if (shouldPollRef.current) {
+          fetchOffers(true);
+        } else {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+        }
+      }, effectiveInterval);
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
   }, [fetchOffers, effectiveInterval]);
 
   return {
     offers,
     isLoading,
     error,
-    refresh: fetchOffers,
+    refresh,
     acceptOffer,
     rejectOffer,
   };
 }
-

@@ -315,17 +315,15 @@ class ApiClient {
         statusCode: response.status,
       };
     } catch (error) {
-      // Log network/fetch errors for debugging (avoid [object Object] for ApiError)
-      const errMsg =
-        error instanceof Error
-          ? error.message
-          : error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string'
-            ? (error as { message: string }).message
-            : String(error);
-      console.error(`[API] Request failed: ${method} ${fullUrl}`, {
-        errorMessage: errMsg,
-        status: error && typeof error === 'object' && 'status' in error ? (error as { status: number }).status : undefined,
-      });
+      // Log request failures only when API debug is enabled
+      if (API_DEBUG) {
+        console.error(`[API] Request failed: ${method} ${fullUrl}`, {
+          error,
+          errorType: typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorName: error instanceof Error ? error.name : undefined,
+        });
+      }
 
       // Re-throw ApiError as-is
       if (error && typeof error === 'object' && 'message' in error && 'status' in error) {

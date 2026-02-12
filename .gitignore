@@ -46,3 +46,5 @@ yarn-error.*
 # Firebase iOS configuration (contains sensitive project info)
 # Note: google-services.json is safe to commit (public config)
 GoogleService-Info.plist
+keystore_base64.txt
+release.keystore

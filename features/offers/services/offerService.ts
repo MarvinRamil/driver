@@ -24,19 +24,31 @@ class OfferService {
       // Ensure limit is within valid range (1-10)
       const validLimit = Math.max(1, Math.min(10, limit));
       
-      const response = await apiClient.get<DriverOffer[]>('/api/driver-offers/pending', {
+      const response = await apiClient.get<DriverOffer[] | { items?: any[]; data?: any[] }>('/api/driver-offers/pending', {
         params: { limit: validLimit },
         requiresAuth: true,
       });
 
-      if (!response.success || !response.data) {
+      if (!response.success) {
         return [];
       }
 
-      // Handle both array response and wrapped response
-      const offers = Array.isArray(response.data) ? response.data : [];
-      
-      return offers.map((offer: any) => {
+      // Extract list from common API response shapes: array, { items }, { data }, { data: { items } }
+      const raw = response.data;
+      let list: any[] = [];
+      if (Array.isArray(raw)) {
+        list = raw;
+      } else if (raw && typeof raw === 'object') {
+        if (Array.isArray((raw as any).items)) list = (raw as any).items;
+        else if (Array.isArray((raw as any).data)) list = (raw as any).data;
+        else if ((raw as any).data && Array.isArray((raw as any).data.items)) list = (raw as any).data.items;
+      }
+
+      if (list.length === 0 && raw != null) {
+        console.warn('[OfferService] Pending offers response had no array. Shape:', typeof raw, raw && typeof raw === 'object' ? Object.keys(raw) : raw);
+      }
+
+      return list.map((offer: any) => {
         // Parse dates
         const expiresAt = this.parseDate(offer.expiresAt);
         const offeredAt = this.parseDate(offer.offeredAt);
