@@ -218,7 +218,7 @@ export default function LoginScreen() {
                   style={styles.heroLogo}
                   resizeMode="contain"
                 />
-                <Text style={styles.heroText}>ON-DEMAND</Text>
+                <Text style={styles.heroText}>BEE ON-DEMAND</Text>
               </View>
             </View>
           </View>
