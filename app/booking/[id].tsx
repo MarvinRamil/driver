@@ -5,6 +5,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { bookingService, dispatchService } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
+import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
+import { locationTrackingService } from '@/features/driver/services/locationTrackingService';
 import type { Booking, Dispatch } from '@/shared/types/booking';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
@@ -20,6 +22,7 @@ export default function BookingDetailsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
+  const { isOnline } = useDriverStatusContext();
   const params = useLocalSearchParams<{ id: string }>();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [dispatch, setDispatch] = useState<Dispatch | null>(null);
@@ -120,6 +123,46 @@ export default function BookingDetailsScreen() {
 
     setIsUpdatingStatus(true);
     try {
+      // Ensure driver is online and location tracking is active
+      if (!isOnline) {
+        Alert.alert(
+          'Driver Offline',
+          'Please go online first to start location tracking.',
+          [{ text: 'OK' }]
+        );
+        setIsUpdatingStatus(false);
+        return;
+      }
+
+      // Ensure location tracking is started (in case it stopped for some reason)
+      const isTracking = locationTrackingService.getIsTracking();
+      if (!isTracking && user?.id) {
+        try {
+          console.log('[BookingDetails] Starting location tracking for transport');
+          locationTrackingService.setDriverId(user.id);
+          const hasPermission = await locationTrackingService.hasPermissions();
+          if (hasPermission) {
+            await locationTrackingService.startTracking(5000, user.id);
+          } else {
+            const granted = await locationTrackingService.requestPermissions();
+            if (granted) {
+              await locationTrackingService.startTracking(5000, user.id);
+            } else {
+              Alert.alert(
+                'Location Permission Required',
+                'Location permission is required to track your position during transport.',
+                [{ text: 'OK' }]
+              );
+              setIsUpdatingStatus(false);
+              return;
+            }
+          }
+        } catch (locationError) {
+          console.warn('[BookingDetails] Failed to start location tracking:', locationError);
+          // Continue anyway - location tracking might already be active via DriverStatusContext
+        }
+      }
+
       // Update booking status to DriverAssigned - driver going to pickup location
       const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'DriverAssigned');
       setBooking(updatedBooking);

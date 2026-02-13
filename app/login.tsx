@@ -8,7 +8,6 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -20,7 +19,11 @@ import {
   AppState,
   AppStateStatus,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// Import images as constants for reliable bundling in release builds
+const adaptiveIcon = require('../assets/images/adaptive-icon.png');
 
 /**
  * Login screen component
@@ -213,10 +216,10 @@ export default function LoginScreen() {
           <View style={styles.headerImageContainer}>
             <View style={[styles.headerImage, { backgroundColor: BRAND_YELLOW }]}>
               <View style={styles.heroContent}>
-                <Image
-                  source={require('@/assets/images/adaptive-icon.png')}
+                <ExpoImage
+                  source={adaptiveIcon}
                   style={styles.heroLogo}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
                 <Text style={styles.heroText}>BEE ON-DEMAND</Text>
               </View>

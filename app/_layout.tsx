@@ -6,9 +6,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
+
+// Import images as constants for reliable bundling in release builds
+const splashIcon = require('../assets/images/splash-icon.png');
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BeeColors, BRAND_YELLOW } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/features/auth';
@@ -188,6 +191,7 @@ const IN_APP_SPLASH_DURATION_MS = 2200;
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const [showInAppSplash, setShowInAppSplash] = useState(true);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const t = setTimeout(() => setShowInAppSplash(false), IN_APP_SPLASH_DURATION_MS);
@@ -223,12 +227,15 @@ function RootLayoutNav() {
                 <View style={styles.inAppSplash} pointerEvents="box-none">
                   <View style={styles.inAppSplashContent}>
                     <Image
-                      source={require('@/assets/images/splash-icon.png')}
+                      source={splashIcon}
                       style={styles.inAppSplashLogo}
                       contentFit="contain"
                     />
                     <Text style={styles.inAppSplashText}>BEE ON-DEMAND</Text>
                   </View>
+                  <Text style={[styles.inAppSplashFooter, { bottom: 40 + insets.bottom }]}>
+                    Made with ❤️ by Ilocos Script I.T. Solutions
+                  </Text>
                 </View>
               )}
             </View>
@@ -263,6 +270,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: BeeColors.gray[900],
     letterSpacing: 2,
+  },
+  inAppSplashFooter: {
+    position: 'absolute',
+    bottom: 40,
+    fontSize: 14,
+    fontWeight: '500',
+    color: BeeColors.gray[700],
+    textAlign: 'center',
   },
 });
 

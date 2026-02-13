@@ -17,6 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { BeeColors } from '@/constants/theme';
 import { Image as ExpoImage } from 'expo-image';
 
+// Import images as constants for reliable bundling in release builds
+const adaptiveIcon = require('../../assets/images/adaptive-icon.png');
+
 /**
  * Dashboard screen
  * Matches prepared design with header, earnings, stats, and quick actions
@@ -83,7 +86,7 @@ export default function DashboardScreen() {
           {/* Decorative Bee Logo */}
           <View style={styles.beeLogoWrapper}>
             <ExpoImage
-              source={require('@/assets/images/adaptive-icon.png')}
+              source={adaptiveIcon}
               style={styles.beeLogo}
               contentFit="contain"
             />
