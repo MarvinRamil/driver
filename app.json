@@ -58,6 +58,17 @@
     "plugins": [
       "expo-router",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "backgroundColor": "#ffcd36",
+          "resizeMode": "contain",
+          "android": {
+            "imageWidth": 240
+          }
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/adaptive-icon.png",
@@ -97,6 +108,9 @@
     "owner": "ilocosscriptdevs",
     "updates": {
       "url": "https://u.expo.dev/1746836d-2181-4337-bf25-dcd5ac61f0a3"
-    }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ]
   }
 }

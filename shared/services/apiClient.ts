@@ -235,8 +235,34 @@ class ApiClient {
         }
       }
 
+      // Implement timeout using AbortController
+      const timeoutMs = Number(process.env.EXPO_PUBLIC_API_TIMEOUT) || 30000; // Default 30 seconds
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      // Add abort signal to fetch options
+      fetchOptions.signal = controller.signal;
+
       // Make the request
-      const response = await fetch(fullUrl, fetchOptions);
+      let response: Response;
+      try {
+        response = await fetch(fullUrl, fetchOptions);
+      } catch (error) {
+        // Clear timeout if request completes
+        clearTimeout(timeoutId);
+        
+        // Handle abort (timeout)
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw {
+            message: `Request timeout after ${timeoutMs}ms. Please check your connection and try again.`,
+            status: 408,
+          } as ApiError;
+        }
+        throw error;
+      }
+      
+      // Clear timeout on successful fetch
+      clearTimeout(timeoutId);
 
       // Debug logging for response
       if (API_DEBUG) {

@@ -6,6 +6,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
+
+// Import images as constants for reliable bundling in release builds
+const splashIcon = require('../assets/images/splash-icon.png');
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -223,7 +226,7 @@ function RootLayoutNav() {
                 <View style={styles.inAppSplash} pointerEvents="box-none">
                   <View style={styles.inAppSplashContent}>
                     <Image
-                      source={require('@/assets/images/splash-icon.png')}
+                      source={splashIcon}
                       style={styles.inAppSplashLogo}
                       contentFit="contain"
                     />
