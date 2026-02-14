@@ -97,10 +97,10 @@ export function LocationLogger() {
       const host = process.env.EXPO_PUBLIC_MQTT_HOST;
       const username = process.env.EXPO_PUBLIC_MQTT_USERNAME;
       const password = process.env.EXPO_PUBLIC_MQTT_PASSWORD;
-      const port = process.env.EXPO_PUBLIC_MQTT_PORT || '80';
       const useSsl = process.env.EXPO_PUBLIC_MQTT_USE_SSL === 'true' || process.env.EXPO_PUBLIC_MQTT_USE_SSL === '1';
+      const port = process.env.EXPO_PUBLIC_MQTT_PORT || (useSsl ? '443' : '80');
       
-      // Build WebSocket URL to show
+      // Build WebSocket URL to show (WSS = 443, WS = 80)
       const protocol = useSsl || port === '443' ? 'wss' : 'ws';
       const wsUrl = `${protocol}://${host}:${port}/mqtt`;
       
