@@ -101,6 +101,7 @@ class MqttLocationService {
 
       console.log('[MQTT] Env check:', {
         appEnv,
+        normalizedAppEnv,
         hasHost: !!host,
         port,
         useSsl,
@@ -149,6 +150,13 @@ class MqttLocationService {
         topic,
         clientId
       };
+
+      console.log('[MQTT] Resolved environment/topic routing:', {
+        appEnv,
+        normalizedAppEnv,
+        topicPrefix,
+        sampleTopic: `${topicPrefix}/<driverId>/location`,
+      });
 
       console.log('[MQTT] Credentials loaded:', {
         wsUrl: credentials.wsUrl,
