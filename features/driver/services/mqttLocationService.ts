@@ -71,6 +71,9 @@ class MqttLocationService {
       // This ensures that if env vars are missing (OTA issue), it still connects
       const host = process.env.EXPO_PUBLIC_MQTT_HOST || 'mqtt.ilocosscript.live';
       let port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '443', 10);
+      const explicitAppEnv = (process.env.EXPO_PUBLIC_APP_ENV || '').trim().toLowerCase();
+      const inferredAppEnv = __DEV__ ? 'dev' : 'staging';
+      const appEnv = explicitAppEnv || inferredAppEnv;
       // Respect explicit false ('false'/'0') for WS on port 80 (e.g. behind Cloudflare tunnel); otherwise default to WSS
       const sslEnv = process.env.EXPO_PUBLIC_MQTT_USE_SSL;
       const useSsl = (sslEnv === 'false' || sslEnv === '0') ? false : true;
@@ -83,15 +86,27 @@ class MqttLocationService {
 
       const username = process.env.EXPO_PUBLIC_MQTT_USERNAME || 'ilocosscript';
       const password = process.env.EXPO_PUBLIC_MQTT_PASSWORD || 'passwordZxc123AbC';
-      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || 'beelogistics/drivers';
+      const normalizedAppEnv =
+        appEnv === 'production' || appEnv === 'prod'
+          ? 'prod'
+          : appEnv === 'uat'
+            ? 'staging'
+            : appEnv;
+      const defaultTopicPrefix =
+        normalizedAppEnv === 'prod'
+          ? 'beelogistics/drivers'
+          : `${normalizedAppEnv}/beelogistics/drivers`;
+      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || defaultTopicPrefix;
       const path = process.env.EXPO_PUBLIC_MQTT_PATH || '/mqtt';
 
       console.log('[MQTT] Env check:', {
+        appEnv,
         hasHost: !!host,
         port,
         useSsl,
         path,
         hasUsername: !!username,
+        topicPrefix,
       });
 
       // Validate required fields
