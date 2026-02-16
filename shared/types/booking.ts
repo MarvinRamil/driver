@@ -66,6 +66,21 @@ export interface LocationCoordinates {
 }
 
 /**
+ * Delivery stop (pickup or dropoff) with id for POD upload
+ */
+export interface DeliveryStop {
+  id: string;
+  sequence: number;
+  address: string;
+  type: 'Pickup' | 'Dropoff';
+  latitude?: number | null;
+  longitude?: number | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  notes?: string | null;
+}
+
+/**
  * Booking entity interface
  * Represents a booking/order in the system
  */
@@ -126,6 +141,8 @@ export interface Booking {
   driverId?: string;
   /** Optional driver location coordinates (legacy) */
   driverLocation?: LocationCoordinates;
+  /** Stops (pickup/dropoff) with ids for POD upload */
+  stops?: DeliveryStop[];
 }
 
 /**

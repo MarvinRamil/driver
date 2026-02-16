@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, Linking, Platform } from 'react-native';
+import {
+  StyleSheet,
+  ScrollView,
+  View,
+  TouchableOpacity,
+  Alert,
+  Linking,
+  Platform,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { bookingService, dispatchService } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
@@ -29,6 +41,11 @@ export default function BookingDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [showPodModal, setShowPodModal] = useState(false);
+  const [podImageUri, setPodImageUri] = useState<string | null>(null);
+  const [podSignatureUri, setPodSignatureUri] = useState<string | null>(null);
+  const [podRecipientName, setPodRecipientName] = useState('');
+  const [podNotes, setPodNotes] = useState('');
 
   // Check if driver is under operator (needs dispatch)
   const isDriverUnderOperator = user?.tenantId !== null && !user?.isSoloDriver;
@@ -211,57 +228,112 @@ export default function BookingDetailsScreen() {
     }
   };
 
-  const handleMarkAsDelivered = async () => {
-    if (!booking || isUpdatingStatus) return;
+  const dropoffStop = booking?.stops?.find((s) => s.type === 'Dropoff');
 
+  const pickPodImage = async (type: 'delivery' | 'signature') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo library access to add the delivery photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    if (type === 'delivery') setPodImageUri(result.assets[0].uri);
+    else setPodSignatureUri(result.assets[0].uri);
+  };
+
+  const handleOpenPodModal = () => {
+    if (!booking) return;
+    if (dropoffStop) {
+      setPodImageUri(null);
+      setPodSignatureUri(null);
+      setPodRecipientName('');
+      setPodNotes('');
+      setShowPodModal(true);
+    } else {
+      Alert.alert(
+        'Mark as Delivered?',
+        'Have you successfully delivered the cargo? (No proof of delivery will be uploaded.)',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Confirm', onPress: () => markDeliveredWithoutPod() },
+        ]
+      );
+    }
+  };
+
+  const markDeliveredWithoutPod = async () => {
+    if (!booking || isUpdatingStatus) return;
+    setIsUpdatingStatus(true);
+    try {
+      await bookingService.updateBookingStatus(booking.id, 'Delivered');
+      await bookingService.updateBookingStatus(booking.id, 'Completed');
+      await fetchBookingDetails();
+      if (isDriverUnderOperator) {
+        const d = await dispatchService.getDispatchByBookingId(booking.id).catch(() => null);
+        if (d) setDispatch(d);
+      }
+      Alert.alert('Success', 'Cargo delivered successfully!', [{ text: 'OK' }]);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update status');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleSubmitPod = async () => {
+    if (!booking || !dropoffStop || !podImageUri || isUpdatingStatus) {
+      if (!podImageUri) Alert.alert('Required', 'Please add a delivery photo.');
+      return;
+    }
+    setIsUpdatingStatus(true);
+    try {
+      await bookingService.uploadPod(
+        booking.id,
+        dropoffStop.id,
+        podImageUri,
+        podSignatureUri ?? undefined,
+        podRecipientName.trim() || undefined,
+        podNotes.trim() || undefined
+      );
+      const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'Delivered');
+      setBooking(updatedBooking);
+      setShowPodModal(false);
+      Alert.alert('Success', 'Proof of delivery uploaded. Completing booking...', [{ text: 'OK' }]);
+      setTimeout(async () => {
+        try {
+          await bookingService.updateBookingStatus(booking.id, 'Completed');
+          await fetchBookingDetails();
+        } catch (err) {
+          console.warn('Failed to mark as completed:', err);
+        }
+      }, 1500);
+      if (isDriverUnderOperator) {
+        const d = await dispatchService.getDispatchByBookingId(booking.id).catch(() => null);
+        if (d) setDispatch(d);
+      }
+    } catch (err) {
+      Alert.alert(
+        'Upload failed',
+        err instanceof Error ? err.message : 'Failed to upload proof of delivery. Please try again.'
+      );
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleMarkAsDelivered = () => {
+    if (!booking || isUpdatingStatus) return;
     Alert.alert(
       'Mark as Delivered?',
-      'Have you successfully delivered the cargo to the destination?',
+      'Have you successfully delivered the cargo to the destination? You will be asked to add a delivery photo.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          style: 'default',
-          onPress: async () => {
-            setIsUpdatingStatus(true);
-            try {
-              // Update booking status to Delivered
-              const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'Delivered');
-              setBooking(updatedBooking);
-              
-              // Refresh dispatch if driver is under operator
-              if (isDriverUnderOperator) {
-                setTimeout(async () => {
-                  try {
-                    const updatedDispatch = await dispatchService.getDispatchByBookingId(booking.id);
-                    if (updatedDispatch) {
-                      setDispatch(updatedDispatch);
-                    }
-                  } catch (dispatchErr) {
-                    console.warn('Failed to refresh dispatch (non-critical):', dispatchErr);
-                  }
-                }, 500);
-              }
-
-              Alert.alert('Success', 'Cargo delivered successfully!', [{ text: 'OK' }]);
-              
-              // Auto-complete after a short delay
-              setTimeout(async () => {
-                try {
-                  await bookingService.updateBookingStatus(booking.id, 'Completed');
-                  await fetchBookingDetails(); // Refresh to show completed status
-                } catch (err) {
-                  console.warn('Failed to mark as completed:', err);
-                }
-              }, 2000);
-            } catch (err) {
-              const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
-              Alert.alert('Error', errorMessage);
-            } finally {
-              setIsUpdatingStatus(false);
-            }
-          },
-        },
+        { text: 'Continue', onPress: handleOpenPodModal },
       ]
     );
   };
@@ -647,6 +719,85 @@ export default function BookingDetailsScreen() {
         {/* Extra spacing for bottom */}
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* Proof of delivery modal */}
+      <Modal
+        visible={showPodModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => !isUpdatingStatus && setShowPodModal(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+            <ThemedText type="subtitle" style={[styles.modalTitle, { color: theme.text }]}>
+              Proof of delivery
+            </ThemedText>
+            <ThemedText style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Add a photo of the delivered cargo (required). Signature is optional.
+            </ThemedText>
+
+            <TouchableOpacity
+              style={[styles.podUploadBox, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => pickPodImage('delivery')}>
+              {podImageUri ? (
+                <Ionicons name="checkmark-circle" size={32} color={theme.success} />
+              ) : (
+                <Ionicons name="camera-outline" size={32} color={theme.textSecondary} />
+              )}
+              <ThemedText style={[styles.podUploadLabel, { color: theme.textSecondary }]}>
+                {podImageUri ? 'Delivery photo added' : 'Tap to add delivery photo *'}
+              </ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.podUploadBox, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => pickPodImage('signature')}>
+              {podSignatureUri ? (
+                <Ionicons name="checkmark-circle" size={32} color={theme.success} />
+              ) : (
+                <Ionicons name="create-outline" size={32} color={theme.textSecondary} />
+              )}
+              <ThemedText style={[styles.podUploadLabel, { color: theme.textSecondary }]}>
+                {podSignatureUri ? 'Signature added' : 'Tap to add signature (optional)'}
+              </ThemedText>
+            </TouchableOpacity>
+
+            <TextInput
+              style={[styles.podInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
+              placeholder="Recipient name (optional)"
+              placeholderTextColor={theme.textSecondary}
+              value={podRecipientName}
+              onChangeText={setPodRecipientName}
+            />
+            <TextInput
+              style={[styles.podInput, styles.podNotesInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
+              placeholder="Notes (optional)"
+              placeholderTextColor={theme.textSecondary}
+              value={podNotes}
+              onChangeText={setPodNotes}
+              multiline
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.border }]}
+                onPress={() => setShowPodModal(false)}
+                disabled={isUpdatingStatus}>
+                <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }, (!podImageUri || isUpdatingStatus) && styles.modalButtonDisabled]}
+                onPress={handleSubmitPod}
+                disabled={!podImageUri || isUpdatingStatus}>
+                {isUpdatingStatus ? (
+                  <ActivityIndicator color={theme.primaryText} size="small" />
+                ) : (
+                  <ThemedText style={{ color: theme.primaryText }}>Submit</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -899,6 +1050,62 @@ const styles = StyleSheet.create({
   swipeButton: {
     height: 56,
     borderRadius: 28,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: '90%',
+  },
+  modalTitle: {
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  podUploadBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 80,
+    marginBottom: 12,
+  },
+  podUploadLabel: {
+    marginTop: 8,
+    fontSize: 14,
+  },
+  podInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  podNotesInput: {
+    minHeight: 60,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

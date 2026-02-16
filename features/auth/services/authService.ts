@@ -103,6 +103,14 @@ class AuthService {
 
       // Store token securely (only if role is allowed)
       await tokenStorage.setAccessToken(token);
+
+      // Store refresh token if returned (for 401 refresh/retry)
+      const refreshToken = (loginData as any).refreshToken ?? (loginData as any).RefreshToken;
+      const refreshTokenExpiration = (loginData as any).refreshTokenExpiration ?? (loginData as any).RefreshTokenExpiration;
+      if (refreshToken) {
+        await tokenStorage.setRefreshToken(refreshToken);
+        console.log('[AuthService] ✓ Refresh token stored');
+      }
       
       // Verify token was stored (for debugging)
       const storedToken = await tokenStorage.getAccessToken();
@@ -119,9 +127,6 @@ class AuthService {
         expiration: expiration || new Date().toISOString(),
         user: user || (loginData as any).user,
       };
-
-      // Note: API doesn't provide refresh token, so we only store access token
-      // If refresh token becomes available, store it here
 
       return normalizedResponse;
     } catch (error) {
