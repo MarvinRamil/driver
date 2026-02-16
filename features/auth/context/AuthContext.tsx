@@ -8,8 +8,8 @@ import React, {
 import { authService } from "../services/authService";
 // Import chatSignalRService directly to avoid circular dependency
 import { chatSignalRService } from "@/features/support/services/chatSignalRService";
-import { biometricStorage } from "@/shared/services/biometricStorage";
 import { storeTempCredentialsForPrompt } from "@/shared/services/biometricPromptStorage";
+import { biometricStorage } from "@/shared/services/biometricStorage";
 import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidation";
 import type { User } from "../types";
 
@@ -170,14 +170,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Set user from login response (only if role is allowed)
       setUser(loginResponse.user);
       
-      // Store temporary credentials for biometric prompt (non-blocking)
-      // These will be used to enable biometric login if user accepts the prompt
+      // Store temporary credentials for biometric prompt ONLY if biometric is not already enabled
+      // (If user already has biometric enabled, they don't need the "Enable biometric?" prompt)
       try {
-        await storeTempCredentialsForPrompt(email, password);
-        console.log('[AuthContext] Temporary credentials stored for biometric prompt');
+        const hasBiometricEnabled = await biometricStorage.hasStoredCredentials();
+        if (!hasBiometricEnabled) {
+          await storeTempCredentialsForPrompt(email, password);
+          console.log('[AuthContext] Temporary credentials stored for biometric prompt');
+        } else {
+          console.log('[AuthContext] Biometric already enabled, skipping temp credentials storage');
+        }
       } catch (tempError) {
         // Don't fail login if temp storage fails
-        console.warn('[AuthContext] Failed to store temp credentials:', tempError);
+        console.warn('[AuthContext] Failed to check/store temp credentials:', tempError);
       }
       
       // Initialize SignalR connection after successful login
@@ -225,14 +230,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Clear tokens and user data
       await authService.logout();
       
-      // Clear biometric credentials on logout
-      try {
-        await biometricStorage.clearCredentials();
-        console.log('[AuthContext] Biometric credentials cleared on logout');
-      } catch (biometricError) {
-        // Don't fail logout if biometric clear fails
-        console.warn('[AuthContext] Failed to clear biometric credentials:', biometricError);
-      }
+      // Do NOT clear biometric credentials on logout - keep them so the user can
+      // log back in with biometric without re-entering password. They can disable
+      // from Profile > Security Settings if they want to remove stored credentials.
       
       setUser(null);
     } catch (err) {

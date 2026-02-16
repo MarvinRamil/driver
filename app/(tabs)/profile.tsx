@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -36,11 +36,30 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '+1 555-0123');
   const [licenseExpiry, setLicenseExpiry] = useState('12/2025');
-  const [vehicle, setVehicle] = useState('Toyota Prius (Yellow)');
-  const [licensePlate, setLicensePlate] = useState('BEE-425');
+  const [vehicleModel, setVehicleModel] = useState(user?.vehicleModel || '');
+  const [vehicleColor, setVehicleColor] = useState(user?.vehicleColor || '');
+  const [vehiclePlate, setVehiclePlate] = useState(user?.vehiclePlate || '');
+  const [vehicleType, setVehicleType] = useState(user?.vehicleType || '');
+  const [isEditingVehicle, setIsEditingVehicle] = useState(false);
+  const [showVehicleTypePicker, setShowVehicleTypePicker] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+
+  const VEHICLE_TYPES = [
+    'Motorcycle', 'Sedan', 'SUV', 'Van', 'Pickup',
+    'L300', 'FB2000', 'Aluminum2000', 'Truck3000', 'Truck7000', 'Truck12000',
+  ];
+
+  // Sync vehicle fields when user data changes
+  React.useEffect(() => {
+    if (user) {
+      setVehicleModel(user.vehicleModel || '');
+      setVehicleColor(user.vehicleColor || '');
+      setVehiclePlate(user.vehiclePlate || '');
+      setVehicleType(user.vehicleType || '');
+    }
+  }, [user?.vehicleModel, user?.vehicleColor, user?.vehiclePlate, user?.vehicleType]);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometric');
@@ -97,7 +116,12 @@ export default function ProfileScreen() {
       await updateProfile({
         fullName,
         email,
+        vehicleType: vehicleType || undefined,
+        vehicleModel: vehicleModel || undefined,
+        vehicleColor: vehicleColor || undefined,
+        vehiclePlate: vehiclePlate || undefined,
       });
+      setIsEditingVehicle(false);
       Alert.alert('Success', 'Profile updated successfully');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update profile');
@@ -399,37 +423,120 @@ export default function ProfileScreen() {
 
         {/* Vehicle Information Section */}
         <View style={styles.section}>
-          <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
-            Vehicle Information
-          </ThemedText>
+          <View style={styles.sectionHeader}>
+            <ThemedText type="subtitle" style={[styles.sectionTitleInline, { color: theme.text }]}>
+              Vehicle Information
+            </ThemedText>
+            <TouchableOpacity
+              onPress={() => setIsEditingVehicle(!isEditingVehicle)}
+              style={styles.editSectionButton}>
+              <Ionicons
+                name={isEditingVehicle ? 'close-outline' : 'create-outline'}
+                size={20}
+                color={theme.primary}
+              />
+            </TouchableOpacity>
+          </View>
           <View style={[styles.detailsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            {/* Vehicle */}
+            {/* Vehicle Type */}
+            <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
+              <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
+                <Ionicons name="car-outline" size={20} color={theme.text} />
+              </View>
+              <View style={styles.detailContent}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Vehicle Type
+                </ThemedText>
+                {isEditingVehicle ? (
+                  <TouchableOpacity
+                    style={[styles.pickerButton, { borderColor: theme.border, backgroundColor: theme.background }]}
+                    onPress={() => setShowVehicleTypePicker(true)}>
+                    <ThemedText style={[styles.pickerButtonText, { color: vehicleType ? theme.text : theme.textSecondary }]}>
+                      {vehicleType || 'Select vehicle type'}
+                    </ThemedText>
+                    <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehicleType || 'Not set'}
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+
+            {/* Vehicle Model */}
             <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
               <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
                 <Ionicons name="cube-outline" size={20} color={theme.text} />
               </View>
               <View style={styles.detailContent}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                  Vehicle
+                  Vehicle Model
                 </ThemedText>
-                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
-                  {vehicle}
+                {isEditingVehicle ? (
+                  <TextInput
+                    style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={vehicleModel}
+                    onChangeText={setVehicleModel}
+                    placeholder="e.g. Toyota Prius"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehicleModel || 'Not set'}
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+
+            {/* Vehicle Color */}
+            <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
+              <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
+                <Ionicons name="color-palette-outline" size={20} color={theme.text} />
+              </View>
+              <View style={styles.detailContent}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Vehicle Color
                 </ThemedText>
+                {isEditingVehicle ? (
+                  <TextInput
+                    style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={vehicleColor}
+                    onChangeText={setVehicleColor}
+                    placeholder="e.g. Yellow"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehicleColor || 'Not set'}
+                  </ThemedText>
+                )}
               </View>
             </View>
 
             {/* License Plate */}
             <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
               <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
-                <Ionicons name="location-outline" size={20} color={theme.text} />
+                <Ionicons name="pricetag-outline" size={20} color={theme.text} />
               </View>
               <View style={styles.detailContent}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
                   License Plate
                 </ThemedText>
-                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
-                  {licensePlate}
-                </ThemedText>
+                {isEditingVehicle ? (
+                  <TextInput
+                    style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={vehiclePlate}
+                    onChangeText={setVehiclePlate}
+                    placeholder="e.g. ABC-1234"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
+                  />
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehiclePlate || 'Not set'}
+                  </ThemedText>
+                )}
               </View>
             </View>
 
@@ -449,6 +556,52 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* Vehicle Type Picker Modal */}
+        <Modal
+          visible={showVehicleTypePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowVehicleTypePicker(false)}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowVehicleTypePicker(false)}>
+            <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
+                  Select Vehicle Type
+                </ThemedText>
+                <TouchableOpacity onPress={() => setShowVehicleTypePicker(false)}>
+                  <Ionicons name="close" size={24} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={VEHICLE_TYPES}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalOption,
+                      { borderBottomColor: theme.border },
+                      vehicleType === item && { backgroundColor: theme.primary + '15' },
+                    ]}
+                    onPress={() => {
+                      setVehicleType(item);
+                      setShowVehicleTypePicker(false);
+                    }}>
+                    <ThemedText style={[styles.modalOptionText, { color: theme.text }]}>
+                      {item}
+                    </ThemedText>
+                    {vehicleType === item && (
+                      <Ionicons name="checkmark" size={20} color={theme.primary} />
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Edit Profile Button */}
         <TouchableOpacity
@@ -747,5 +900,76 @@ const styles = StyleSheet.create({
   },
   supportSubtitle: {
     fontSize: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  sectionTitleInline: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  editSectionButton: {
+    padding: 4,
+  },
+  editInput: {
+    fontSize: 16,
+    fontWeight: '500',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '60%',
+    paddingBottom: 34,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

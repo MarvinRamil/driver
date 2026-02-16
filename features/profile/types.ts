@@ -8,12 +8,20 @@
 export interface UpdateProfileRequest {
   /** Full name */
   fullName?: string;
-  /** Email address */
+  /** Email address (not updatable via auth/profile on backend) */
   email?: string;
   /** Phone number */
   phoneNumber?: string;
   /** Address */
   address?: string;
+  /** Vehicle plate (driver) */
+  vehiclePlate?: string;
+  /** Vehicle model (driver) */
+  vehicleModel?: string;
+  /** Vehicle color (driver) */
+  vehicleColor?: string;
+  /** Vehicle type (driver) */
+  vehicleType?: string;
 }
 
 /**
