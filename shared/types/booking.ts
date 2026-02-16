@@ -13,11 +13,16 @@ export type BookingStatus =
   | "Broadcasting"
   | "Confirmed"
   | "Dispatched"
+  | "DriverAssigned"
   | "OnTheWayToPickup"
+  | "PickedUp"
+  | "InTransit"
   | "InProgress"
   | "Delivered"
   | "Completed"
   | "Cancelled";
+
+export type StopStatus = "Pending" | "Arrived" | "Completed";
 
 /**
  * Assignment status enumeration
@@ -73,6 +78,9 @@ export interface DeliveryStop {
   sequence: number;
   address: string;
   type: 'Pickup' | 'Dropoff';
+  status?: StopStatus;
+  arrivedAt?: Date | null;
+  completedAt?: Date | null;
   latitude?: number | null;
   longitude?: number | null;
   contactName?: string | null;

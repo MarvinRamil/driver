@@ -240,6 +240,9 @@ class BookingService {
             sequence: s.sequence ?? 0,
             address: s.address ?? '',
             type: (s.type === 'Dropoff' ? 'Dropoff' : 'Pickup') as 'Pickup' | 'Dropoff',
+            status: ['Pending', 'Arrived', 'Completed'].includes(s.status) ? s.status : 'Pending',
+            arrivedAt: this.parseDate(s.arrivedAt),
+            completedAt: this.parseDate(s.completedAt),
             latitude: s.latitude != null ? Number(s.latitude) : null,
             longitude: s.longitude != null ? Number(s.longitude) : null,
             contactName: s.contactName ?? null,
@@ -295,6 +298,36 @@ class BookingService {
     if (!response.success) {
       throw new Error(response.message ?? 'Failed to upload proof of delivery');
     }
+  }
+
+  /**
+   * Mark a stop as arrived.
+   */
+  async arriveStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/arrive`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to mark stop as arrived');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Complete an arrived stop.
+   */
+  async completeStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/complete`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to complete stop');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
   }
 
   /**
