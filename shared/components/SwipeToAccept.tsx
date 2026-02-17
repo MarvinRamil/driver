@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { View, Animated, PanResponder, StyleSheet, type ViewStyle } from 'react-native';
 import { ThemedText } from './themed-text';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +33,8 @@ export function SwipeToAccept({
 
   const reset = () => {
     hasTriggered.current = false;
+    translateX.setOffset(0);
+    translateX.flattenOffset();
     Animated.spring(translateX, {
       toValue: 0,
       useNativeDriver: true,
@@ -44,14 +46,30 @@ export function SwipeToAccept({
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => !disabled && !hasTriggered.current,
-      onMoveShouldSetPanResponder: () => !disabled && !hasTriggered.current,
+      onStartShouldSetPanResponderCapture: () => !disabled && !hasTriggered.current,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        if (disabled || hasTriggered.current) return false;
+        // Respond to any horizontal movement (prefer horizontal over vertical)
+        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        if (disabled || hasTriggered.current) return false;
+        // Capture horizontal swipes early
+        return Math.abs(gestureState.dx) > 2;
+      },
+      onPanResponderTerminationRequest: () => false, // Don't allow parent to take over
       onPanResponderGrant: () => {
         if (hasTriggered.current) return;
-        translateX.setOffset(0);
+        // Stop any ongoing animation and capture current position
+        translateX.stopAnimation((value) => {
+          translateX.setOffset(value);
+          translateX.setValue(0);
+        });
       },
       onPanResponderMove: (_, gestureState) => {
         if (hasTriggered.current) return;
         const max = maxDrag.current;
+        // Clamp the drag distance between 0 and max
         const dx = Math.max(0, Math.min(gestureState.dx, max));
         translateX.setValue(dx);
       },
@@ -59,6 +77,11 @@ export function SwipeToAccept({
         if (hasTriggered.current) return;
         const max = maxDrag.current;
         const threshold = max * THRESHOLD_RATIO;
+        
+        // Get final position after flattening offset
+        translateX.flattenOffset();
+        
+        // Check if we've reached the threshold using gestureState.dx
         if (gestureState.dx >= threshold && max > 0) {
           hasTriggered.current = true;
           Animated.timing(translateX, {
@@ -66,12 +89,18 @@ export function SwipeToAccept({
             duration: 150,
             useNativeDriver: true,
           }).start(() => {
-            Promise.resolve(onAccept()).finally(() => reset());
+            Promise.resolve(onAccept()).finally(() => {
+              reset();
+            });
           });
         } else {
           reset();
         }
+      },
+      onPanResponderTerminate: () => {
+        if (hasTriggered.current) return;
         translateX.flattenOffset();
+        reset();
       },
     })
   ).current;
@@ -88,7 +117,7 @@ export function SwipeToAccept({
         trackWidth.current = w;
         maxDrag.current = Math.max(0, w - THUMB_SIZE - 8);
       }}>
-      <ThemedText style={[styles.label, { color: textColor }]} numberOfLines={1}>
+      <ThemedText style={[styles.label, { color: textColor }]} numberOfLines={1} pointerEvents="none">
         {label}
       </ThemedText>
       <Animated.View
@@ -102,9 +131,11 @@ export function SwipeToAccept({
             transform: [{ translateX }],
           },
         ]}
-        {...panResponder.panHandlers}>
+        pointerEvents="none">
         <Ionicons name="chevron-forward" size={24} color="#333" />
       </Animated.View>
+      {/* Invisible overlay to capture touches on the entire track */}
+      <View style={styles.touchOverlay} {...panResponder.panHandlers} />
     </View>
   );
 }
@@ -137,5 +168,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
+    zIndex: 10,
+  },
+  touchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 5,
   },
 });
