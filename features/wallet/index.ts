@@ -8,6 +8,7 @@ export { useWalletTransactions } from './hooks/useWalletTransactions';
 export { useTopUp } from './hooks/useTopUp';
 export { useCashEligibility } from './hooks/useCashEligibility';
 export { useTopUpHistory } from './hooks/useTopUpHistory';
+export { useWalletTopUpEvents } from './hooks/useWalletTopUpEvents';
 
 // Export services
 export { walletService } from './services/walletService';

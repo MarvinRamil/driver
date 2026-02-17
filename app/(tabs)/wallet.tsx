@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Modal, TextInput, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useWallet } from '@/features/wallet';
 import { useWalletTransactions } from '@/features/wallet';
-import { useCashEligibility, useTopUp, useTopUpHistory, walletService } from '@/features/wallet';
+import { useCashEligibility, useTopUp, useTopUpHistory, useWalletTopUpEvents, walletService } from '@/features/wallet';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { useAuth } from '@/features/auth';
@@ -24,6 +24,15 @@ export default function WalletScreen() {
   const [topUpAmount, setTopUpAmount] = useState('200');
   const [transferAmount, setTransferAmount] = useState('100');
   const [transferFrom, setTransferFrom] = useState<'Personal' | 'TopUp'>('Personal');
+
+  const onRefreshAll = useCallback(async () => {
+    await Promise.all([refresh(), refreshEligibility(), refreshTopUps()]);
+  }, [refresh, refreshEligibility, refreshTopUps]);
+
+  // Real-time: when webhook marks top-up as paid, backend pushes TopUpPaid via SignalR; refresh wallet and history
+  useWalletTopUpEvents(user?.id, () => {
+    onRefreshAll();
+  });
 
   const canAccessWallet = user?.role === 'Driver';
 
@@ -48,10 +57,6 @@ export default function WalletScreen() {
   const pendingBalance = wallet?.pendingPayout ?? 0;
   const canAcceptCashJobs = wallet?.canAcceptCashJobs ?? true;
   const effectiveCashEligibility = cashEligibility?.canAcceptCashJobs ?? canAcceptCashJobs;
-
-  const onRefreshAll = async () => {
-    await Promise.all([refresh(), refreshEligibility(), refreshTopUps()]);
-  };
 
   const topUpStatusText = useMemo(() => {
     if (!cashEligibility) return '';
