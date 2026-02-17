@@ -53,6 +53,8 @@ export interface RequestConfig {
   requiresAuth?: boolean;
   /** Request timeout in milliseconds */
   timeout?: number;
+  /** Internal: true when this is a retry after token refresh (do not refresh again) */
+  isRetry?: boolean;
 }
 
 /**

@@ -74,6 +74,13 @@ export default function MoreScreen() {
       show: true,
     },
     {
+      id: 'giveaways',
+      title: 'Giveaways',
+      icon: 'gift-outline',
+      route: '/(tabs)/giveaways',
+      show: true,
+    },
+    {
       id: 'history',
       title: 'Trip History',
       icon: 'time-outline',

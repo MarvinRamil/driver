@@ -124,6 +124,60 @@ class ApiClient {
   }
 
   /**
+   * Try to refresh the access token using the stored refresh token.
+   * Used on 401 to recover session without logging out.
+   * @returns true if new tokens were saved and the original request can be retried; false otherwise
+   */
+  private async tryRefreshToken(): Promise<boolean> {
+    const refreshToken = await tokenStorage.getRefreshToken();
+    if (!refreshToken) {
+      if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
+        console.log('[API] 401: No refresh token, cannot refresh');
+      }
+      return false;
+    }
+    const url = `${this.config.baseURL}/api/auth/refresh`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const text = await res.text();
+      const data = (() => {
+        try {
+          return text ? JSON.parse(text) : {};
+        } catch {
+          return {};
+        }
+      })();
+      if (!res.ok) {
+        if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
+          console.log('[API] Refresh failed:', res.status, data);
+        }
+        await tokenStorage.clearAllTokens();
+        return false;
+      }
+      const newToken = data.token ?? data.Token;
+      const newRefresh = data.refreshToken ?? data.RefreshToken;
+      if (newToken) {
+        await tokenStorage.setAccessToken(newToken);
+        if (newRefresh) await tokenStorage.setRefreshToken(newRefresh);
+        if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
+          console.log('[API] Token refreshed, retrying request');
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
+        console.log('[API] Refresh request error:', e);
+      }
+      return false;
+    }
+  }
+
+  /**
    * Handle API errors and transform them into ApiError format
    * @param error - Error object
    * @param status - HTTP status code
@@ -317,6 +371,14 @@ class ApiClient {
         }
       } else if (endpoint.includes('/bookings') || endpoint.includes('/dispatches') || endpoint.includes('/locations/')) {
         console.log(`[API] ✓ Success: ${method} ${fullUrl} - Status: ${response.status}`);
+      }
+
+      // Handle 401: try refresh token once and retry (driver app session recovery)
+      if (response.status === 401 && config.requiresAuth !== false && !config.isRetry && !endpoint.includes('auth/refresh')) {
+        const refreshed = await this.tryRefreshToken();
+        if (refreshed) {
+          return this.request<T>(method, endpoint, { ...config, isRetry: true });
+        }
       }
 
       // Handle error responses

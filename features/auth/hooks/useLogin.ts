@@ -21,6 +21,8 @@ interface UseLoginReturn {
   handleLogin: () => Promise<void>;
   /** Clear error */
   clearError: () => void;
+  /** Set error message (e.g. for biometric login errors) */
+  setError: (message: string | null) => void;
 }
 
 /**
@@ -122,6 +124,7 @@ export function useLogin(): UseLoginReturn {
     setPassword,
     handleLogin,
     clearError,
+    setError,
   };
 }
 

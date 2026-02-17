@@ -21,7 +21,7 @@ export function BiometricPromptManager() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [tempCredentials, setTempCredentials] = useState<TempCredentials | null>(null);
 
-  // Check for temporary credentials and show prompt if needed
+  // Check for temporary credentials and show prompt if needed (only when user does NOT already have biometric enabled)
   useEffect(() => {
     const loadTempCredentials = async () => {
       if (!isAuthenticated || !user) {
@@ -29,20 +29,20 @@ export function BiometricPromptManager() {
       }
 
       try {
-        // Check if we should show prompt
-        await checkPrompt();
+        // Resolve whether to show prompt from this call (avoids race: state may not be updated yet)
+        const shouldShow = await checkPrompt();
+        if (!shouldShow) {
+          await clearTempCredentialsForPrompt();
+          return;
+        }
 
-        // Get temporary credentials if they exist
         const credentials = await getTempCredentialsForPrompt();
         if (credentials) {
-          // Check if credentials are recent (within 5 minutes)
           const isRecent = Date.now() - credentials.timestamp < 5 * 60 * 1000;
-          
-          if (isRecent && shouldShowPrompt) {
+          if (isRecent) {
             setTempCredentials(credentials);
             setShowPrompt(true);
           } else {
-            // Clean up old credentials
             await clearTempCredentialsForPrompt();
           }
         }
@@ -52,7 +52,7 @@ export function BiometricPromptManager() {
     };
 
     loadTempCredentials();
-  }, [isAuthenticated, user, shouldShowPrompt, checkPrompt]);
+  }, [isAuthenticated, user, checkPrompt]);
 
   const handleDismiss = async () => {
     setShowPrompt(false);

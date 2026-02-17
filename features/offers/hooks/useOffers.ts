@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/features/auth';
 import { offerService } from '../services/offerService';
 import type { DriverOffer } from '../types';
 
@@ -32,6 +33,9 @@ function isRateLimitError(err: unknown): boolean {
 
 export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
   const { limit = 3, pollingInterval = 5000 } = options;
+  const { user } = useAuth();
+  const isAuthenticated = user !== null;
+
   const [offers, setOffers] = useState<DriverOffer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +68,12 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
           setError(null);
         }, RATE_LIMIT_BACKOFF_MS);
       } else {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch offers';
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err != null && 'message' in err && typeof (err as { message: unknown }).message === 'string'
+              ? (err as { message: string }).message
+              : 'Failed to fetch offers';
         setError(errorMessage);
       }
       console.error('[useOffers] Error fetching offers:', err);
@@ -133,7 +142,18 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
   const isInBackoff = rateLimitBackoffUntil !== null && Date.now() < rateLimitBackoffUntil;
   const effectiveInterval = isInBackoff ? RATE_LIMIT_POLL_MS : pollingInterval;
 
+  // Only fetch and poll when user is logged in; avoid 401 from calling API before auth is ready
   useEffect(() => {
+    if (!isAuthenticated) {
+      setOffers([]);
+      setError(null);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+
     // Initial fetch (show loading)
     fetchOffers(false);
 
@@ -158,7 +178,7 @@ export function useOffers(options: UseOffersOptions = {}): UseOffersReturn {
         pollingIntervalRef.current = null;
       }
     };
-  }, [fetchOffers, effectiveInterval]);
+  }, [isAuthenticated, fetchOffers, effectiveInterval]);
 
   return {
     offers,

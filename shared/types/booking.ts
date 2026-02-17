@@ -13,11 +13,16 @@ export type BookingStatus =
   | "Broadcasting"
   | "Confirmed"
   | "Dispatched"
+  | "DriverAssigned"
   | "OnTheWayToPickup"
+  | "PickedUp"
+  | "InTransit"
   | "InProgress"
   | "Delivered"
   | "Completed"
   | "Cancelled";
+
+export type StopStatus = "Pending" | "Arrived" | "Completed";
 
 /**
  * Assignment status enumeration
@@ -63,6 +68,24 @@ export interface LocationCoordinates {
   latitude: number;
   /** Longitude */
   longitude: number;
+}
+
+/**
+ * Delivery stop (pickup or dropoff) with id for POD upload
+ */
+export interface DeliveryStop {
+  id: string;
+  sequence: number;
+  address: string;
+  type: 'Pickup' | 'Dropoff';
+  status?: StopStatus;
+  arrivedAt?: Date | null;
+  completedAt?: Date | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  notes?: string | null;
 }
 
 /**
@@ -126,6 +149,8 @@ export interface Booking {
   driverId?: string;
   /** Optional driver location coordinates (legacy) */
   driverLocation?: LocationCoordinates;
+  /** Stops (pickup/dropoff) with ids for POD upload */
+  stops?: DeliveryStop[];
 }
 
 /**
