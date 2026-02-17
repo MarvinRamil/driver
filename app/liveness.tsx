@@ -20,7 +20,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 /**
  * Face liveness verification during driver onboarding.
  * Shown after email verification, before submitting documents.
- * Captures multiple images over 20 seconds and averages the results.
+ * Captures a single photo and sends it to backend for processing.
  */
 export default function LivenessScreen() {
   const insets = useSafeAreaInsets();
@@ -34,13 +34,10 @@ export default function LivenessScreen() {
   const [cameraStarted, setCameraStarted] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number>(20);
-  const [capturedCount, setCapturedCount] = useState(0);
-  const [passedCount, setPassedCount] = useState(0);
-  const [totalCaptures, setTotalCaptures] = useState(5);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const cameraRef = useRef<CameraView>(null);
-  const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [directions, setDirections] = useState<string[]>([]);
 
   const startSession = useCallback(async () => {
     setError(null);
@@ -48,7 +45,8 @@ export default function LivenessScreen() {
     try {
       const result = await livenessService.createSession();
       setSessionId(result.sessionId);
-      // Use the first direction for all captures (we'll use same direction for all images)
+      setDirections(result.directions);
+      // Use the first direction for the capture
       setDirection(result.directions[0] || "front");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start verification");
@@ -61,134 +59,86 @@ export default function LivenessScreen() {
     startSession();
   }, [startSession]);
 
-  const handleCapture = useCallback(async (imageUri: string): Promise<boolean> => {
-    if (!sessionId || !direction) return false;
-
-    try {
-      const data = await livenessService.submitImage(
-        sessionId,
-        direction,
-        imageUri
-      );
-
-      // If backend says all passed (shouldn't happen with single direction, but handle it)
-      if (data.allPassed) {
-        await refreshUser?.();
-        router.replace("/driver-complete");
-        return true;
-      }
-
-      // Return whether this image passed
-      return data.directionPassed;
-    } catch (e) {
-      console.error("Error submitting image:", e);
-      return false;
-    }
-  }, [sessionId, direction, refreshUser, router]);
-
-  const evaluateResults = useCallback(async (finalPassedCount: number, finalCapturedCount: number) => {
-    setIsCapturing(false);
-    
-    // Need at least 3 out of 5 passes (60% success rate)
-    const successThreshold = Math.ceil(totalCaptures * 0.6);
-    
-    if (finalPassedCount >= successThreshold) {
-      // Success - mark as verified
-      await refreshUser?.();
-      router.replace("/driver-complete");
-    } else {
-      // Failed - show error
-      setError(
-        `Verification failed. Only ${finalPassedCount} out of ${finalCapturedCount} images passed. Please try again.`
-      );
-    }
-  }, [totalCaptures, refreshUser, router]);
-
-  // Start 20-second timer and auto-capture when camera starts
+  // Auto-capture countdown when camera starts
   useEffect(() => {
-    if (!cameraStarted || !sessionId || !direction || !permission?.granted) {
+    if (!cameraStarted || !sessionId || !direction || isCapturing || !permission?.granted) {
+      setCountdown(null);
       return;
     }
 
-    // Reset state
-    setTimeRemaining(20);
-    setCapturedCount(0);
-    setPassedCount(0);
-    setError(null);
-    setIsCapturing(true);
+    setCountdown(3);
 
-    let passedCountLocal = 0;
-    let capturedCountLocal = 0;
-
-    // Start countdown timer
-    timerIntervalRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          if (timerIntervalRef.current) {
-            clearInterval(timerIntervalRef.current);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          if (prev === 1) {
+            handleCapture();
           }
-          return 0;
+          return null;
         }
         return prev - 1;
       });
     }, 1000);
 
-    // Capture images at intervals: 0s, 4s, 8s, 12s, 16s (5 images total)
-    const captureTimes = [0, 4, 8, 12, 16];
-    const capturePromises: Promise<void>[] = [];
+    return () => clearInterval(timer);
+  }, [cameraStarted, sessionId, direction, isCapturing, permission?.granted]);
 
-    captureTimes.forEach((delaySeconds, index) => {
-      const promise = new Promise<void>((resolve) => {
-        setTimeout(async () => {
-          if (!cameraRef.current || !sessionId || !direction) {
-            resolve();
-            return;
-          }
+  const handleCapture = useCallback(async () => {
+    if (!sessionId || !direction || !cameraRef.current || isCapturing) return;
 
-          try {
-            const photo = await cameraRef.current.takePictureAsync({
-              quality: 0.8,
-              base64: false,
-            });
+    if (!permission?.granted) {
+      Alert.alert(
+        "Camera required",
+        "Please allow camera access to complete face verification."
+      );
+      return;
+    }
 
-            if (photo?.uri) {
-              capturedCountLocal++;
-              setCapturedCount(capturedCountLocal);
-              
-              const passed = await handleCapture(photo.uri);
-              if (passed) {
-                passedCountLocal++;
-                setPassedCount(passedCountLocal);
-              }
-            }
-          } catch (e) {
-            console.error("Error capturing photo:", e);
-          }
-          
-          resolve();
-        }, delaySeconds * 1000);
+    setIsCapturing(true);
+    setError(null);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+        base64: false,
       });
-      
-      capturePromises.push(promise);
-    });
 
-    // Wait for all captures to complete, then evaluate
-    Promise.all(capturePromises).then(() => {
-      // Wait a bit more to ensure all state updates are processed
-      setTimeout(() => {
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-        }
-        evaluateResults(passedCountLocal, capturedCountLocal);
-      }, 500);
-    });
-
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
+      if (!photo?.uri) {
+        throw new Error("Failed to capture photo");
       }
-    };
-  }, [cameraStarted, sessionId, direction, permission?.granted, handleCapture, evaluateResults]);
+
+      // Submit the same photo for all directions that backend expects
+      // This ensures allPassed becomes true
+      let allPassed = false;
+      for (const dir of directions) {
+        const data = await livenessService.submitImage(
+          sessionId,
+          dir,
+          photo.uri
+        );
+        
+        if (data.allPassed) {
+          allPassed = true;
+          break;
+        }
+      }
+
+      if (allPassed) {
+        // Backend has marked user as verified, refresh user data to get updated livenessVerifiedAt
+        await refreshUser?.();
+        // Small delay to ensure state is updated before redirect
+        setTimeout(() => {
+          router.replace("/driver-complete");
+        }, 500);
+      } else {
+        setError("Verification failed. Please try again.");
+        setIsCapturing(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+      setIsCapturing(false);
+    }
+  }, [sessionId, direction, directions, isCapturing, permission?.granted, refreshUser, router]);
 
   if (loading) {
     return (
@@ -259,7 +209,7 @@ export default function LivenessScreen() {
             Verify your identity
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            We'll capture a few photos over 20 seconds. Keep your face centered and look straight at the camera.
+            We need to confirm you're a real person. Keep your face centered and look straight at the camera.
           </Text>
           <TouchableOpacity
             style={[styles.captureButton, styles.startButton, { backgroundColor: theme.primary }]}
@@ -275,7 +225,7 @@ export default function LivenessScreen() {
     );
   }
 
-  const frameColor = isCapturing ? BeeColors.green[500] : theme.primary;
+  const frameColor = (countdown !== null && countdown > 0) || isCapturing ? BeeColors.green[500] : theme.primary;
 
   return (
     <SafeAreaView style={[styles.container, styles.safeContainer, { backgroundColor: theme.background }]} edges={["top", "bottom"]}>
@@ -289,20 +239,8 @@ export default function LivenessScreen() {
             Verify your identity
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Keep your face centered and look straight at the camera. Photos will be captured automatically.
+            Keep your face centered and look straight at the camera. Photo will be captured automatically.
           </Text>
-
-          {isCapturing && (
-            <View style={[styles.directionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={[styles.directionLabel, { color: theme.text }]}>
-                {timeRemaining} seconds remaining
-              </Text>
-              <Text style={[styles.stepText, { color: theme.textSecondary }]}>
-                Captured {capturedCount} of {totalCaptures} photos
-                {passedCount > 0 && ` • ${passedCount} passed`}
-              </Text>
-            </View>
-          )}
 
           {error && (
             <View style={styles.errorContainer}>
@@ -321,17 +259,17 @@ export default function LivenessScreen() {
               <View style={styles.overlay}>
                 <View style={styles.guideFrameContainer}>
                   <View style={[styles.guideFrame, { borderColor: frameColor }]} />
-                  {isCapturing && timeRemaining > 0 && (
+                  {countdown !== null && countdown > 0 && (
                     <View style={styles.countdownContainer}>
-                      <Text style={[styles.countdownText, { color: BeeColors.green[500] }]}>{timeRemaining}</Text>
+                      <Text style={[styles.countdownText, { color: BeeColors.green[500] }]}>{countdown}</Text>
                     </View>
                   )}
                 </View>
                 <Text style={styles.guideText}>
-                  {isCapturing
-                    ? timeRemaining > 0
-                      ? "Keep your face centered..."
-                      : "Processing results..."
+                  {countdown !== null && countdown > 0
+                    ? "Get ready..."
+                    : isCapturing
+                    ? "Processing..."
                     : "Position your face within the frame"}
                 </Text>
               </View>
@@ -342,19 +280,13 @@ export default function LivenessScreen() {
             <View style={[styles.captureButton, { backgroundColor: theme.primary }]}>
               <ActivityIndicator color={theme.primaryText} />
               <Text style={[styles.captureButtonText, { color: theme.primaryText, marginLeft: 10 }]}>
-                Capturing photos... ({capturedCount}/{totalCaptures})
-              </Text>
-            </View>
-          ) : !cameraStarted ? (
-            <View style={styles.infoContainer}>
-              <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                Tap "Start verification" to begin
+                Processing...
               </Text>
             </View>
           ) : (
             <View style={styles.infoContainer}>
               <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                Verification complete
+                Photo will be captured automatically
               </Text>
             </View>
           )}
