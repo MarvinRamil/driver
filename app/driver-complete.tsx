@@ -55,20 +55,67 @@ export default function DriverCompleteScreen() {
   }
 
   const pickImage = async (type: "license" | "selfie") => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Allow photo library access to upload images.");
-      return;
+    // For selfie, show option to use camera or gallery
+    if (type === "selfie") {
+      Alert.alert(
+        "Take Selfie",
+        "Choose an option",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Take Photo",
+            onPress: async () => {
+              const { status } = await ImagePicker.requestCameraPermissionsAsync();
+              if (status !== "granted") {
+                Alert.alert("Permission needed", "Allow camera access to take a photo.");
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.8,
+              });
+              if (result.canceled || !result.assets?.[0]?.uri) return;
+              setSelfieUri(result.assets[0].uri);
+              setError(null);
+            },
+          },
+          {
+            text: "Choose from Library",
+            onPress: async () => {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== "granted") {
+                Alert.alert("Permission needed", "Allow photo library access to upload images.");
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.8,
+              });
+              if (result.canceled || !result.assets?.[0]?.uri) return;
+              setSelfieUri(result.assets[0].uri);
+              setError(null);
+            },
+          },
+        ]
+      );
+    } else {
+      // For license, use gallery only (or add camera option here too if needed)
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Allow photo library access to upload images.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      setLicenseUri(result.assets[0].uri);
+      setError(null);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    if (type === "license") setLicenseUri(result.assets[0].uri);
-    else setSelfieUri(result.assets[0].uri);
-    setError(null);
   };
 
   const onSubmit = async () => {
@@ -124,11 +171,14 @@ export default function DriverCompleteScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
       >
         <View style={styles.content}>
           <Text style={[styles.title, { color: theme.text }]}>Complete registration</Text>
@@ -226,7 +276,7 @@ export default function DriverCompleteScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: 24 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 100 },
   content: { paddingTop: 24 },
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   title: { fontSize: 24, fontWeight: "700", marginBottom: 8 },
