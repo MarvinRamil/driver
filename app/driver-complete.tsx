@@ -126,6 +126,11 @@ export default function DriverCompleteScreen() {
     setLoading(true);
     setError(null);
     try {
+      console.log("[DriverComplete] Starting registration submission...");
+      console.log("[DriverComplete] Email:", email);
+      console.log("[DriverComplete] License URI:", licenseUri);
+      console.log("[DriverComplete] Selfie URI:", selfieUri);
+      
       const formData = new FormData();
       formData.append("email", email);
       formData.append("licenseImage", {
@@ -142,27 +147,61 @@ export default function DriverCompleteScreen() {
       if (licenseExpiryDate.trim()) formData.append("licenseExpiryDate", licenseExpiryDate.trim());
       if (address.trim()) formData.append("address", address.trim());
 
-      const response = await apiClient.post<{ success: boolean; message?: string }>(
+      console.log("[DriverComplete] Submitting form data...");
+      // File uploads can take longer - use 120 seconds timeout
+      const response = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
         "api/auth/register/driver/complete",
         {
           body: formData,
           requiresAuth: false,
           headers: {},
+          timeout: 120000, // 120 seconds for file uploads
         }
       );
 
+      console.log("[DriverComplete] API Response:", {
+        success: response.success,
+        message: response.message,
+        statusCode: response.statusCode,
+        data: response.data,
+      });
+
       if (!response.success) {
-        throw new Error(response.message || "Submission failed");
+        const errorMsg = response.message || "Submission failed";
+        console.error("[DriverComplete] Submission failed:", errorMsg);
+        throw new Error(errorMsg);
       }
 
+      console.log("[DriverComplete] Submission successful, refreshing user...");
       await refreshUser?.();
+      
       Alert.alert(
         "Registration complete",
         "Your documents have been submitted. You can now use the app.",
         [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      console.error("[DriverComplete] Error during submission:", e);
+      
+      let errorMessage = "Something went wrong";
+      if (e && typeof e === 'object' && 'message' in e) {
+        errorMessage = String(e.message);
+      } else if (e instanceof Error) {
+        errorMessage = e.message;
+      } else if (typeof e === 'string') {
+        errorMessage = e;
+      }
+      
+      // Log full error details
+      console.error("[DriverComplete] Full error details:", {
+        error: e,
+        errorType: typeof e,
+        errorMessage,
+        errorString: String(e),
+        errorJson: JSON.stringify(e, null, 2),
+      });
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

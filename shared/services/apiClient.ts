@@ -290,7 +290,9 @@ class ApiClient {
       }
 
       // Implement timeout using AbortController
-      const timeoutMs = Number(process.env.EXPO_PUBLIC_API_TIMEOUT) || 30000; // Default 30 seconds
+      // Use request-specific timeout if provided, otherwise use env var or default
+      const defaultTimeout = Number(process.env.EXPO_PUBLIC_API_TIMEOUT) || 30000; // Default 30 seconds
+      const timeoutMs = config.timeout ?? defaultTimeout;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       
@@ -345,6 +347,9 @@ class ApiClient {
       // Always log errors for debugging
       if (!response.ok) {
         console.error(`[API] ✗ Error: ${method} ${fullUrl} - Status: ${response.status} ${response.statusText}`);
+        console.error(`[API] Error Response Body:`, responseText);
+        console.error(`[API] Parsed Error Data:`, data);
+        
         // For 401 errors, log authentication details
         if (response.status === 401) {
           console.error(`[API] 401 Unauthorized - Authentication failed`);
@@ -357,6 +362,21 @@ class ApiClient {
           }
           console.error(`[API]   Response:`, responseText);
         }
+        
+        // Log registration/authentication errors with more detail
+        if (endpoint.includes('/register') || endpoint.includes('/auth/')) {
+          console.error(`[API] Registration/Auth Error Details:`, {
+            status: response.status,
+            statusText: response.statusText,
+            url: fullUrl,
+            endpoint,
+            responseText,
+            parsedData: data,
+            errorMessage: data.message || data.error,
+            hasAuthHeader: !!headers.Authorization,
+          });
+        }
+        
         // Log location API errors with more detail
         if (endpoint.includes('/locations/')) {
           console.error(`[API] Location API Error Details:`, {
