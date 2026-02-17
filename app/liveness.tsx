@@ -36,16 +36,15 @@ export default function LivenessScreen() {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const cameraRef = useRef<CameraView>(null);
-
-  const [directions, setDirections] = useState<string[]>([]);
+  const hasCapturedRef = useRef<boolean>(false);
 
   const startSession = useCallback(async () => {
     setError(null);
     setLoading(true);
+    hasCapturedRef.current = false; // Reset capture flag
     try {
       const result = await livenessService.createSession();
       setSessionId(result.sessionId);
-      setDirections(result.directions);
       // Use the first direction for the capture
       setDirection(result.directions[0] || "front");
     } catch (e) {
@@ -61,18 +60,22 @@ export default function LivenessScreen() {
 
   // Auto-capture countdown when camera starts
   useEffect(() => {
-    if (!cameraStarted || !sessionId || !direction || isCapturing || !permission?.granted) {
+    if (!cameraStarted || !sessionId || !direction || isCapturing || !permission?.granted || hasCapturedRef.current) {
       setCountdown(null);
       return;
     }
 
     setCountdown(3);
+    let mounted = true;
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
+        if (!mounted) return null;
         if (prev === null || prev <= 1) {
           clearInterval(timer);
-          if (prev === 1) {
+          if (prev === 1 && !hasCapturedRef.current && mounted) {
+            hasCapturedRef.current = true;
+            // Call handleCapture directly without adding it to dependencies
             handleCapture();
           }
           return null;
@@ -81,11 +84,16 @@ export default function LivenessScreen() {
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraStarted, sessionId, direction, isCapturing, permission?.granted]);
 
   const handleCapture = useCallback(async () => {
-    if (!sessionId || !direction || !cameraRef.current || isCapturing) return;
+    // Prevent multiple captures
+    if (!sessionId || !direction || !cameraRef.current || isCapturing || hasCapturedRef.current) return;
 
     if (!permission?.granted) {
       Alert.alert(
@@ -97,6 +105,8 @@ export default function LivenessScreen() {
 
     setIsCapturing(true);
     setError(null);
+    hasCapturedRef.current = true;
+    
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
@@ -107,38 +117,43 @@ export default function LivenessScreen() {
         throw new Error("Failed to capture photo");
       }
 
-      // Submit the same photo for all directions that backend expects
-      // This ensures allPassed becomes true
-      let allPassed = false;
-      for (const dir of directions) {
-        const data = await livenessService.submitImage(
-          sessionId,
-          dir,
-          photo.uri
-        );
-        
-        if (data.allPassed) {
-          allPassed = true;
-          break;
-        }
-      }
+      // Submit only ONE photo with the first direction
+      console.log("[Liveness] Submitting single photo with direction:", direction);
+      const data = await livenessService.submitImage(
+        sessionId,
+        direction,
+        photo.uri
+      );
 
-      if (allPassed) {
+      console.log("[Liveness] Response:", { allPassed: data.allPassed, directionPassed: data.directionPassed });
+
+      if (data.allPassed) {
         // Backend has marked user as verified, refresh user data to get updated livenessVerifiedAt
         await refreshUser?.();
         // Small delay to ensure state is updated before redirect
         setTimeout(() => {
           router.replace("/driver-complete");
         }, 500);
+        return;
+      }
+
+      if (data.directionPassed) {
+        // Direction passed - refresh user to check if backend marked as verified
+        await refreshUser?.();
+        setTimeout(() => {
+          router.replace("/driver-complete");
+        }, 500);
       } else {
-        setError("Verification failed. Please try again.");
+        setError(data.error || "Verification failed. Please try again.");
         setIsCapturing(false);
+        hasCapturedRef.current = false; // Allow retry
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setIsCapturing(false);
+      hasCapturedRef.current = false; // Allow retry
     }
-  }, [sessionId, direction, directions, isCapturing, permission?.granted, refreshUser, router]);
+  }, [sessionId, direction, isCapturing, permission?.granted, refreshUser, router]);
 
   if (loading) {
     return (
