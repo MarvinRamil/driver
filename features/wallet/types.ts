@@ -80,7 +80,7 @@ export interface DriverTopUp {
   driverId: string;
   walletId: string;
   amount: number;
-  status: 'Pending' | 'Paid' | 'Failed' | 'Expired';
+  status: 'Pending' | 'Paid' | 'Failed' | 'Expired' | 'Cancelled';
   externalId: string;
   idempotencyKey?: string | null;
   xenditInvoiceId?: string | null;

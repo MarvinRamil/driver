@@ -60,6 +60,29 @@ export default function WalletScreen() {
     return `Threshold: ₱${threshold.toFixed(2)} | Current: ₱${current.toFixed(2)}`;
   }, [cashEligibility]);
 
+  const handleCancelTopUp = (topUpId: string) => {
+    if (!user?.id) return;
+    Alert.alert(
+      'Cancel top-up',
+      'Are you sure you want to cancel this top-up? You will need to create a new one to pay.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await walletService.cancelTopUp(user.id, topUpId);
+              await refreshTopUps();
+            } catch (e) {
+              Alert.alert('Error', e instanceof Error ? e.message : 'Failed to cancel top-up');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleCreateTopUp = async () => {
     const amount = Number(topUpAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -343,8 +366,20 @@ export default function WalletScreen() {
                     ? theme.success
                     : topUp.status === 'Pending'
                     ? theme.primary
+                    : topUp.status === 'Expired' || topUp.status === 'Cancelled'
+                    ? theme.textSecondary
                     : theme.error;
                 const statusBg = `${statusColor}20`;
+                const statusIcon =
+                  topUp.status === 'Paid'
+                    ? 'checkmark-circle-outline'
+                    : topUp.status === 'Pending'
+                    ? 'time-outline'
+                    : topUp.status === 'Expired' || topUp.status === 'Cancelled'
+                    ? 'ban-outline'
+                    : 'close-circle-outline';
+                const isPending = topUp.status === 'Pending';
+                const isPaid = topUp.status === 'Paid';
 
                 return (
                   <View
@@ -352,11 +387,7 @@ export default function WalletScreen() {
                     style={[styles.transactionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                     <View style={styles.transactionLeft}>
                       <View style={[styles.transactionIcon, { backgroundColor: statusBg }]}>
-                        <Ionicons
-                          name={topUp.status === 'Paid' ? 'checkmark-circle-outline' : topUp.status === 'Pending' ? 'time-outline' : 'close-circle-outline'}
-                          size={20}
-                          color={statusColor}
-                        />
+                        <Ionicons name={statusIcon} size={20} color={statusColor} />
                       </View>
                       <View style={styles.transactionInfo}>
                         <ThemedText style={[styles.transactionTitle, { color: theme.text }]}>
@@ -374,12 +405,30 @@ export default function WalletScreen() {
                       <ThemedText style={[styles.transactionAmount, { color: theme.text }]}>
                         ₱{(topUp.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </ThemedText>
-                      {!!topUp.xenditInvoiceUrl && (
+                      {isPending && !!topUp.xenditInvoiceUrl && (
                         <TouchableOpacity
-                          onPress={() => openTopUpLink(topUp.xenditInvoiceUrl)}
+                          onPress={() => openTopUpLink(topUp.xenditInvoiceUrl!)}
                           style={[styles.linkButton, { borderColor: theme.border }]}>
                           <ThemedText style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>
-                            {topUp.status === 'Paid' ? 'Open receipt' : 'Pay now'}
+                            Pay now
+                          </ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      {isPaid && !!topUp.xenditInvoiceUrl && (
+                        <TouchableOpacity
+                          onPress={() => openTopUpLink(topUp.xenditInvoiceUrl!)}
+                          style={[styles.linkButton, { borderColor: theme.border }]}>
+                          <ThemedText style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>
+                            Open receipt
+                          </ThemedText>
+                        </TouchableOpacity>
+                      )}
+                      {isPending && user?.id && (
+                        <TouchableOpacity
+                          onPress={() => handleCancelTopUp(topUp.id)}
+                          style={[styles.linkButton, { borderColor: theme.error }]}>
+                          <ThemedText style={{ color: theme.error, fontSize: 12, fontWeight: '600' }}>
+                            Cancel
                           </ThemedText>
                         </TouchableOpacity>
                       )}

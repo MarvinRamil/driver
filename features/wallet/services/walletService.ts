@@ -246,6 +246,32 @@ class WalletService {
     };
   }
 
+  /**
+   * Cancel a pending top-up.
+   * POST /api/drivers/{driverId}/wallet/topup/{topUpId}/cancel
+   */
+  async cancelTopUp(driverId: string, topUpId: string, reason?: string): Promise<DriverTopUp> {
+    const response = await apiClient.post<DriverTopUp>(
+      `/api/drivers/${driverId}/wallet/topup/${topUpId}/cancel`,
+      {
+        body: reason != null ? { reason } : {},
+        requiresAuth: true,
+      }
+    );
+    const topUp = this.extractPayload<DriverTopUp>(response);
+    if (!topUp) {
+      const payload: any = response.data;
+      throw new Error(payload?.message || response.message || 'Failed to cancel top-up');
+    }
+    return {
+      ...topUp,
+      createdAt: this.parseDate((topUp as any).createdAt) || new Date(),
+      paidAt: this.parseDate((topUp as any).paidAt),
+      expiresAt: this.parseDate((topUp as any).expiresAt),
+      creditedAt: this.parseDate((topUp as any).creditedAt),
+    };
+  }
+
   async getTopUpHistory(driverId: string): Promise<DriverTopUp[]> {
     const response = await apiClient.get<DriverTopUp[]>(
       `/api/drivers/${driverId}/wallet/topup/history`,
