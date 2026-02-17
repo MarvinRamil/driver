@@ -1,10 +1,10 @@
-import React from 'react';
-import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Modal, TextInput, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useWallet } from '@/features/wallet';
 import { useWalletTransactions } from '@/features/wallet';
+import { useCashEligibility, useTopUp, useTopUpHistory, walletService } from '@/features/wallet';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { useAuth } from '@/features/auth';
@@ -13,10 +13,17 @@ import { Ionicons } from '@expo/vector-icons';
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const router = useRouter();
   const { user } = useAuth();
-  const { wallet, isLoading, error, refresh } = useWallet(user?.id || '');
-  const { transactions, isLoading: transactionsLoading } = useWalletTransactions(user?.id || '');
+  const { wallet, isLoading, error, refresh } = useWallet();
+  const { transactions } = useWalletTransactions();
+  const { data: cashEligibility, refresh: refreshEligibility } = useCashEligibility();
+  const { topUps, refresh: refreshTopUps } = useTopUpHistory();
+  const { createTopUp, isSubmitting: topUpSubmitting } = useTopUp();
+  const [topUpModalVisible, setTopUpModalVisible] = useState(false);
+  const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('200');
+  const [transferAmount, setTransferAmount] = useState('100');
+  const [transferFrom, setTransferFrom] = useState<'Personal' | 'TopUp'>('Personal');
 
   const canAccessWallet = user?.role === 'Driver';
 
@@ -36,15 +43,96 @@ export default function WalletScreen() {
     );
   }
 
-  const balance = wallet?.balance ?? 0;
-  const pendingBalance = wallet?.pendingBalance ?? 0;
+  const personalBalance = wallet?.personalBalance ?? 0;
+  const topUpBalance = wallet?.topUpBalance ?? 0;
+  const pendingBalance = wallet?.pendingPayout ?? 0;
+  const canAcceptCashJobs = wallet?.canAcceptCashJobs ?? true;
+  const effectiveCashEligibility = cashEligibility?.canAcceptCashJobs ?? canAcceptCashJobs;
+
+  const onRefreshAll = async () => {
+    await Promise.all([refresh(), refreshEligibility(), refreshTopUps()]);
+  };
+
+  const topUpStatusText = useMemo(() => {
+    if (!cashEligibility) return '';
+    const threshold = Number.isFinite(cashEligibility.blockThreshold) ? cashEligibility.blockThreshold : 0;
+    const current = Number.isFinite(cashEligibility.currentTopUpBalance) ? cashEligibility.currentTopUpBalance : 0;
+    return `Threshold: ₱${threshold.toFixed(2)} | Current: ₱${current.toFixed(2)}`;
+  }, [cashEligibility]);
+
+  const handleCreateTopUp = async () => {
+    const amount = Number(topUpAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid top-up amount.');
+      return;
+    }
+
+    try {
+      const topUp = await createTopUp(amount, undefined, 'Driver top-up wallet funding');
+      setTopUpModalVisible(false);
+      if (topUp.xenditInvoiceUrl) {
+        try {
+          const canOpen = await Linking.canOpenURL(topUp.xenditInvoiceUrl);
+          if (canOpen) {
+            await Linking.openURL(topUp.xenditInvoiceUrl);
+          } else {
+            Alert.alert('Top-up Created', 'Invoice was created, but your device cannot open the payment link.');
+          }
+        } catch {
+          Alert.alert('Top-up Created', 'Invoice created, but failed to open link automatically.');
+        }
+      } else {
+        Alert.alert('Top-up Created', 'Top-up request created. You can open it from Top-up History.');
+      }
+      await onRefreshAll();
+    } catch (err) {
+      Alert.alert('Top-up Failed', err instanceof Error ? err.message : 'Unable to create top-up');
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!user?.id) return;
+    const amount = Number(transferAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid transfer amount.');
+      return;
+    }
+
+    const to = transferFrom === 'Personal' ? 'TopUp' : 'Personal';
+    try {
+      await walletService.transferWalletBalance(user.id, transferFrom, to, amount);
+      setTransferModalVisible(false);
+      Alert.alert('Transfer Complete', `Moved ₱${amount.toFixed(2)} from ${transferFrom} to ${to}.`);
+      await onRefreshAll();
+    } catch (err) {
+      Alert.alert('Transfer Failed', err instanceof Error ? err.message : 'Unable to transfer funds');
+    }
+  };
+
+  const openTopUpLink = async (url?: string | null) => {
+    if (!url) {
+      Alert.alert('No Link', 'This top-up has no invoice URL.');
+      return;
+    }
+
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('Cannot Open Link', 'Your device cannot open this URL.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Open Failed', 'Failed to open invoice URL.');
+    }
+  };
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefreshAll} />}
         showsVerticalScrollIndicator={false}>
         
         {/* Header */}
@@ -78,7 +166,7 @@ export default function WalletScreen() {
             <View style={styles.walletCardContent}>
               <View style={styles.walletCardHeader}>
                 <ThemedText style={[styles.walletCardLabel, { color: '#9ca3af' }]}>
-                  Total Balance
+                  Personal Wallet
                 </ThemedText>
                 <View style={[styles.verifiedBadge, { backgroundColor: '#1f2937' }]}>
                   <Ionicons name="checkmark-circle" size={12} color={theme.primary} />
@@ -89,7 +177,7 @@ export default function WalletScreen() {
               </View>
               
               <ThemedText style={[styles.walletBalance, { color: '#fff' }]}>
-                ₱{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₱{personalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </ThemedText>
               
               <View style={styles.walletCardFooter}>
@@ -109,9 +197,25 @@ export default function WalletScreen() {
           </View>
         </View>
 
+        {/* Top-up wallet status */}
+        <View style={[styles.summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>Top-up Wallet</ThemedText>
+          <ThemedText style={[styles.summaryValue, { color: theme.text }]}>
+            ₱{topUpBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </ThemedText>
+          <ThemedText style={[styles.summarySubtext, { color: effectiveCashEligibility ? theme.success : theme.error }]}>
+            {effectiveCashEligibility ? 'Eligible for cash jobs' : 'Cash jobs temporarily blocked'}
+          </ThemedText>
+          {!!topUpStatusText && (
+            <ThemedText style={[styles.summarySubtext, { color: theme.textSecondary }]}>
+              {topUpStatusText}
+            </ThemedText>
+          )}
+        </View>
+
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => setTopUpModalVisible(true)}>
             <View style={[styles.quickActionIcon, { backgroundColor: theme.primary }]}>
               <Ionicons name="add" size={24} color="#111" />
             </View>
@@ -119,7 +223,7 @@ export default function WalletScreen() {
               Top Up
             </ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => setTransferModalVisible(true)}>
             <View style={[styles.quickActionIcon, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Ionicons name="arrow-up-outline" size={24} color={theme.text} />
             </View>
@@ -173,7 +277,7 @@ export default function WalletScreen() {
           ) : (
             <View style={styles.transactionsList}>
               {transactions.slice(0, 10).map((transaction) => {
-                const isCredit = transaction.type === 'Credit' || transaction.type === 'Earning';
+                const isCredit = ['Earning', 'TopUp', 'WalletTransferIn', 'Refund'].includes(transaction.type);
                 const iconName = isCredit ? 'car-outline' : transaction.type === 'Withdrawal' ? 'arrow-down-outline' : 'card-outline';
                 const iconColor = isCredit ? theme.success : theme.error;
                 const iconBg = isCredit ? theme.success + '20' : theme.error + '20';
@@ -217,7 +321,136 @@ export default function WalletScreen() {
             </View>
           )}
         </View>
+
+        {/* Top-up History */}
+        <View style={styles.activitySection}>
+          <View style={styles.activityHeader}>
+            <ThemedText type="subtitle" style={[styles.activityTitle, { color: theme.text }]}>
+              Top-up History
+            </ThemedText>
+          </View>
+          {topUps.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                No top-up records yet
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.transactionsList}>
+              {topUps.slice(0, 8).map((topUp) => {
+                const statusColor =
+                  topUp.status === 'Paid'
+                    ? theme.success
+                    : topUp.status === 'Pending'
+                    ? theme.primary
+                    : theme.error;
+                const statusBg = `${statusColor}20`;
+
+                return (
+                  <View
+                    key={topUp.id}
+                    style={[styles.transactionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <View style={styles.transactionLeft}>
+                      <View style={[styles.transactionIcon, { backgroundColor: statusBg }]}>
+                        <Ionicons
+                          name={topUp.status === 'Paid' ? 'checkmark-circle-outline' : topUp.status === 'Pending' ? 'time-outline' : 'close-circle-outline'}
+                          size={20}
+                          color={statusColor}
+                        />
+                      </View>
+                      <View style={styles.transactionInfo}>
+                        <ThemedText style={[styles.transactionTitle, { color: theme.text }]}>
+                          Top-up #{topUp.externalId.slice(-8)}
+                        </ThemedText>
+                        <ThemedText style={[styles.transactionDate, { color: theme.textSecondary }]}>
+                          {new Date(topUp.createdAt).toLocaleString()}
+                        </ThemedText>
+                        <ThemedText style={[styles.transactionDate, { color: statusColor }]}>
+                          {topUp.status}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                      <ThemedText style={[styles.transactionAmount, { color: theme.text }]}>
+                        ₱{(topUp.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </ThemedText>
+                      {!!topUp.xenditInvoiceUrl && (
+                        <TouchableOpacity
+                          onPress={() => openTopUpLink(topUp.xenditInvoiceUrl)}
+                          style={[styles.linkButton, { borderColor: theme.border }]}>
+                          <ThemedText style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>
+                            {topUp.status === 'Paid' ? 'Open receipt' : 'Pay now'}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
       </ScrollView>
+
+      <Modal visible={topUpModalVisible} animationType="slide" transparent onRequestClose={() => setTopUpModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <ThemedText type="subtitle" style={{ color: theme.text }}>Create Top-up</ThemedText>
+            <TextInput
+              value={topUpAmount}
+              onChangeText={setTopUpAmount}
+              keyboardType="numeric"
+              style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+              placeholder="Amount"
+              placeholderTextColor={theme.textMuted}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setTopUpModalVisible(false)} style={[styles.modalBtn, { borderColor: theme.border }]}>
+                <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCreateTopUp} style={[styles.modalBtn, { backgroundColor: theme.primary }]}>
+                <ThemedText style={{ color: '#111' }}>{topUpSubmitting ? 'Creating...' : 'Create'}</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={transferModalVisible} animationType="slide" transparent onRequestClose={() => setTransferModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <ThemedText type="subtitle" style={{ color: theme.text }}>Transfer Wallet Balance</ThemedText>
+            <View style={styles.transferToggle}>
+              <TouchableOpacity
+                onPress={() => setTransferFrom('Personal')}
+                style={[styles.pill, { backgroundColor: transferFrom === 'Personal' ? theme.primary : theme.surface, borderColor: theme.border }]}>
+                <ThemedText style={{ color: transferFrom === 'Personal' ? '#111' : theme.text }}>From Personal</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setTransferFrom('TopUp')}
+                style={[styles.pill, { backgroundColor: transferFrom === 'TopUp' ? theme.primary : theme.surface, borderColor: theme.border }]}>
+                <ThemedText style={{ color: transferFrom === 'TopUp' ? '#111' : theme.text }}>From Top-up</ThemedText>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              value={transferAmount}
+              onChangeText={setTransferAmount}
+              keyboardType="numeric"
+              style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+              placeholder="Amount"
+              placeholderTextColor={theme.textMuted}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setTransferModalVisible(false)} style={[styles.modalBtn, { borderColor: theme.border }]}>
+                <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleTransfer} style={[styles.modalBtn, { backgroundColor: theme.primary }]}>
+                <ThemedText style={{ color: '#111' }}>Transfer</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -402,6 +635,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 16,
   },
+  summaryCard: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 6,
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  summaryValue: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  summarySubtext: {
+    fontSize: 12,
+  },
   activityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -488,5 +740,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  transferToggle: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  linkButton: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
 });
