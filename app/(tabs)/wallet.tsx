@@ -41,6 +41,14 @@ export default function WalletScreen() {
     onRefreshAll();
   });
 
+  // Must be called unconditionally (before any early return) to satisfy Rules of Hooks
+  const topUpStatusText = useMemo(() => {
+    if (!cashEligibility) return '';
+    const threshold = Number.isFinite(cashEligibility.blockThreshold) ? cashEligibility.blockThreshold : 0;
+    const current = Number.isFinite(cashEligibility.currentTopUpBalance) ? cashEligibility.currentTopUpBalance : 0;
+    return `Threshold: ₱${threshold.toFixed(2)} | Current: ₱${current.toFixed(2)}`;
+  }, [cashEligibility]);
+
   const canAccessWallet = user?.role === 'Driver';
 
   if (!canAccessWallet) {
@@ -64,13 +72,6 @@ export default function WalletScreen() {
   const pendingBalance = wallet?.pendingPayout ?? 0;
   const canAcceptCashJobs = wallet?.canAcceptCashJobs ?? true;
   const effectiveCashEligibility = cashEligibility?.canAcceptCashJobs ?? canAcceptCashJobs;
-
-  const topUpStatusText = useMemo(() => {
-    if (!cashEligibility) return '';
-    const threshold = Number.isFinite(cashEligibility.blockThreshold) ? cashEligibility.blockThreshold : 0;
-    const current = Number.isFinite(cashEligibility.currentTopUpBalance) ? cashEligibility.currentTopUpBalance : 0;
-    return `Threshold: ₱${threshold.toFixed(2)} | Current: ₱${current.toFixed(2)}`;
-  }, [cashEligibility]);
 
   const handleCancelTopUp = (topUpId: string) => {
     if (!user?.id) return;
