@@ -24,7 +24,13 @@ export function LoginAdkitPopup() {
 
   useEffect(() => {
     const load = async () => {
-      if (isLoading || !user) return;
+      // Only show campaigns/giveaways if user is fully onboarded
+      if (isLoading || !user || !user.isOnboarded) {
+        setVisible(false);
+        setItems([]);
+        return;
+      }
+      
       const currentKey = `${user.id}:${Date.now()}`;
       if (sessionKey && sessionKey.startsWith(`${user.id}:`)) return;
 
@@ -34,6 +40,7 @@ export function LoginAdkitPopup() {
         setVisible(active.length > 0);
       } catch {
         setItems([]);
+        setVisible(false);
       } finally {
         setSessionKey(currentKey);
       }

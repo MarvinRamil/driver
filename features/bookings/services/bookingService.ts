@@ -240,7 +240,28 @@ class BookingService {
             sequence: s.sequence ?? 0,
             address: s.address ?? '',
             type: (s.type === 'Dropoff' ? 'Dropoff' : 'Pickup') as 'Pickup' | 'Dropoff',
-            status: ['Pending', 'Arrived', 'Completed'].includes(s.status) ? s.status : 'Pending',
+            status: (() => {
+              const apiStatus = s.status;
+              if (!apiStatus) return 'Pending';
+              
+              // Normalize to handle case variations
+              const normalizedStatus = String(apiStatus).trim();
+              
+              // Map API statuses to our StopStatus type
+              if (normalizedStatus === 'InTransit' || normalizedStatus === 'OnTheWay' || normalizedStatus.toLowerCase() === 'intransit' || normalizedStatus.toLowerCase() === 'ontheway') {
+                return 'OnTheWay';
+              }
+              if (normalizedStatus === 'Arrived' || normalizedStatus === 'ArrivedAt' || normalizedStatus.toLowerCase() === 'arrived') {
+                return 'Arrived';
+              }
+              if (normalizedStatus === 'Completed' || normalizedStatus === 'Delivered' || normalizedStatus.toLowerCase() === 'completed' || normalizedStatus.toLowerCase() === 'delivered') {
+                return 'Completed';
+              }
+              if (normalizedStatus === 'Pending' || normalizedStatus.toLowerCase() === 'pending') {
+                return 'Pending';
+              }
+              return 'Pending';
+            })(),
             arrivedAt: this.parseDate(s.arrivedAt),
             completedAt: this.parseDate(s.completedAt),
             latitude: s.latitude != null ? Number(s.latitude) : null,
@@ -304,12 +325,38 @@ class BookingService {
    * Mark a stop as arrived.
    */
   async arriveStop(bookingId: string, stopId: string): Promise<Booking> {
+    console.log(`[BookingService] Marking stop ${stopId} as arrived for booking ${bookingId}`);
+    
     const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/arrive`, {
       requiresAuth: true,
     });
 
+    console.log(`[BookingService] Arrive response:`, {
+      success: response.success,
+      statusCode: response.statusCode,
+      message: response.message,
+      hasData: !!response.data,
+    });
+
     if (!response.success || !response.data) {
-      throw new Error(response.message ?? 'Failed to mark stop as arrived');
+      const errorMsg = response.message ?? `Failed to mark stop as arrived. Status: ${response.statusCode ?? 'unknown'}`;
+      console.error(`[BookingService] Arrive failed:`, errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Mark a stop as in transit (driver heading to stop location).
+   */
+  async onTheWayStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/in-transit`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to mark stop as in transit');
     }
 
     return this.mapApiBookingToBooking(response.data);
@@ -470,7 +517,7 @@ class BookingService {
 
         if (!response.success || !response.data) {
           console.warn('[BookingService] No bookings found or request failed');
-          return [];
+        return [];
         }
 
         // Handle API response structure

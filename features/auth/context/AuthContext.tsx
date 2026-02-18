@@ -11,6 +11,7 @@ import { chatSignalRService } from "@/features/support/services/chatSignalRServi
 import { storeTempCredentialsForPrompt } from "@/shared/services/biometricPromptStorage";
 import { biometricStorage } from "@/shared/services/biometricStorage";
 import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidation";
+import { locationTrackingService } from "@/features/driver/services/locationTrackingService";
 import type { User } from "../types";
 
 /**
@@ -220,6 +221,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null);
 
     try {
+      // Stop location tracking before logout
+      try {
+        locationTrackingService.stopTracking();
+      } catch (locationErr) {
+        console.warn("Failed to stop location tracking:", locationErr);
+      }
+
       // Stop SignalR connection before logout
       try {
         await chatSignalRService.stop();

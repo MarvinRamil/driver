@@ -7,6 +7,7 @@ import type {
   WalletBucket,
   WalletTransaction,
   WalletTransactionType,
+  WithdrawalRequest,
 } from '../types';
 
 /**
@@ -91,7 +92,7 @@ class WalletService {
   ): Promise<WalletTransaction[]> {
     try {
       const params: Record<string, string | number> = {};
-      
+
       if (startDate) {
         params.startDate = startDate.toISOString();
       }
@@ -113,7 +114,7 @@ class WalletService {
       if (!transactions || !Array.isArray(transactions)) {
         return [];
       }
-      
+
       return transactions.map((tx) => ({
         ...tx,
         amount: tx.amount ?? 0,
@@ -142,7 +143,7 @@ class WalletService {
   ): Promise<DriverEarnings> {
     try {
       const params: Record<string, string> = {};
-      
+
       if (startDate) {
         params.startDate = startDate.toISOString();
       }
@@ -209,6 +210,22 @@ class WalletService {
         `Failed to request withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  async getWithdrawalRequests(driverId: string): Promise<WithdrawalRequest[]> {
+    const response = await apiClient.get<WithdrawalRequest[]>(
+      `/api/drivers/${driverId}/withdrawals`,
+      { requiresAuth: true }
+    );
+    const requests = this.extractPayload<WithdrawalRequest[]>(response);
+    if (!requests || !Array.isArray(requests)) return [];
+
+    return requests.map((r) => ({
+      ...r,
+      amount: r.amount ?? 0,
+      requestedAt: this.parseDate((r as any).requestedAt) || new Date(),
+      processedAt: this.parseDate((r as any).processedAt),
+    }));
   }
 
   async createTopUp(

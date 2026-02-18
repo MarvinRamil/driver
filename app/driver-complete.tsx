@@ -55,20 +55,67 @@ export default function DriverCompleteScreen() {
   }
 
   const pickImage = async (type: "license" | "selfie") => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Allow photo library access to upload images.");
-      return;
+    // For selfie, show option to use camera or gallery
+    if (type === "selfie") {
+      Alert.alert(
+        "Take Selfie",
+        "Choose an option",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Take Photo",
+            onPress: async () => {
+              const { status } = await ImagePicker.requestCameraPermissionsAsync();
+              if (status !== "granted") {
+                Alert.alert("Permission needed", "Allow camera access to take a photo.");
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.8,
+              });
+              if (result.canceled || !result.assets?.[0]?.uri) return;
+              setSelfieUri(result.assets[0].uri);
+              setError(null);
+            },
+          },
+          {
+            text: "Choose from Library",
+            onPress: async () => {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== "granted") {
+                Alert.alert("Permission needed", "Allow photo library access to upload images.");
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.8,
+              });
+              if (result.canceled || !result.assets?.[0]?.uri) return;
+              setSelfieUri(result.assets[0].uri);
+              setError(null);
+            },
+          },
+        ]
+      );
+    } else {
+      // For license, use gallery only (or add camera option here too if needed)
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Allow photo library access to upload images.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      setLicenseUri(result.assets[0].uri);
+      setError(null);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    if (type === "license") setLicenseUri(result.assets[0].uri);
-    else setSelfieUri(result.assets[0].uri);
-    setError(null);
   };
 
   const onSubmit = async () => {
@@ -79,6 +126,11 @@ export default function DriverCompleteScreen() {
     setLoading(true);
     setError(null);
     try {
+      console.log("[DriverComplete] Starting registration submission...");
+      console.log("[DriverComplete] Email:", email);
+      console.log("[DriverComplete] License URI:", licenseUri);
+      console.log("[DriverComplete] Selfie URI:", selfieUri);
+      
       const formData = new FormData();
       formData.append("email", email);
       formData.append("licenseImage", {
@@ -95,27 +147,61 @@ export default function DriverCompleteScreen() {
       if (licenseExpiryDate.trim()) formData.append("licenseExpiryDate", licenseExpiryDate.trim());
       if (address.trim()) formData.append("address", address.trim());
 
-      const response = await apiClient.post<{ success: boolean; message?: string }>(
+      console.log("[DriverComplete] Submitting form data...");
+      // File uploads can take longer - use 120 seconds timeout
+      const response = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
         "api/auth/register/driver/complete",
         {
           body: formData,
           requiresAuth: false,
           headers: {},
+          timeout: 120000, // 120 seconds for file uploads
         }
       );
 
+      console.log("[DriverComplete] API Response:", {
+        success: response.success,
+        message: response.message,
+        statusCode: response.statusCode,
+        data: response.data,
+      });
+
       if (!response.success) {
-        throw new Error(response.message || "Submission failed");
+        const errorMsg = response.message || "Submission failed";
+        console.error("[DriverComplete] Submission failed:", errorMsg);
+        throw new Error(errorMsg);
       }
 
+      console.log("[DriverComplete] Submission successful, refreshing user...");
       await refreshUser?.();
+      
       Alert.alert(
         "Registration complete",
         "Your documents have been submitted. You can now use the app.",
         [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      console.error("[DriverComplete] Error during submission:", e);
+      
+      let errorMessage = "Something went wrong";
+      if (e && typeof e === 'object' && 'message' in e) {
+        errorMessage = String(e.message);
+      } else if (e instanceof Error) {
+        errorMessage = e.message;
+      } else if (typeof e === 'string') {
+        errorMessage = e;
+      }
+      
+      // Log full error details
+      console.error("[DriverComplete] Full error details:", {
+        error: e,
+        errorType: typeof e,
+        errorMessage,
+        errorString: String(e),
+        errorJson: JSON.stringify(e, null, 2),
+      });
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -124,11 +210,14 @@ export default function DriverCompleteScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
       >
         <View style={styles.content}>
           <Text style={[styles.title, { color: theme.text }]}>Complete registration</Text>
@@ -226,7 +315,7 @@ export default function DriverCompleteScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: 24 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 100 },
   content: { paddingTop: 24 },
   center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   title: { fontSize: 24, fontWeight: "700", marginBottom: 8 },

@@ -22,7 +22,7 @@ export type BookingStatus =
   | "Completed"
   | "Cancelled";
 
-export type StopStatus = "Pending" | "Arrived" | "Completed";
+export type StopStatus = "Pending" | "OnTheWay" | "Arrived" | "Completed";
 
 /**
  * Assignment status enumeration
