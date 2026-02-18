@@ -1,5 +1,5 @@
 import { BeeColors, BRAND_YELLOW } from "@/constants/theme";
-import { useLogin } from "@/features/auth";
+import { useAuth, useLogin } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { biometricAuth } from "@/shared/services/biometricAuth";
 import { biometricStorage } from "@/shared/services/biometricStorage";
@@ -35,6 +35,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
+  const { login: authLogin } = useAuth();
   const {
     email,
     password,
@@ -44,6 +45,7 @@ export default function LoginScreen() {
     setPassword,
     handleLogin,
     clearError,
+    setError,
   } = useLogin();
 
   // Password visibility state
@@ -56,6 +58,7 @@ export default function LoginScreen() {
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
   const [hasAutoPrompted, setHasAutoPrompted] = useState(false);
   const appState = useRef<AppStateStatus>(AppState.currentState);
+  const autoPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Attempt auto biometric login
@@ -92,7 +95,10 @@ export default function LoginScreen() {
         // Auto-prompt biometric login if ready and user hasn't been prompted
         if (ready && !hasAutoPrompted && !isLoading) {
           // Small delay to ensure UI is ready
-          setTimeout(() => {
+          if (autoPromptTimeoutRef.current) {
+            clearTimeout(autoPromptTimeoutRef.current);
+          }
+          autoPromptTimeoutRef.current = setTimeout(() => {
             attemptAutoBiometricLogin();
           }, 800);
         }
@@ -104,6 +110,13 @@ export default function LoginScreen() {
     };
 
     checkBiometric();
+
+    return () => {
+      if (autoPromptTimeoutRef.current) {
+        clearTimeout(autoPromptTimeoutRef.current);
+        autoPromptTimeoutRef.current = null;
+      }
+    };
   }, [hasAutoPrompted, isLoading]);
 
   /**
@@ -120,7 +133,10 @@ export default function LoginScreen() {
         !hasAutoPrompted
       ) {
         // Small delay to ensure UI is ready
-        setTimeout(() => {
+        if (autoPromptTimeoutRef.current) {
+          clearTimeout(autoPromptTimeoutRef.current);
+        }
+        autoPromptTimeoutRef.current = setTimeout(() => {
           attemptAutoBiometricLogin();
         }, 500);
       }
@@ -128,7 +144,13 @@ export default function LoginScreen() {
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      if (autoPromptTimeoutRef.current) {
+        clearTimeout(autoPromptTimeoutRef.current);
+        autoPromptTimeoutRef.current = null;
+      }
+    };
   }, [isLoading, isBiometricReady, hasAutoPrompted]);
 
   /**
@@ -171,15 +193,17 @@ export default function LoginScreen() {
         return;
       }
 
-      // Use stored credentials to login
-      setEmail(credentials.email);
-      setPassword(credentials.password);
-      
-      // Call login with stored credentials
-      await handleLogin();
-      
+      // Call auth login directly with retrieved credentials (don't use setState + handleLogin:
+      // state updates are async so handleLogin would see empty email/password and show "Email is required")
+      await authLogin(credentials.email, credentials.password);
+
       // Login successful - NavigationGuard will automatically redirect to /(tabs)
-      setHasAutoPrompted(false); // Reset for next session
+      // Keep this true so auto-biometric does not immediately retrigger during route transition.
+      setHasAutoPrompted(true);
+      if (autoPromptTimeoutRef.current) {
+        clearTimeout(autoPromptTimeoutRef.current);
+        autoPromptTimeoutRef.current = null;
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Biometric login failed';
       console.error('[LoginScreen] Biometric login error:', errorMessage);

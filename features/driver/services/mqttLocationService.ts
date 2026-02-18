@@ -70,20 +70,44 @@ class MqttLocationService {
       // Use env variables but DEFAULT to the working configuration (WSS/443)
       // This ensures that if env vars are missing (OTA issue), it still connects
       const host = process.env.EXPO_PUBLIC_MQTT_HOST || 'mqtt.ilocosscript.live';
-      const port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '443', 10);
-      const useSsl = (process.env.EXPO_PUBLIC_MQTT_USE_SSL === 'true' || process.env.EXPO_PUBLIC_MQTT_USE_SSL === '1')
-        || true; // Default to TRUE (SSL)
+      let port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '443', 10);
+      const explicitAppEnv = (process.env.EXPO_PUBLIC_APP_ENV || '').trim().toLowerCase();
+      const inferredAppEnv = __DEV__ ? 'dev' : 'staging';
+      const appEnv = explicitAppEnv || inferredAppEnv;
+      // Respect explicit false ('false'/'0') for WS on port 80 (e.g. behind Cloudflare tunnel); otherwise default to WSS
+      const sslEnv = process.env.EXPO_PUBLIC_MQTT_USE_SSL;
+      const useSsl = (sslEnv === 'false' || sslEnv === '0') ? false : true;
+
+      // WSS must use port 443; port 80 is for plain WS (e.g. behind Cloudflare tunnel)
+      if (useSsl && port === 80) {
+        console.warn('[MQTT] useSsl is true but port was 80; using 443 for WSS (port 80 is for plain WS only)');
+        port = 443;
+      }
+
       const username = process.env.EXPO_PUBLIC_MQTT_USERNAME || 'ilocosscript';
       const password = process.env.EXPO_PUBLIC_MQTT_PASSWORD || 'passwordZxc123AbC';
-      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || 'beelogistics/drivers';
+      const normalizedAppEnv =
+        appEnv === 'production' || appEnv === 'prod'
+          ? 'prod'
+          : appEnv === 'uat'
+            ? 'staging'
+            : appEnv;
+      const defaultTopicPrefix =
+        normalizedAppEnv === 'prod'
+          ? 'beelogistics/drivers'
+          : `${normalizedAppEnv}/beelogistics/drivers`;
+      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || defaultTopicPrefix;
       const path = process.env.EXPO_PUBLIC_MQTT_PATH || '/mqtt';
 
       console.log('[MQTT] Env check:', {
+        appEnv,
+        normalizedAppEnv,
         hasHost: !!host,
         port,
         useSsl,
         path,
         hasUsername: !!username,
+        topicPrefix,
       });
 
       // Validate required fields
@@ -126,6 +150,13 @@ class MqttLocationService {
         topic,
         clientId
       };
+
+      console.log('[MQTT] Resolved environment/topic routing:', {
+        appEnv,
+        normalizedAppEnv,
+        topicPrefix,
+        sampleTopic: `${topicPrefix}/<driverId>/location`,
+      });
 
       console.log('[MQTT] Credentials loaded:', {
         wsUrl: credentials.wsUrl,
@@ -207,8 +238,8 @@ class MqttLocationService {
         password: credentials.password,
         clean: true,
         reconnectPeriod: 0, // Disable auto-reconnect during initial connection
-        connectTimeout: 15000, // Increased timeout
-        keepalive: 45, // Increased keepalive
+        connectTimeout: 30000, // 30s for slow/mobile networks and WSS handshake
+        keepalive: 45,
         protocolVersion: 4, // MQTT 3.1.1
         // WebSocket-specific options for React Native
         // Important for self-signed certs or lax security environments
@@ -216,7 +247,6 @@ class MqttLocationService {
         wsOptions: {
           headers: {},
         },
-        // Additional options for better compatibility
         resubscribe: false,
       };
 
@@ -258,7 +288,8 @@ class MqttLocationService {
           reject(error);
         };
 
-        // Set timeout
+        // Set timeout (match connectTimeout so we don't fire before the client gives up)
+        const timeoutMs = 30000;
         timeout = setTimeout(() => {
           if (resolved) return;
           resolved = true;
@@ -266,7 +297,7 @@ class MqttLocationService {
           this.addDebugEvent(`TIMEOUT after ${elapsed}ms`);
           this.lastError = `Connection timeout after ${elapsed}ms`;
           reject(new Error('MQTT connection timeout'));
-        }, 15000);
+        }, timeoutMs);
 
         // Create client and attach handlers IMMEDIATELY
         this.addDebugEvent('Creating MQTT client...');

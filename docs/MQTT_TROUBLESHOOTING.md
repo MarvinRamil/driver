@@ -32,6 +32,17 @@ This is **not an error** - it's a fallback mechanism. The app will:
 2. If it fails, automatically use HTTP batch API instead
 3. Location updates will still work, just via HTTP instead of MQTT
 
+### MQTT behind Cloudflare Tunnel (WS on port 80)
+
+If your broker is behind a **Cloudflare Tunnel** and you can only connect with **WS** (not WSS) in MQTT Explorer:
+
+- Use **plain WebSocket** on port **80** in the app:
+  ```env
+  EXPO_PUBLIC_MQTT_USE_SSL=false
+  EXPO_PUBLIC_MQTT_PORT=80
+  ```
+- The app will connect with `ws://your-host:80/mqtt`. Restart Expo after changing `.env` (`npx expo start --clear`).
+
 ### To Fix MQTT Connection
 
 1. **Verify Environment Variables**:
@@ -95,14 +106,17 @@ The app logs MQTT connection status. Look for these log messages:
 3. Check variable names have `EXPO_PUBLIC_` prefix
 4. Verify no typos in variable names
 
-### Issue 2: Wrong Port or Protocol
+### Issue 2: Wrong Port or Protocol (Connection Timeout)
 
-**Symptom**: Connection timeout or connection refused
+**Symptom**: `MQTT connection timeout` or connection refused
+
+**Cause**: WSS (secure WebSocket) must use port **443**. If your env has port **80** with `EXPO_PUBLIC_MQTT_USE_SSL=true`, the connection will fail (brokers typically serve WSS on 443 only). The app now auto-corrects port 80 → 443 when SSL is enabled.
 
 **Solutions**:
-1. For WebSocket (WS): Use port `80` with `EXPO_PUBLIC_MQTT_USE_SSL=false`
-2. For Secure WebSocket (WSS): Use port `443` with `EXPO_PUBLIC_MQTT_USE_SSL=true`
-3. Verify MQTT broker is configured for WebSocket on that port
+1. For **Secure WebSocket (WSS)** use port **443**: `EXPO_PUBLIC_MQTT_PORT=443` and `EXPO_PUBLIC_MQTT_USE_SSL=true`
+2. For plain WebSocket (WS) use port **80**: `EXPO_PUBLIC_MQTT_PORT=80` and `EXPO_PUBLIC_MQTT_USE_SSL=false`
+3. After changing `.env`, **restart Expo** and clear cache if needed: `npx expo start --clear`
+4. Verify the MQTT broker is listening for WebSocket on the chosen port
 
 ### Issue 3: Authentication Failed
 

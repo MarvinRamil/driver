@@ -64,6 +64,14 @@ export interface User {
   profilePictureUrl?: string | null;
   /** When the user completed face liveness verification (ISO date string, optional) */
   livenessVerifiedAt?: string | null;
+  /** Vehicle license plate (driver) */
+  vehiclePlate?: string | null;
+  /** Vehicle model (driver) */
+  vehicleModel?: string | null;
+  /** Vehicle color (driver) */
+  vehicleColor?: string | null;
+  /** Vehicle type (driver) - e.g. Motorcycle, Sedan, SUV, Van, Pickup, L300, etc. */
+  vehicleType?: string | null;
 }
 
 /**

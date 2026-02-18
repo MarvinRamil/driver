@@ -234,7 +234,100 @@ class BookingService {
       dropoffLongitude: dropoffLongitude !== null && !isNaN(dropoffLongitude) ? dropoffLongitude : null,
       description: apiBooking.cargoDescription || apiBooking.description,
       weight: weightKg ?? apiBooking.weight,
+      stops: Array.isArray(apiBooking.stops)
+        ? apiBooking.stops.map((s: any) => ({
+            id: s.id ?? '',
+            sequence: s.sequence ?? 0,
+            address: s.address ?? '',
+            type: (s.type === 'Dropoff' ? 'Dropoff' : 'Pickup') as 'Pickup' | 'Dropoff',
+            status: ['Pending', 'Arrived', 'Completed'].includes(s.status) ? s.status : 'Pending',
+            arrivedAt: this.parseDate(s.arrivedAt),
+            completedAt: this.parseDate(s.completedAt),
+            latitude: s.latitude != null ? Number(s.latitude) : null,
+            longitude: s.longitude != null ? Number(s.longitude) : null,
+            contactName: s.contactName ?? null,
+            contactPhone: s.contactPhone ?? null,
+            notes: s.notes ?? null,
+          }))
+        : undefined,
     };
+  }
+
+  /**
+   * Upload proof of delivery (POD) for a stop.
+   * Requires delivery photo (image). Signature is optional.
+   * @param bookingId Booking ID
+   * @param stopId Dropoff stop ID (from booking.stops)
+   * @param imageUri Local URI of delivery photo (required)
+   * @param signatureUri Optional local URI of signature image
+   * @param recipientName Optional recipient name
+   * @param notes Optional notes
+   */
+  async uploadPod(
+    bookingId: string,
+    stopId: string,
+    imageUri: string,
+    signatureUri?: string | null,
+    recipientName?: string | null,
+    notes?: string | null
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('Image', {
+      uri: imageUri,
+      name: 'delivery.jpg',
+      type: 'image/jpeg',
+    } as unknown as Blob);
+    if (signatureUri) {
+      formData.append('Signature', {
+        uri: signatureUri,
+        name: 'signature.jpg',
+        type: 'image/jpeg',
+      } as unknown as Blob);
+    }
+    if (recipientName?.trim()) formData.append('RecipientName', recipientName.trim());
+    if (notes?.trim()) formData.append('Notes', notes.trim());
+
+    const response = await apiClient.post<{ success: boolean; message?: string; data?: unknown }>(
+      `/api/bookings/${bookingId}/stops/${stopId}/pod`,
+      {
+        body: formData,
+        requiresAuth: true,
+      }
+    );
+
+    if (!response.success) {
+      throw new Error(response.message ?? 'Failed to upload proof of delivery');
+    }
+  }
+
+  /**
+   * Mark a stop as arrived.
+   */
+  async arriveStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/arrive`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to mark stop as arrived');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Complete an arrived stop.
+   */
+  async completeStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/complete`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to complete stop');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
   }
 
   /**

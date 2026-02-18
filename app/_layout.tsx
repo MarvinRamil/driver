@@ -21,6 +21,7 @@ import { useColorScheme } from '@/shared/hooks/use-color-scheme';
 import { useNotifications } from '@/shared/hooks/useNotifications';
 import { useOTAUpdates } from '@/shared/hooks/useOTAUpdates';
 import { BiometricPromptManager } from '@/shared/components/BiometricPromptManager';
+import { LoginAdkitPopup } from '@/shared/components/LoginAdkitPopup';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -205,6 +206,7 @@ function RootLayoutNav() {
           <DriverStatusProvider>
             <AppInitializer />
             <BiometricPromptManager />
+            <LoginAdkitPopup />
             <NavigationGuard />
             <View style={styles.root}>
               <Stack>
