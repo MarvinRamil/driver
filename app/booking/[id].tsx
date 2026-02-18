@@ -228,12 +228,47 @@ export default function BookingDetailsScreen() {
     }
   };
 
+  const handleSingleStopPickupComplete = async (pickupStopId: string) => {
+    if (!booking || isUpdatingStatus) return;
+    
+    setIsUpdatingStatus(true);
+    try {
+      // Complete the pickup stop
+      const updated = await bookingService.completeStop(booking.id, pickupStopId);
+      setBooking(updated);
+      
+      // Update booking status to PickedUp (not InTransit for single-stop)
+      const bookingUpdated = await bookingService.updateBookingStatus(booking.id, 'PickedUp');
+      setBooking(bookingUpdated);
+      
+      if (isDriverUnderOperator) {
+        const d = await dispatchService.getDispatchByBookingId(booking.id).catch(() => null);
+        if (d) setDispatch(d);
+      }
+      
+      Alert.alert('Success', 'Cargo marked as picked up. You can now proceed to delivery.', [{ text: 'OK' }]);
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to complete pickup');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const orderedStops = (booking?.stops ?? []).slice().sort((a, b) => a.sequence - b.sequence);
   const dropoffStops = orderedStops.filter((s) => s.type === 'Dropoff');
   const completedDropoffs = dropoffStops.filter((s) => s.status === 'Completed').length;
   const nextSuggestedStop =
     orderedStops.find((s) => s.status === 'Arrived') ??
     orderedStops.find((s) => s.status !== 'Completed');
+
+  // Helper function to detect single-stop bookings (1 pickup + 1 dropoff)
+  const isSingleStopBooking = (stops: typeof orderedStops): boolean => {
+    if (!stops || stops.length === 0) return false;
+    const dropoffCount = stops.filter(s => s.type === 'Dropoff').length;
+    return dropoffCount === 1; // 1 pickup + 1 dropoff = single stop
+  };
+
+  const isSingleStop = isSingleStopBooking(orderedStops);
 
   const pickPodImage = async (type: 'delivery' | 'signature') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -549,14 +584,16 @@ export default function BookingDetailsScreen() {
                   />
                   <View style={styles.timelineContent}>
                     <ThemedText style={[styles.timelineLabel, { color: theme.textSecondary }]}>
-                      {stop.type === 'Pickup' ? 'Pickup' : `Dropoff ${stop.sequence > 0 ? stop.sequence : ''}`.trim()}
+                      {stop.type === 'Pickup' ? 'Pickup' : isSingleStop ? 'Delivery' : `Dropoff ${stop.sequence > 0 ? stop.sequence : ''}`.trim()}
                     </ThemedText>
                     <ThemedText style={[styles.timelineValue, { color: theme.text }]}>
                       {stop.address}
                     </ThemedText>
-                    <ThemedText style={[styles.timelineCoords, { color: theme.textMuted }]}>
-                      Status: {stopStatus}
-                    </ThemedText>
+                    {!isSingleStop && (
+                      <ThemedText style={[styles.timelineCoords, { color: theme.textMuted }]}>
+                        Status: {stopStatus}
+                      </ThemedText>
+                    )}
                     {stop.latitude != null && stop.longitude != null && (
                       <ThemedText style={[styles.timelineCoords, { color: theme.textMuted }]}>
                         {stop.latitude.toFixed(6)}, {stop.longitude.toFixed(6)}
@@ -694,6 +731,133 @@ export default function BookingDetailsScreen() {
             return null;
           }
 
+          // Single-stop booking: simplified flow
+          if (isSingleStop && orderedStops.length > 0) {
+            const pickupStop = orderedStops.find((s) => s.type === 'Pickup');
+            const deliveryStop = orderedStops.find((s) => s.type === 'Dropoff');
+            const pickupStatus = pickupStop?.status ?? 'Pending';
+            const deliveryStatus = deliveryStop?.status ?? 'Pending';
+
+            return (
+              <View style={styles.statusUpdateContainer}>
+                {/* Start Transport - Show when booking is Confirmed */}
+                {isConfirmed && (
+                  <TouchableOpacity
+                    style={[
+                      styles.statusUpdateButton,
+                      { backgroundColor: theme.info, opacity: isUpdatingStatus ? 0.6 : 1 },
+                    ]}
+                    onPress={handleStartTransport}
+                    disabled={isUpdatingStatus}>
+                    <Ionicons name="play-circle-outline" size={24} color={theme.surface} />
+                    <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
+                      {isUpdatingStatus ? 'Updating...' : 'Start Transport'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
+                {/* On The Way to Pickup Indicator */}
+                {isDriverAssigned && pickupStatus === 'Pending' && (
+                  <View style={styles.inTransitIndicator}>
+                    <Ionicons name="navigate-outline" size={20} color={theme.info} />
+                    <ThemedText style={[styles.inTransitText, { color: theme.info }]}>
+                      On The Way to Pickup Location
+                    </ThemedText>
+                  </View>
+                )}
+
+                {/* Mark Arrived at Pickup - Show when DriverAssigned and pickup is Pending */}
+                {isDriverAssigned && pickupStatus === 'Pending' && pickupStop && (
+                  <TouchableOpacity
+                    style={[
+                      styles.statusUpdateButton,
+                      { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 },
+                    ]}
+                    onPress={() => handleArriveStop(pickupStop.id)}
+                    disabled={isUpdatingStatus}>
+                    <Ionicons name="location" size={24} color={theme.surface} />
+                    <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
+                      {isUpdatingStatus ? 'Updating...' : 'Mark Arrived at Pickup'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
+                {/* Mark as Picked Up - Show when pickup is Arrived */}
+                {pickupStatus === 'Arrived' && pickupStop && (
+                  <TouchableOpacity
+                    style={[
+                      styles.statusUpdateButton,
+                      { backgroundColor: theme.success, opacity: isUpdatingStatus ? 0.6 : 1 },
+                    ]}
+                    onPress={() => handleSingleStopPickupComplete(pickupStop.id)}
+                    disabled={isUpdatingStatus}>
+                    <Ionicons name="checkmark-circle" size={24} color={theme.surface} />
+                    <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
+                      {isUpdatingStatus ? 'Updating...' : 'Mark as Picked Up'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
+                {/* In Transit Indicator - Show when PickedUp */}
+                {(isPickedUp || (pickupStatus === 'Completed' && !isDriverAssigned)) && deliveryStatus !== 'Completed' && (
+                  <View style={styles.inTransitIndicator}>
+                    <Ionicons name="car-outline" size={20} color={theme.info} />
+                    <ThemedText style={[styles.inTransitText, { color: theme.info }]}>
+                      Cargo Picked Up - On Transit to Delivery
+                    </ThemedText>
+                  </View>
+                )}
+
+                {/* Mark Arrived at Delivery - Show when PickedUp and delivery is Pending */}
+                {(isPickedUp || (pickupStatus === 'Completed' && !isDriverAssigned)) && deliveryStatus === 'Pending' && deliveryStop && (
+                  <TouchableOpacity
+                    style={[
+                      styles.statusUpdateButton,
+                      { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 },
+                    ]}
+                    onPress={() => handleArriveStop(deliveryStop.id)}
+                    disabled={isUpdatingStatus}>
+                    <Ionicons name="location" size={24} color={theme.surface} />
+                    <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
+                      {isUpdatingStatus ? 'Updating...' : 'Mark Arrived at Delivery'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
+                {/* Complete Delivery - Show when delivery is Arrived */}
+                {deliveryStatus === 'Arrived' && deliveryStop && (
+                  <View style={styles.statusUpdateContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.statusUpdateButton,
+                        { backgroundColor: theme.success, opacity: isUpdatingStatus ? 0.6 : 1 },
+                      ]}
+                      onPress={() => handleCompleteStop(deliveryStop.id)}
+                      disabled={isUpdatingStatus}>
+                      <Ionicons name="checkmark-circle" size={24} color={theme.surface} />
+                      <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
+                        {isUpdatingStatus ? 'Updating...' : 'Complete Delivery'}
+                      </ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.statusUpdateButton,
+                        { backgroundColor: theme.primary, opacity: isUpdatingStatus ? 0.6 : 1 },
+                      ]}
+                      onPress={() => handleOpenPodModal(deliveryStop.id)}
+                      disabled={isUpdatingStatus}>
+                      <Ionicons name="camera-outline" size={24} color={theme.primaryText} />
+                      <ThemedText style={[styles.statusUpdateButtonText, { color: theme.primaryText }]}>
+                        Upload Proof of Delivery
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            );
+          }
+
+          // Multi-stop booking: existing detailed interface
           return (
             <View style={styles.statusUpdateContainer}>
               <View style={[styles.inTransitIndicator, { justifyContent: 'space-between', paddingHorizontal: 16 }]}>
@@ -874,7 +1038,7 @@ export default function BookingDetailsScreen() {
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
           <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
             <ThemedText type="subtitle" style={[styles.modalTitle, { color: theme.text }]}>
-              Proof of delivery {selectedPodStopId ? `(stop ${orderedStops.find((s) => s.id === selectedPodStopId)?.sequence ?? ''})` : ''}
+              Proof of delivery {selectedPodStopId && !isSingleStop ? `(stop ${orderedStops.find((s) => s.id === selectedPodStopId)?.sequence ?? ''})` : ''}
             </ThemedText>
             <ThemedText style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
               Add a photo of the delivered cargo (required). Signature is optional.

@@ -1,27 +1,94 @@
-import React from 'react';
-import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useBookings, type BookingFilter } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
+import { useOffers, getPickupAddress, getDropoffAddress, isMultiStopOffer, getTimeRemaining, filterValidOffers } from '@/features/offers';
+import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
+import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
  * Bookings screen
  * Matches prepared design with timeline view for operator drivers
  */
+type TabType = 'INCOMING' | 'ONGOING' | 'COMPLETED';
+
 export default function BookingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const { bookings, isLoading, error, refresh, filter, setFilter } = useBookings();
+  const { isOnline } = useDriverStatusContext();
+  const { bookings, isLoading: bookingsLoading, error, refresh: refreshBookings, allBookings } = useBookings();
+  const { offers, isLoading: offersLoading, refresh: refreshOffers, acceptOffer, rejectOffer } = useOffers({ limit: 10, pollingInterval: 5000 });
+  
+  const [activeTab, setActiveTab] = useState<TabType>('INCOMING');
+  
+  // Filter valid (non-expired) offers
+  const validOffers = filterValidOffers(offers);
+  const validOffersRef = useRef(validOffers);
+  validOffersRef.current = validOffers;
+
+  // Countdown timer state for offers
+  const [timeRemaining, setTimeRemaining] = useState<Record<string, number>>({});
+  const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
+
+  // Update countdown timers every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = validOffersRef.current;
+      const timers: Record<string, number> = {};
+      current.forEach((offer) => {
+        timers[offer.id] = getTimeRemaining(offer);
+      });
+      setTimeRemaining(timers);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const isSoloDriver = user?.role === 'Driver';
-  const filters: BookingFilter[] = ['All', 'Active', 'Completed'];
+  
+  // Filter bookings based on active tab
+  const filteredBookings = React.useMemo(() => {
+    if (activeTab === 'INCOMING') {
+      return []; // INCOMING shows offers, not bookings
+    }
+    if (activeTab === 'ONGOING') {
+      // Show Confirmed + active/in-progress bookings
+      return allBookings.filter((booking) => {
+        const status = booking.status;
+        return status === 'Confirmed' || 
+               status === 'DriverAssigned' || 
+               status === 'OnTheWayToPickup' ||
+               status === 'PickedUp' ||
+               status === 'InTransit' ||
+               status === 'InProgress';
+      });
+    }
+    if (activeTab === 'COMPLETED') {
+      // Show completed bookings
+      return allBookings.filter((booking) => {
+        const status = booking.status;
+        return status === 'Completed' || status === 'Delivered';
+      });
+    }
+    return [];
+  }, [activeTab, allBookings]);
+
+  const isLoading = activeTab === 'INCOMING' ? offersLoading : bookingsLoading;
+  
+  const refresh = async () => {
+    if (activeTab === 'INCOMING') {
+      await refreshOffers();
+    } else {
+      await refreshBookings();
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -49,65 +116,211 @@ export default function BookingsScreen() {
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <ThemedText type="title" style={[styles.title, { color: theme.text }]}>
-            {isSoloDriver ? 'My Bookings' : 'Assigned Bookings'}
-          </ThemedText>
-          <View style={[styles.badge, { backgroundColor: theme.border }]}>
-            <ThemedText style={[styles.badgeText, { color: theme.textSecondary }]}>Today</ThemedText>
-          </View>
-        </View>
-      </View>
-
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        {filters.map((filterOption) => (
+      {/* Full-Width Header Tabs */}
+      <View style={[styles.headerTabsContainer, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        {(['INCOMING', 'ONGOING', 'COMPLETED'] as TabType[]).map((tab) => (
           <TouchableOpacity
-            key={filterOption}
+            key={tab}
             style={[
-              styles.filterButton,
-              filter === filterOption
-                ? { backgroundColor: theme.primary }
-                : { backgroundColor: theme.surface, borderColor: theme.border },
+              styles.headerTab,
+              activeTab === tab && { borderBottomWidth: 3, borderBottomColor: theme.primary },
             ]}
-            onPress={() => setFilter(filterOption)}>
+            onPress={() => setActiveTab(tab)}>
             <ThemedText
               style={[
-                styles.filterText,
+                styles.headerTabText,
                 {
-                  color: filter === filterOption ? theme.primaryText : theme.text,
+                  color: activeTab === tab ? theme.primary : theme.textSecondary,
+                  fontWeight: activeTab === tab ? '700' : '500',
                 },
               ]}>
-              {filterOption}
+              {tab}
             </ThemedText>
+            {tab === 'INCOMING' && validOffers.length > 0 && (
+              <View style={[styles.tabBadge, { backgroundColor: theme.primary }]}>
+                <ThemedText style={[styles.tabBadgeText, { color: theme.primaryText }]}>
+                  {validOffers.length}
+                </ThemedText>
+              </View>
+            )}
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Bookings List */}
+      {/* Content List */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
         showsVerticalScrollIndicator={false}>
-        {error ? (
+        {activeTab === 'INCOMING' ? (
+          // INCOMING: Show offers
+          !isOnline ? (
+            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+              <Ionicons name="power-outline" size={48} color={theme.textMuted} />
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                Go online to receive offers
+              </ThemedText>
+            </View>
+          ) : validOffers.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+              <Ionicons name="megaphone-outline" size={48} color={theme.textMuted} />
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                No new offers available
+              </ThemedText>
+            </View>
+          ) : (
+            validOffers.map((offer) => {
+              const remaining = timeRemaining[offer.id] ?? getTimeRemaining(offer);
+              const minutes = Math.floor(remaining / 60);
+              const seconds = remaining % 60;
+              const isExpiringSoon = remaining < 60;
+              
+              return (
+                <View
+                  key={offer.id}
+                  style={[styles.offerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <View style={[styles.offerIndicator, { backgroundColor: isExpiringSoon ? theme.error : theme.warning }]} />
+                  <View style={styles.offerHeader}>
+                    <View style={styles.offerHeaderLeft}>
+                      <View style={[styles.statusBadge, { backgroundColor: theme.primary + '20' }]}>
+                        <ThemedText style={[styles.statusBadgeText, { color: theme.primary }]}>
+                          NEW
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={[styles.bookingNumber, { color: theme.textSecondary }]}>
+                        {offer.bookingNumber}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.offerAmountContainer}>
+                      <ThemedText style={[styles.offerAmount, { color: theme.text }]}>
+                        ₱{offer.estimatedFare.toFixed(2)}
+                      </ThemedText>
+                      {offer.distanceKm && (
+                        <ThemedText style={[styles.offerDistance, { color: theme.textSecondary }]}>
+                          {offer.distanceKm.toFixed(1)} km
+                        </ThemedText>
+                      )}
+                    </View>
+                  </View>
+                  
+                  {/* Countdown Timer */}
+                  <View style={[styles.countdownContainer, { backgroundColor: isExpiringSoon ? theme.error + '10' : theme.border + '40' }]}>
+                    <Ionicons 
+                      name="time-outline" 
+                      size={14} 
+                      color={isExpiringSoon ? theme.error : theme.textSecondary} 
+                    />
+                    <ThemedText style={[styles.countdownText, { color: isExpiringSoon ? theme.error : theme.textSecondary }]}>
+                      {remaining > 0 
+                        ? `Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`
+                        : 'Expired'}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.offerTimeline}>
+                    <View style={[styles.timelineLine, { backgroundColor: theme.border }]} />
+                    <View style={styles.timelineItem}>
+                      <View style={[styles.timelineDot, { backgroundColor: theme.surface, borderColor: theme.primary }]} />
+                      <View style={styles.timelineContent}>
+                        <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
+                          Pickup • {new Date(offer.scheduleDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </ThemedText>
+                        <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
+                          {getPickupAddress(offer)}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    {isMultiStopOffer(offer) ? (
+                      <View style={styles.timelineItem}>
+                        <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
+                        <View style={styles.timelineContent}>
+                          <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
+                            Multi-stop ({offer.stops.filter(s => s.type === 'Dropoff').length} stops)
+                          </ThemedText>
+                          <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
+                            {getDropoffAddress(offer)}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.timelineItem}>
+                        <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
+                        <View style={styles.timelineContent}>
+                          <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
+                            Delivery
+                          </ThemedText>
+                          <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
+                            {getDropoffAddress(offer)}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                  
+                  {offer.cargoDescription && (
+                    <View style={styles.cargoInfo}>
+                      <Ionicons name="cube-outline" size={14} color={theme.textSecondary} />
+                      <ThemedText style={[styles.cargoText, { color: theme.textSecondary }]}>
+                        {offer.cargoDescription}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  <View style={[styles.offerActions, { borderTopColor: theme.border }]}>
+                    <SwipeToAccept
+                      label="Swipe to accept"
+                      disabled={acceptingOfferId !== null && acceptingOfferId !== offer.id}
+                      trackColor={theme.border}
+                      thumbColor={theme.primary}
+                      textColor={theme.text}
+                      style={styles.swipeToAcceptFull}
+                      onAccept={async () => {
+                        setAcceptingOfferId(offer.id);
+                        try {
+                          await acceptOffer(offer.id);
+                          Alert.alert('Success', 'Offer accepted! Check your bookings.');
+                        } catch (error) {
+                          setAcceptingOfferId(null);
+                          Alert.alert('Error', error instanceof Error ? error.message : 'Failed to accept offer. Please try again.');
+                        }
+                      }}
+                    />
+                    <TouchableOpacity
+                      style={[styles.rejectButton, { borderColor: theme.border }]}
+                      onPress={async () => {
+                        try {
+                          await rejectOffer(offer.id);
+                        } catch (error) {
+                          Alert.alert('Error', 'Failed to reject offer. Please try again.');
+                        }
+                      }}>
+                      <Ionicons name="close-outline" size={18} color={theme.textSecondary} />
+                      <ThemedText style={[styles.rejectButtonText, { color: theme.textSecondary }]}>
+                        Not for me
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )
+        ) : error ? (
           <View style={[styles.errorContainer, { backgroundColor: theme.surface }]}>
             <Ionicons name="alert-circle" size={24} color={theme.error} />
             <ThemedText style={[styles.errorText, { color: theme.error }]}>
               {error}
             </ThemedText>
           </View>
-        ) : bookings.length === 0 ? (
+        ) : filteredBookings.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
             <Ionicons name="calendar-outline" size={48} color={theme.textMuted} />
             <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-              No bookings found
+              {activeTab === 'ONGOING' ? 'No ongoing bookings' : 'No completed bookings'}
             </ThemedText>
           </View>
         ) : (
-          bookings.map((booking) => {
+          filteredBookings.map((booking) => {
             const statusColors = getStatusBadgeColor(booking.status);
             const isActive = booking.status === 'Active' || booking.status === 'Assigned' || booking.status === 'InProgress';
             const isUpcoming = booking.status === 'Upcoming' || booking.status === 'Confirmed';
@@ -235,44 +448,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
+  headerTabsContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
     paddingTop: 48,
-    paddingBottom: 16,
   },
-  headerTop: {
+  headerTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  filtersContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
     gap: 8,
   },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
+  headerTabText: {
+    fontSize: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,
@@ -422,5 +626,101 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Offer card styles
+  offerCard: {
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  offerIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 6,
+  },
+  offerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  offerHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  offerAmountContainer: {
+    alignItems: 'flex-end',
+  },
+  offerAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  offerDistance: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  countdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  countdownText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  offerTimeline: {
+    gap: 16,
+    marginLeft: 8,
+    position: 'relative',
+    marginBottom: 12,
+  },
+  cargoInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  cargoText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  offerActions: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  swipeToAcceptFull: {
+    width: '100%',
+    minHeight: 48,
+  },
+  rejectButton: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  rejectButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

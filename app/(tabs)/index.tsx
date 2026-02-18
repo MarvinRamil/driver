@@ -8,7 +8,7 @@ import { useBookings } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { useLocationTrackingStatus } from '@/features/driver/hooks/useLocationTracking';
-import { useOffers, getPickupAddress, getDropoffAddress, isMultiStopOffer, getTimeRemaining, filterValidOffers } from '@/features/offers';
+import { useGiveaways } from '@/features/giveaways';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
@@ -30,33 +30,9 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const stats = useDashboardStats();
-  const { bookings, isLoading, refresh, filter, setFilter } = useBookings('Incoming');
   const { isOnline, toggleOnlineStatus, isLoading: statusLoading, isInitialLoading } = useDriverStatusContext();
   const locationStatus = useLocationTrackingStatus();
-  const { offers, isLoading: offersLoading, refresh: refreshOffers, acceptOffer, rejectOffer } = useOffers({ limit: 3, pollingInterval: 5000 });
-  
-  // Filter valid (non-expired) offers
-  const validOffers = filterValidOffers(offers);
-  const validOffersRef = useRef(validOffers);
-  validOffersRef.current = validOffers;
-
-  // Countdown timer state for offers
-  const [timeRemaining, setTimeRemaining] = useState<Record<string, number>>({});
-  // Track which offer is being accepted (disable switch while request in flight)
-  const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null);
-
-  // Update countdown timers every second (single interval, read latest offers from ref to avoid effect re-running every render)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const current = validOffersRef.current;
-      const timers: Record<string, number> = {};
-      current.forEach((offer) => {
-        timers[offer.id] = getTimeRemaining(offer);
-      });
-      setTimeRemaining(timers);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const { giveaways, isLoading: giveawaysLoading, refresh: refreshGiveaways } = useGiveaways();
 
   // Determine if solo driver or operator driver
   // All drivers are independent (solo)
@@ -69,10 +45,10 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading || offersLoading}
+            refreshing={giveawaysLoading}
             onRefresh={async () => {
               try {
-                await Promise.all([refresh(), refreshOffers()]);
+                await refreshGiveaways();
               } catch (error) {
                 console.error('Error refreshing dashboard:', error);
               }
@@ -241,284 +217,62 @@ export default function DashboardScreen() {
             </View>
           )}
 
-          {/* New Offers Section */}
-          {isOnline && (
-            <View style={styles.offersSection}>
+          {/* Latest News Section */}
+          <View style={styles.newsSection}>
+            <View style={styles.sectionHeader}>
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                Latest News
+              </ThemedText>
+            </View>
+            <View style={[styles.newsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Ionicons name="newspaper-outline" size={24} color={theme.primary} />
+              <View style={styles.newsContent}>
+                <ThemedText style={[styles.newsTitle, { color: theme.text }]}>
+                  Welcome to Bee Logistics!
+                </ThemedText>
+                <ThemedText style={[styles.newsText, { color: theme.textSecondary }]}>
+                  Stay updated with the latest features and announcements.
+                </ThemedText>
+              </View>
+            </View>
+          </View>
+
+          {/* Active Giveaways Section */}
+          {giveaways.length > 0 && (
+            <View style={styles.giveawaysSection}>
               <View style={styles.sectionHeader}>
                 <ThemedText type="subtitle" style={styles.sectionTitle}>
-                  New Offers
+                  Active Giveaways
                 </ThemedText>
-                {validOffers.length > 0 && (
-                  <View style={[styles.badge, { backgroundColor: theme.primary + '20' }]}>
-                    <ThemedText style={[styles.badgeText, { color: theme.primary }]}>
-                      {validOffers.length}
-                    </ThemedText>
-                  </View>
-                )}
-              </View>
-
-              {offersLoading && validOffers.length === 0 ? (
-                <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
-                  <ActivityIndicator size="small" color={theme.primary} />
-                  <ThemedText style={[styles.emptyText, { color: theme.textSecondary, marginTop: 8 }]}>
-                    Loading offers...
+                <TouchableOpacity onPress={() => router.push('/(tabs)/giveaways')}>
+                  <ThemedText style={[styles.viewAllText, { color: theme.primary }]}>
+                    View All
                   </ThemedText>
-                </View>
-              ) : validOffers.length === 0 ? (
-                <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
-                  <Ionicons name="megaphone-outline" size={32} color={theme.textSecondary} />
-                  <ThemedText style={[styles.emptyText, { color: theme.textSecondary, marginTop: 8 }]}>
-                    No new offers available
-                  </ThemedText>
-                </View>
-              ) : (
-                validOffers.map((offer) => {
-                  const remaining = timeRemaining[offer.id] ?? getTimeRemaining(offer);
-                  const minutes = Math.floor(remaining / 60);
-                  const seconds = remaining % 60;
-                  const isExpiringSoon = remaining < 60; // Less than 1 minute
-                  
-                  return (
-                    <View
-                      key={offer.id}
-                      style={[styles.offerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                      <View style={[styles.offerIndicator, { backgroundColor: isExpiringSoon ? theme.error : theme.warning }]} />
-                      <View style={styles.offerHeader}>
-                        <View style={styles.offerHeaderLeft}>
-                          <View style={[styles.statusBadge, { backgroundColor: theme.primary + '20' }]}>
-                            <ThemedText style={[styles.statusBadgeText, { color: theme.primary }]}>
-                              NEW
-                            </ThemedText>
-                          </View>
-                          <ThemedText style={[styles.bookingNumber, { color: theme.textSecondary }]}>
-                            {offer.bookingNumber}
-                          </ThemedText>
-                        </View>
-                        <View style={styles.offerAmountContainer}>
-                          <ThemedText style={[styles.offerAmount, { color: theme.text }]}>
-                            ₱{offer.estimatedFare.toFixed(2)}
-                          </ThemedText>
-                          {offer.distanceKm && (
-                            <ThemedText style={[styles.offerDistance, { color: theme.textSecondary }]}>
-                              {offer.distanceKm.toFixed(1)} km
-                            </ThemedText>
-                          )}
-                        </View>
-                      </View>
-                      
-                      {/* Countdown Timer */}
-                      <View style={[styles.countdownContainer, { backgroundColor: isExpiringSoon ? theme.error + '10' : theme.border + '40' }]}>
-                        <Ionicons 
-                          name="time-outline" 
-                          size={14} 
-                          color={isExpiringSoon ? theme.error : theme.textSecondary} 
-                        />
-                        <ThemedText style={[styles.countdownText, { color: isExpiringSoon ? theme.error : theme.textSecondary }]}>
-                          {remaining > 0 
-                            ? `Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`
-                            : 'Expired'}
-                        </ThemedText>
-                      </View>
-
-                      <View style={styles.offerTimeline}>
-                        <View style={[styles.timelineLine, { backgroundColor: theme.border }]} />
-                        <View style={styles.timelineItem}>
-                          <View style={[styles.timelineDot, { backgroundColor: theme.surface, borderColor: theme.primary }]} />
-                          <View style={styles.timelineContent}>
-                            <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
-                              Pickup • {new Date(offer.scheduleDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                            </ThemedText>
-                            <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
-                              {getPickupAddress(offer)}
-                            </ThemedText>
-                          </View>
-                        </View>
-                        {isMultiStopOffer(offer) ? (
-                          <View style={styles.timelineItem}>
-                            <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
-                            <View style={styles.timelineContent}>
-                              <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
-                                Multi-stop ({offer.stops.filter(s => s.type === 'Dropoff').length} stops)
-                              </ThemedText>
-                              <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
-                                {getDropoffAddress(offer)}
-                              </ThemedText>
-                            </View>
-                          </View>
-                        ) : (
-                          <View style={styles.timelineItem}>
-                            <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
-                            <View style={styles.timelineContent}>
-                              <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
-                                Delivery
-                              </ThemedText>
-                              <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
-                                {getDropoffAddress(offer)}
-                              </ThemedText>
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                      
-                      {offer.cargoDescription && (
-                        <View style={styles.cargoInfo}>
-                          <Ionicons name="cube-outline" size={14} color={theme.textSecondary} />
-                          <ThemedText style={[styles.cargoText, { color: theme.textSecondary }]}>
-                            {offer.cargoDescription}
-                          </ThemedText>
-                        </View>
-                      )}
-
-                      <View style={[styles.offerActions, { borderTopColor: theme.border }]}>
-                        <SwipeToAccept
-                          label="Swipe to accept"
-                          disabled={acceptingOfferId !== null && acceptingOfferId !== offer.id}
-                          trackColor={theme.border}
-                          thumbColor={theme.primary}
-                          textColor={theme.text}
-                          style={styles.swipeToAcceptFull}
-                          onAccept={async () => {
-                            setAcceptingOfferId(offer.id);
-                            try {
-                              await acceptOffer(offer.id);
-                              Alert.alert('Success', 'Offer accepted! Check your bookings.');
-                            } catch (error) {
-                              setAcceptingOfferId(null);
-                              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to accept offer. Please try again.');
-                            }
-                          }}
-                        />
-                        <TouchableOpacity
-                          style={[styles.rejectButton, { borderColor: theme.border }]}
-                          onPress={async () => {
-                            try {
-                              await rejectOffer(offer.id);
-                            } catch (error) {
-                              Alert.alert('Error', 'Failed to reject offer. Please try again.');
-                            }
-                          }}>
-                          <Ionicons name="close-outline" size={18} color={theme.textSecondary} />
-                          <ThemedText style={[styles.rejectButtonText, { color: theme.textSecondary }]}>
-                            Not for me
-                          </ThemedText>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          )}
-
-          {/* Deliveries — tab layout like Bookings */}
-          <View style={styles.deliveriesSection}>
-            <View style={styles.deliveriesSectionHeader}>
-              <ThemedText type="subtitle" style={[styles.sectionTitle, { marginBottom: 0 }]}>
-                Deliveries
-              </ThemedText>
-              <View style={[styles.badge, { backgroundColor: theme.border }]}>
-                <ThemedText style={[styles.badgeText, { color: theme.textSecondary }]}>Today</ThemedText>
+                </TouchableOpacity>
               </View>
-            </View>
-            <View style={styles.deliveriesTabs}>
-              {(['Incoming', 'Ongoing', 'Done'] as const).map((filterOption) => (
+              {giveaways.slice(0, 2).map((giveaway) => (
                 <TouchableOpacity
-                  key={filterOption}
-                  style={[
-                    styles.deliveriesTab,
-                    filter === filterOption
-                      ? { backgroundColor: theme.primary }
-                      : { backgroundColor: theme.surface, borderColor: theme.border },
-                  ]}
-                  onPress={() => setFilter(filterOption)}>
-                  <ThemedText
-                    style={[
-                      styles.deliveriesTabText,
-                      {
-                        color: filter === filterOption ? theme.primaryText : theme.text,
-                      },
-                    ]}>
-                    {filterOption}
-                  </ThemedText>
+                  key={giveaway.id}
+                  style={[styles.giveawayCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  onPress={() => router.push('/(tabs)/giveaways')}>
+                  <View style={[styles.giveawayIcon, { backgroundColor: theme.primary + '20' }]}>
+                    <Ionicons name="gift" size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.giveawayContent}>
+                    <ThemedText style={[styles.giveawayTitle, { color: theme.text }]} numberOfLines={1}>
+                      {giveaway.title}
+                    </ThemedText>
+                    {giveaway.rewardDetails && (
+                      <ThemedText style={[styles.giveawayReward, { color: theme.textSecondary }]} numberOfLines={1}>
+                        {giveaway.rewardDetails}
+                      </ThemedText>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
                 </TouchableOpacity>
               ))}
             </View>
-
-            {bookings.length === 0 ? (
-              <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
-                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  {filter === 'Incoming' ? 'No incoming deliveries' :
-                   filter === 'Ongoing' ? 'No ongoing deliveries' :
-                   filter === 'Done' ? 'No completed deliveries' :
-                   'No active bookings'}
-                </ThemedText>
-              </View>
-            ) : (
-              bookings.slice(0, 3).map((booking) => (
-                <TouchableOpacity
-                  key={booking.id}
-                  style={[styles.bookingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                  onPress={() => router.push(`/booking/${booking.id}`)}>
-                  <View style={[styles.bookingIndicator, { backgroundColor: theme.primary }]} />
-                  <View style={styles.bookingHeader}>
-                    <View style={styles.bookingHeaderLeft}>
-                      <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
-                        <ThemedText style={[styles.statusBadgeText, { color: theme.success }]}>
-                          {booking.status}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={[styles.bookingNumber, { color: theme.textSecondary }]}>
-                        {booking.bookingNumber}
-                      </ThemedText>
-                    </View>
-                    <ThemedText style={[styles.bookingAmount, { color: theme.text }]}>
-                      ₱{((Math.random() * 50) + 20).toFixed(2)}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.bookingTimeline}>
-                    <View style={[styles.timelineLine, { backgroundColor: theme.border }]} />
-                    <View style={styles.timelineItem}>
-                      <View style={[styles.timelineDot, { backgroundColor: theme.surface, borderColor: theme.primary }]} />
-                      <View style={styles.timelineContent}>
-                        <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
-                          Pickup • {new Date(booking.scheduleDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                        </ThemedText>
-                        <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
-                          {booking.pickupLocation}
-                        </ThemedText>
-                      </View>
-                    </View>
-                    <View style={styles.timelineItem}>
-                      <View style={[styles.timelineDot, { backgroundColor: theme.primary, borderColor: theme.primary }]} />
-                      <View style={styles.timelineContent}>
-                        <ThemedText style={[styles.timelineTime, { color: theme.textSecondary }]}>
-                          Delivery • Est. {new Date(new Date(booking.scheduleDate).getTime() + 45 * 60000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                        </ThemedText>
-                        <ThemedText style={[styles.timelineLocation, { color: theme.text }]}>
-                          {booking.dropoffLocation}
-                        </ThemedText>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={[styles.bookingActions, { borderTopColor: theme.border }]}>
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.border }]}>
-                      <Ionicons name="call-outline" size={16} color={theme.text} />
-                      <ThemedText style={[styles.actionButtonText, { color: theme.text }]}>Call</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        // Handle navigate
-                      }}>
-                      <Ionicons name="navigate-outline" size={16} color={theme.primaryText} />
-                      <ThemedText style={[styles.actionButtonText, { color: theme.primaryText }]}>Navigate</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
+          )}
 
           {/* Weekly Quest (Solo Driver Only) */}
           {isSoloDriver && (
@@ -1109,6 +863,66 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   rejectButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  newsSection: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    gap: 12,
+  },
+  newsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  newsContent: {
+    flex: 1,
+    gap: 4,
+  },
+  newsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  newsText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  giveawaysSection: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    gap: 12,
+  },
+  giveawayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
+  },
+  giveawayIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  giveawayContent: {
+    flex: 1,
+    gap: 4,
+  },
+  giveawayTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  giveawayReward: {
+    fontSize: 13,
+  },
+  viewAllText: {
     fontSize: 14,
     fontWeight: '600',
   },
