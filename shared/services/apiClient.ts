@@ -99,7 +99,12 @@ class ApiClient {
 
     // Automatically inject token if auth is required (default: true)
     if (config.requiresAuth !== false) {
-      const token = await tokenStorage.getAccessToken();
+      let token = await tokenStorage.getAccessToken();
+      // One retry after short delay for cold start (e.g. app opened from push - storage may not be ready yet)
+      if (!token) {
+        await new Promise((r) => setTimeout(r, 350));
+        token = await tokenStorage.getAccessToken();
+      }
       if (token) {
         headers.Authorization = `Bearer ${token}`;
         // Always log token presence for location endpoints (critical for debugging)

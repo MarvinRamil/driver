@@ -255,12 +255,21 @@ class AuthService {
 
   /**
    * Logout user and clear all stored tokens
-   * Clears tokens from secure storage
+   * Calls API to blacklist token first (with current token), then clears local tokens.
+   * This order prevents "No Authorization header" errors from the logout call itself.
    * @returns Promise resolving when logout is complete
    */
   async logout(): Promise<void> {
     try {
-      // Clear all stored tokens
+      // Call logout API first while we still have the token (server can blacklist it).
+      // Use requiresAuth: true so the Authorization header is sent. Ignore errors so we always clear locally.
+      try {
+        await apiClient.post('api/auth/logout', { requiresAuth: true });
+      } catch (apiErr) {
+        // Ignore - we still clear tokens locally so the user is logged out
+        console.warn('[AuthService] Logout API call failed (clearing tokens anyway):', apiErr);
+      }
+      // Clear all stored tokens after API call (or if API not available)
       await tokenStorage.clearAllTokens();
     } catch (error) {
       throw new Error(

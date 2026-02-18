@@ -105,7 +105,7 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
         const isCurrentlyTracking = locationTrackingService.getIsTracking();
         if (isCurrentlyTracking) {
           try {
-            locationTrackingService.stopTracking();
+            await locationTrackingService.stopTracking();
           } catch (err) {
             console.warn('[DriverStatusContext] Failed to stop tracking:', err);
           }
@@ -137,7 +137,7 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
       } else {
         // Driver went offline - stop location tracking
         try {
-          locationTrackingService.stopTracking();
+          await locationTrackingService.stopTracking();
         } catch (locationError) {
           // Log but don't fail the status update if location tracking fails
           console.warn('Failed to stop location tracking:', locationError);
@@ -175,9 +175,9 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
       setIsInitialLoading(false);
       setIsOnline(false);
       setIsLoading(false);
-      // Stop tracking when user logs out
+      // Stop tracking when user logs out (void = fire-and-forget; AuthContext logout already awaits)
       try {
-        locationTrackingService.stopTracking();
+        void locationTrackingService.stopTracking();
       } catch (err) {
         console.warn('[DriverStatusContext] Failed to stop tracking on logout:', err);
       }

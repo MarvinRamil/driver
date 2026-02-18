@@ -221,9 +221,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null);
 
     try {
-      // Stop location tracking before logout
+      // Stop location tracking before logout (await so no location API runs after we clear tokens)
       try {
-        locationTrackingService.stopTracking();
+        await locationTrackingService.stopTracking();
       } catch (locationErr) {
         console.warn("Failed to stop location tracking:", locationErr);
       }

@@ -20,14 +20,22 @@ export default function AcceptBookingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ offerId?: string }>();
   const { user } = useAuth();
-  const { offers, acceptOffer, rejectOffer } = useOffers();
+  const { offers, isLoading: offersLoading, refresh: refreshOffers, acceptOffer, rejectOffer } = useOffers();
   const [timeRemaining, setTimeRemaining] = useState(15);
   const progressAnim = useRef(new Animated.Value(1)).current;
+  const hasRefreshedForOfferId = useRef(false);
 
   // Find the offer by ID or get the first pending offer
   const offer = params.offerId
     ? offers.find((o) => o.id === params.offerId)
     : offers[0];
+
+  // When opened from push with offerId, the list may not have the offer yet — refresh once so we can accept
+  useEffect(() => {
+    if (!params.offerId || offer || hasRefreshedForOfferId.current) return;
+    hasRefreshedForOfferId.current = true;
+    refreshOffers();
+  }, [params.offerId, offer, refreshOffers]);
 
   useEffect(() => {
     if (!offer) return;
@@ -88,15 +96,18 @@ export default function AcceptBookingScreen() {
   };
 
   if (!offer) {
+    const loadingFromPush = !!params.offerId && offersLoading;
     return (
       <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.emptyContainer}>
           <Ionicons name="notifications-off-outline" size={64} color={theme.textSecondary} />
           <ThemedText type="title" style={[styles.emptyText, { color: theme.text }]}>
-            No Active Offers
+            {loadingFromPush ? 'Loading offer…' : 'No Active Offers'}
           </ThemedText>
           <ThemedText style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            You'll be notified when a new booking request arrives
+            {loadingFromPush
+              ? 'Fetching the latest booking request'
+              : "You'll be notified when a new booking request arrives"}
           </ThemedText>
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: theme.primary }]}

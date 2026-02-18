@@ -167,9 +167,10 @@ class LocationTrackingService {
   }
 
   /**
-   * Stop tracking location
+   * Stop tracking location.
+   * Awaits any pending buffer flush so no location API call runs after tokens are cleared (e.g. on logout).
    */
-  stopTracking(): void {
+  async stopTracking(): Promise<void> {
     if (!this.isTracking) {
       return;
     }
@@ -179,20 +180,24 @@ class LocationTrackingService {
       this.watchSubscription = null;
     }
 
-    // Capture and flush remaining buffer
+    // Flush remaining buffer and await so logout doesn't clear tokens before this request completes
     if (this.locationBuffer.length > 0) {
-      this.flushBuffer().catch(err => console.error('Error flushing final buffer:', err));
+      try {
+        await this.flushBuffer();
+      } catch (err) {
+        console.error('Error flushing final buffer:', err);
+      }
     }
 
     this.stopFlushTimer();
     this.isTracking = false;
     this.lastUpdateTime = 0;
-    
+
     // Disconnect MQTT when stopping tracking
     mqttLocationService.disconnect().catch((error) => {
       console.warn('Error disconnecting MQTT:', error);
     });
-    
+
     this.notifyStatusListeners();
     console.log('Location tracking stopped');
   }
