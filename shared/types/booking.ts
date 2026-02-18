@@ -143,6 +143,12 @@ export interface Booking {
   estimatedFare: number | null;
   /** Final fare amount after completion (nullable) */
   finalFare: number | null;
+  /** Cancellation reason (nullable) */
+  cancellationReason: string | null;
+  /** User ID who cancelled the booking (nullable) */
+  cancelledBy: string | null;
+  /** When booking was cancelled (nullable) */
+  cancelledAt: Date | null;
 
   // Legacy fields for backward compatibility
   /** Optional description of cargo (legacy - use cargoDescription) */
@@ -155,6 +161,46 @@ export interface Booking {
   driverLocation?: LocationCoordinates;
   /** Stops (pickup/dropoff) with ids for POD upload */
   stops?: DeliveryStop[];
+}
+
+/**
+ * Cancellation reason enum matching backend
+ */
+export enum CancellationReason {
+  CustomerRequest = 'CustomerRequest',
+  DriverUnavailable = 'DriverUnavailable',
+  NoDriverFound = 'NoDriverFound',
+  PickupLocationInaccessible = 'PickupLocationInaccessible',
+  DeliveryLocationInaccessible = 'DeliveryLocationInaccessible',
+  ItemNotReady = 'ItemNotReady',
+  WeatherConditions = 'WeatherConditions',
+  VehicleBreakdown = 'VehicleBreakdown',
+  Emergency = 'Emergency',
+  Other = 'Other',
+}
+
+/**
+ * Cancellation reason display text
+ */
+export const CancellationReasonLabels: Record<CancellationReason, string> = {
+  [CancellationReason.CustomerRequest]: 'Customer requested cancellation',
+  [CancellationReason.DriverUnavailable]: 'Driver unavailable',
+  [CancellationReason.NoDriverFound]: 'No driver found',
+  [CancellationReason.PickupLocationInaccessible]: 'Pickup location inaccessible',
+  [CancellationReason.DeliveryLocationInaccessible]: 'Delivery location inaccessible',
+  [CancellationReason.ItemNotReady]: 'Item not ready for pickup',
+  [CancellationReason.WeatherConditions]: 'Weather conditions',
+  [CancellationReason.VehicleBreakdown]: 'Vehicle breakdown',
+  [CancellationReason.Emergency]: 'Emergency situation',
+  [CancellationReason.Other]: 'Other',
+};
+
+/**
+ * Cancel booking request DTO
+ */
+export interface CancelBookingDto {
+  reason: CancellationReason;
+  customReason?: string;
 }
 
 /**

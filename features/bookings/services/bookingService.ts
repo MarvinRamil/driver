@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/services/apiClient';
-import type { Booking, Dispatch } from '@/shared/types/booking';
+import type { Booking, Dispatch, CancellationReason } from '@/shared/types/booking';
 import type { User } from '@/features/auth/types';
 
 /**
@@ -234,6 +234,9 @@ class BookingService {
       dropoffLongitude: dropoffLongitude !== null && !isNaN(dropoffLongitude) ? dropoffLongitude : null,
       estimatedFare: apiBooking.estimatedFare != null && !isNaN(Number(apiBooking.estimatedFare)) ? Number(apiBooking.estimatedFare) : null,
       finalFare: apiBooking.finalFare != null && !isNaN(Number(apiBooking.finalFare)) ? Number(apiBooking.finalFare) : null,
+      cancellationReason: apiBooking.cancellationReason ?? null,
+      cancelledBy: apiBooking.cancelledBy ?? null,
+      cancelledAt: this.parseDate(apiBooking.cancelledAt),
       description: apiBooking.cargoDescription || apiBooking.description,
       weight: weightKg ?? apiBooking.weight,
       stops: Array.isArray(apiBooking.stops)
@@ -374,6 +377,26 @@ class BookingService {
 
     if (!response.success || !response.data) {
       throw new Error(response.message ?? 'Failed to complete stop');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Cancel a booking with reason
+   * POST /api/bookings/{id}/cancel
+   */
+  async cancelBooking(bookingId: string, reason: CancellationReason, customReason?: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/cancel`, {
+      body: {
+        reason,
+        customReason,
+      },
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to cancel booking');
     }
 
     return this.mapApiBookingToBooking(response.data);

@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
  * Bookings screen
  * Matches prepared design with timeline view for operator drivers
  */
-type TabType = 'INCOMING' | 'ONGOING' | 'COMPLETED';
+type TabType = 'INCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
 
 export default function BookingsScreen() {
   const insets = useSafeAreaInsets();
@@ -77,6 +77,12 @@ export default function BookingsScreen() {
         return status === 'Completed' || status === 'Delivered';
       });
     }
+    if (activeTab === 'CANCELLED') {
+      // Show cancelled bookings
+      return allBookings.filter((booking) => {
+        return booking.status === 'Cancelled';
+      });
+    }
     return [];
   }, [activeTab, allBookings]);
 
@@ -118,7 +124,7 @@ export default function BookingsScreen() {
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       {/* Full-Width Header Tabs */}
       <View style={[styles.headerTabsContainer, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-        {(['INCOMING', 'ONGOING', 'COMPLETED'] as TabType[]).map((tab) => (
+        {(['INCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'] as TabType[]).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[
@@ -316,7 +322,13 @@ export default function BookingsScreen() {
           <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
             <Ionicons name="calendar-outline" size={48} color={theme.textMuted} />
             <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {activeTab === 'ONGOING' ? 'No ongoing bookings' : 'No completed bookings'}
+              {activeTab === 'ONGOING' 
+                ? 'No ongoing bookings' 
+                : activeTab === 'COMPLETED'
+                ? 'No completed bookings'
+                : activeTab === 'CANCELLED'
+                ? 'No cancelled bookings'
+                : 'No bookings'}
             </ThemedText>
           </View>
         ) : (

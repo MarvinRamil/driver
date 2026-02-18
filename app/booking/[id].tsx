@@ -16,10 +16,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { bookingService, dispatchService } from '@/features/bookings';
+import { CancelBookingModal } from '@/features/bookings/components/CancelBookingModal';
 import { useAuth } from '@/features/auth';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { locationTrackingService } from '@/features/driver/services/locationTrackingService';
-import type { Booking, Dispatch } from '@/shared/types/booking';
+import type { Booking, Dispatch, CancellationReason } from '@/shared/types/booking';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +42,7 @@ export default function BookingDetailsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [showPodModal, setShowPodModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [podImageUri, setPodImageUri] = useState<string | null>(null);
   const [podSignatureUri, setPodSignatureUri] = useState<string | null>(null);
   const [podRecipientName, setPodRecipientName] = useState('');
@@ -373,6 +375,19 @@ export default function BookingDetailsScreen() {
     }
   };
 
+  const handleCancelBooking = async (reason: CancellationReason, customReason?: string) => {
+    if (!booking || isUpdatingStatus) return;
+    
+    try {
+      const updated = await bookingService.cancelBooking(booking.id, reason, customReason);
+      setBooking(updated);
+      Alert.alert('Success', 'Booking cancelled successfully.', [{ text: 'OK' }]);
+      router.back();
+    } catch (err) {
+      throw err; // Re-throw to let modal handle the error
+    }
+  };
+
   const handleSubmitPod = async () => {
     if (!booking || !selectedPodStopId || !podImageUri || isUpdatingStatus) {
       if (!podImageUri) Alert.alert('Required', 'Please add a delivery photo.');
@@ -693,6 +708,26 @@ export default function BookingDetailsScreen() {
           )}
         </View>
 
+        {/* Cancellation Info */}
+        {booking.status === 'Cancelled' && booking.cancellationReason && (
+          <View style={[styles.detailsCard, { backgroundColor: theme.error + '20', borderColor: theme.error }]}>
+            <View style={styles.cancellationHeader}>
+              <Ionicons name="close-circle" size={24} color={theme.error} />
+              <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.error }]}>
+                Booking Cancelled
+              </ThemedText>
+            </View>
+            <ThemedText style={[styles.cancellationReason, { color: theme.text }]}>
+              Reason: {booking.cancellationReason}
+            </ThemedText>
+            {booking.cancelledAt && (
+              <ThemedText style={[styles.cancellationDate, { color: theme.textSecondary }]}>
+                Cancelled on: {new Date(booking.cancelledAt).toLocaleString()}
+              </ThemedText>
+            )}
+          </View>
+        )}
+
         {/* Action Buttons */}
         {isActive && (
           <View style={styles.actionsContainer}>
@@ -711,6 +746,21 @@ export default function BookingDetailsScreen() {
               <Ionicons name="navigate-outline" size={20} color={theme.primaryText} />
               <ThemedText style={[styles.actionButtonText, { color: theme.primaryText }]}>
                 Navigate
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Cancel Booking Button */}
+        {isActive && booking.status !== 'Cancelled' && booking.status !== 'Completed' && (
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.cancelButton, { backgroundColor: theme.error }]}
+              onPress={() => setShowCancelModal(true)}
+              disabled={isUpdatingStatus}>
+              <Ionicons name="close-circle-outline" size={20} color="#fff" />
+              <ThemedText style={[styles.actionButtonText, { color: '#fff' }]}>
+                Cancel Booking
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -1110,6 +1160,14 @@ export default function BookingDetailsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Cancel Booking Modal */}
+      <CancelBookingModal
+        visible={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelBooking}
+        bookingNumber={booking?.bookingNumber}
+      />
     </ThemedView>
   );
 }
@@ -1455,6 +1513,22 @@ const styles = StyleSheet.create({
   },
   modalButtonDisabled: {
     opacity: 0.6,
+  },
+  cancellationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  cancellationReason: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  cancellationDate: {
+    fontSize: 12,
+  },
+  cancelButton: {
+    width: '100%',
   },
 });
 

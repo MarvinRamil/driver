@@ -44,9 +44,9 @@ class HistoryService {
 
       const dispatches = Array.isArray(response.data) ? response.data : [];
       
-      // Filter to only completed dispatches
+      // Filter to only completed or cancelled dispatches
       const completedDispatches = dispatches.filter(
-        (d) => d.status === 'Delivered' || d.status === 'Completed'
+        (d) => d.status === 'Delivered' || d.status === 'Completed' || d.status === 'Cancelled'
       );
 
       // Map to TripHistory
