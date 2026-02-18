@@ -67,16 +67,16 @@ class MqttLocationService {
     try {
       console.log('[MQTT] Loading credentials from environment variables');
 
-      // Use env variables but DEFAULT to the working configuration (WSS/443)
+      // Use env variables but DEFAULT to WS/80 (plain WebSocket)
       // This ensures that if env vars are missing (OTA issue), it still connects
       const host = process.env.EXPO_PUBLIC_MQTT_HOST || 'mqtt.ilocosscript.live';
-      let port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '443', 10);
+      let port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '80', 10);
       const explicitAppEnv = (process.env.EXPO_PUBLIC_APP_ENV || '').trim().toLowerCase();
       const inferredAppEnv = __DEV__ ? 'dev' : 'staging';
       const appEnv = explicitAppEnv || inferredAppEnv;
-      // Respect explicit false ('false'/'0') for WS on port 80 (e.g. behind Cloudflare tunnel); otherwise default to WSS
+      // Default to WS (false) unless explicitly set to 'true' or '1'
       const sslEnv = process.env.EXPO_PUBLIC_MQTT_USE_SSL;
-      const useSsl = (sslEnv === 'false' || sslEnv === '0') ? false : true;
+      const useSsl = (sslEnv === 'true' || sslEnv === '1') ? true : false;
 
       // WSS must use port 443; port 80 is for plain WS (e.g. behind Cloudflare tunnel)
       if (useSsl && port === 80) {
@@ -99,6 +99,22 @@ class MqttLocationService {
       const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || defaultTopicPrefix;
       const path = process.env.EXPO_PUBLIC_MQTT_PATH || '/mqtt';
 
+      // Build WebSocket URL for logging (before final protocol determination)
+      const protocolForLog = useSsl ? 'wss' : 'ws';
+      const safePathForLog = path.startsWith('/') ? path : `/${path}`;
+      const wsUrlForLog = `${protocolForLog}://${host}:${port}${safePathForLog}`;
+
+      console.log('[MQTT] 🔍 Environment Variable Diagnostics:', {
+        'EXPO_PUBLIC_MQTT_HOST': process.env.EXPO_PUBLIC_MQTT_HOST || '(not set)',
+        'EXPO_PUBLIC_MQTT_PORT': process.env.EXPO_PUBLIC_MQTT_PORT || '(not set)',
+        'EXPO_PUBLIC_MQTT_USE_SSL': process.env.EXPO_PUBLIC_MQTT_USE_SSL || '(not set)',
+        'EXPO_PUBLIC_MQTT_USERNAME': process.env.EXPO_PUBLIC_MQTT_USERNAME || '(not set)',
+        'EXPO_PUBLIC_MQTT_TOPIC_PREFIX': process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || '(not set)',
+        'sslEnv (raw)': sslEnv === undefined ? 'undefined' : `"${sslEnv}"`,
+        'sslEnv type': typeof sslEnv,
+        'sslEnv length': sslEnv?.length ?? 'N/A',
+      });
+
       console.log('[MQTT] Env check:', {
         appEnv,
         normalizedAppEnv,
@@ -108,6 +124,7 @@ class MqttLocationService {
         path,
         hasUsername: !!username,
         topicPrefix,
+        'resolved URL': wsUrlForLog,
       });
 
       // Validate required fields

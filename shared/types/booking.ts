@@ -139,6 +139,10 @@ export interface Booking {
   dropoffLatitude: number | null;
   /** GPS longitude of dropoff location (nullable) */
   dropoffLongitude: number | null;
+  /** Estimated fare amount (nullable) */
+  estimatedFare: number | null;
+  /** Final fare amount after completion (nullable) */
+  finalFare: number | null;
 
   // Legacy fields for backward compatibility
   /** Optional description of cargo (legacy - use cargoDescription) */

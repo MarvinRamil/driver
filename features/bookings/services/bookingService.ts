@@ -232,6 +232,8 @@ class BookingService {
       pickupLongitude: pickupLongitude !== null && !isNaN(pickupLongitude) ? pickupLongitude : null,
       dropoffLatitude: dropoffLatitude !== null && !isNaN(dropoffLatitude) ? dropoffLatitude : null,
       dropoffLongitude: dropoffLongitude !== null && !isNaN(dropoffLongitude) ? dropoffLongitude : null,
+      estimatedFare: apiBooking.estimatedFare != null && !isNaN(Number(apiBooking.estimatedFare)) ? Number(apiBooking.estimatedFare) : null,
+      finalFare: apiBooking.finalFare != null && !isNaN(Number(apiBooking.finalFare)) ? Number(apiBooking.finalFare) : null,
       description: apiBooking.cargoDescription || apiBooking.description,
       weight: weightKg ?? apiBooking.weight,
       stops: Array.isArray(apiBooking.stops)

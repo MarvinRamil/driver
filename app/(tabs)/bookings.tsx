@@ -350,7 +350,7 @@ export default function BookingsScreen() {
                     </ThemedText>
                   </View>
                   <ThemedText style={[styles.bookingAmount, { color: theme.text }]}>
-                    ₱{((Math.random() * 50) + 20).toFixed(2)}
+                    ₱{(booking.finalFare ?? booking.estimatedFare ?? 0).toFixed(2)}
                   </ThemedText>
                 </View>
 

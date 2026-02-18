@@ -89,12 +89,18 @@ class HistoryService {
 
   /**
    * Calculate earnings for a dispatch
-   * TODO: This should come from payment/dispatch data
+   * Uses finalFare if available (for completed bookings), otherwise estimatedFare
    */
   private calculateEarnings(dispatch: Dispatch): number {
-    // For now, use a placeholder calculation
-    // In production, this should come from payment data
-    return Math.random() * 50 + 10; // $10-$60 placeholder
+    // Use booking fare if available
+    if (dispatch.booking) {
+      const fare = dispatch.booking.finalFare ?? dispatch.booking.estimatedFare;
+      if (fare != null && fare > 0) {
+        return fare;
+      }
+    }
+    // Fallback to 0 if no fare data available
+    return 0;
   }
 
   /**
