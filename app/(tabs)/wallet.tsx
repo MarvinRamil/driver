@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useWallet } from '@/features/wallet';
 import { useWalletTransactions } from '@/features/wallet';
-import { useCashEligibility, useTopUp, useTopUpHistory, useWalletTopUpEvents, walletService } from '@/features/wallet';
+import { useCashEligibility, useTopUp, useTopUpHistory, useWalletTopUpEvents, walletService, useWithdrawals } from '@/features/wallet';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { useAuth } from '@/features/auth';
@@ -19,15 +19,22 @@ export default function WalletScreen() {
   const { data: cashEligibility, refresh: refreshEligibility } = useCashEligibility();
   const { topUps, refresh: refreshTopUps } = useTopUpHistory();
   const { createTopUp, isSubmitting: topUpSubmitting } = useTopUp();
+  const { requests: withdrawals, refresh: refreshWithdrawals, requestWithdrawal } = useWithdrawals();
   const [topUpModalVisible, setTopUpModalVisible] = useState(false);
   const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('200');
   const [transferAmount, setTransferAmount] = useState('100');
+  const [withdrawAmount, setWithdrawAmount] = useState('500');
+  const [bankName, setBankName] = useState('BPI');
+  const [bankAccount, setBankAccount] = useState('');
+  const [accountHolder, setAccountHolder] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [transferFrom, setTransferFrom] = useState<'Personal' | 'TopUp'>('Personal');
 
   const onRefreshAll = useCallback(async () => {
-    await Promise.all([refresh(), refreshEligibility(), refreshTopUps()]);
-  }, [refresh, refreshEligibility, refreshTopUps]);
+    await Promise.all([refresh(), refreshEligibility(), refreshTopUps(), refreshWithdrawals()]);
+  }, [refresh, refreshEligibility, refreshTopUps, refreshWithdrawals]);
 
   // Real-time: when webhook marks top-up as paid, backend pushes TopUpPaid via SignalR; refresh wallet and history
   useWalletTopUpEvents(user?.id, () => {
@@ -137,6 +144,30 @@ export default function WalletScreen() {
     }
   };
 
+  const handleWithdrawal = async () => {
+    const amount = Number(withdrawAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
+      return;
+    }
+    if (!bankAccount || !accountHolder) {
+      Alert.alert('Missing Details', 'Please fill in all bank details.');
+      return;
+    }
+
+    setIsWithdrawing(true);
+    try {
+      await requestWithdrawal(amount, bankAccount, bankName, accountHolder);
+      setWithdrawModalVisible(false);
+      Alert.alert('Request Sent', 'Your withdrawal request has been submitted.');
+      await onRefreshAll();
+    } catch (err) {
+      Alert.alert('Withdrawal Failed', err instanceof Error ? err.message : 'Unable to request withdrawal');
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   const openTopUpLink = async (url?: string | null) => {
     if (!url) {
       Alert.alert('No Link', 'This top-up has no invoice URL.');
@@ -162,7 +193,7 @@ export default function WalletScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefreshAll} />}
         showsVerticalScrollIndicator={false}>
-        
+
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -190,11 +221,11 @@ export default function WalletScreen() {
             {/* Decorative background elements */}
             <View style={styles.walletCardBg1} />
             <View style={styles.walletCardBg2} />
-            
+
             <View style={styles.walletCardContent}>
               <View style={styles.walletCardHeader}>
                 <ThemedText style={[styles.walletCardLabel, { color: '#9ca3af' }]}>
-                  Personal Wallet
+                  Personal Wallet (Net Earnings)
                 </ThemedText>
                 <View style={[styles.verifiedBadge, { backgroundColor: '#1f2937' }]}>
                   <Ionicons name="checkmark-circle" size={12} color={theme.primary} />
@@ -203,11 +234,11 @@ export default function WalletScreen() {
                   </ThemedText>
                 </View>
               </View>
-              
+
               <ThemedText style={[styles.walletBalance, { color: '#fff' }]}>
                 ₱{personalBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </ThemedText>
-              
+
               <View style={styles.walletCardFooter}>
                 <View>
                   <ThemedText style={[styles.beeIdLabel, { color: '#9ca3af' }]}>
@@ -259,12 +290,12 @@ export default function WalletScreen() {
               Transfer
             </ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => setWithdrawModalVisible(true)}>
             <View style={[styles.quickActionIcon, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Ionicons name="qr-code-outline" size={24} color={theme.text} />
+              <Ionicons name="cash-outline" size={24} color={theme.text} />
             </View>
             <ThemedText style={[styles.quickActionLabel, { color: theme.textSecondary }]}>
-              Scan
+              Withdraw
             </ThemedText>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickAction}>
@@ -370,19 +401,19 @@ export default function WalletScreen() {
                   topUp.status === 'Paid'
                     ? theme.success
                     : topUp.status === 'Pending'
-                    ? theme.primary
-                    : topUp.status === 'Expired' || topUp.status === 'Cancelled'
-                    ? theme.textSecondary
-                    : theme.error;
+                      ? theme.primary
+                      : topUp.status === 'Expired' || topUp.status === 'Cancelled'
+                        ? theme.textSecondary
+                        : theme.error;
                 const statusBg = `${statusColor}20`;
                 const statusIcon =
                   topUp.status === 'Paid'
                     ? 'checkmark-circle-outline'
                     : topUp.status === 'Pending'
-                    ? 'time-outline'
-                    : topUp.status === 'Expired' || topUp.status === 'Cancelled'
-                    ? 'ban-outline'
-                    : 'close-circle-outline';
+                      ? 'time-outline'
+                      : topUp.status === 'Expired' || topUp.status === 'Cancelled'
+                        ? 'ban-outline'
+                        : 'close-circle-outline';
                 const isPending = topUp.status === 'Pending';
                 const isPaid = topUp.status === 'Paid';
 
@@ -438,6 +469,68 @@ export default function WalletScreen() {
                         </TouchableOpacity>
                       )}
                     </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Withdrawal History */}
+        <View style={styles.activitySection}>
+          <View style={styles.activityHeader}>
+            <ThemedText type="subtitle" style={[styles.activityTitle, { color: theme.text }]}>
+              Withdrawals
+            </ThemedText>
+          </View>
+          {withdrawals.length === 0 ? (
+            <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                No withdrawal requests
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.transactionsList}>
+              {withdrawals.slice(0, 5).map((req) => {
+                const statusColor =
+                  req.status === 'Approved'
+                    ? theme.success
+                    : req.status === 'Pending'
+                      ? theme.primary
+                      : req.status === 'Failed' || req.status === 'Rejected'
+                        ? theme.error
+                        : theme.textSecondary;
+                const statusBg = `${statusColor}20`;
+                const statusIcon =
+                  req.status === 'Approved'
+                    ? 'checkmark-circle-outline'
+                    : req.status === 'Pending'
+                      ? 'time-outline'
+                      : 'close-circle-outline';
+
+                return (
+                  <View
+                    key={req.id}
+                    style={[styles.transactionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <View style={styles.transactionLeft}>
+                      <View style={[styles.transactionIcon, { backgroundColor: statusBg }]}>
+                        <Ionicons name={statusIcon} size={20} color={statusColor} />
+                      </View>
+                      <View style={styles.transactionInfo}>
+                        <ThemedText style={[styles.transactionTitle, { color: theme.text }]}>
+                          Withdrawal to {req.bankName}
+                        </ThemedText>
+                        <ThemedText style={[styles.transactionDate, { color: theme.textSecondary }]}>
+                          {new Date(req.requestedAt).toLocaleDateString()}
+                        </ThemedText>
+                        <ThemedText style={[styles.transactionDate, { color: statusColor }]}>
+                          {req.status}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <ThemedText style={[styles.transactionAmount, { color: theme.text }]}>
+                      ₱{req.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </ThemedText>
                   </View>
                 );
               })}
@@ -505,6 +598,62 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={withdrawModalVisible} animationType="slide" transparent onRequestClose={() => setWithdrawModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <ThemedText type="subtitle" style={{ color: theme.text }}>Request Withdrawal</ThemedText>
+
+            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>Amount</ThemedText>
+            <TextInput
+              value={withdrawAmount}
+              onChangeText={setWithdrawAmount}
+              keyboardType="numeric"
+              style={[styles.input, { borderColor: theme.border, color: theme.text, marginBottom: 16 }]}
+              placeholder="Amount"
+              placeholderTextColor={theme.textMuted}
+            />
+
+            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>Bank Name</ThemedText>
+            <TextInput
+              value={bankName}
+              onChangeText={setBankName}
+              style={[styles.input, { borderColor: theme.border, color: theme.text, marginBottom: 16 }]}
+              placeholder="e.g. BPI, BDO, GCASH"
+              placeholderTextColor={theme.textMuted}
+            />
+
+            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>Account Number</ThemedText>
+            <TextInput
+              value={bankAccount}
+              onChangeText={setBankAccount}
+              keyboardType="numeric"
+              style={[styles.input, { borderColor: theme.border, color: theme.text, marginBottom: 16 }]}
+              placeholder="Account Number"
+              placeholderTextColor={theme.textMuted}
+            />
+
+            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>Account Holder Name</ThemedText>
+            <TextInput
+              value={accountHolder}
+              onChangeText={setAccountHolder}
+              style={[styles.input, { borderColor: theme.border, color: theme.text, marginBottom: 24 }]}
+              placeholder="Account Name"
+              placeholderTextColor={theme.textMuted}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setWithdrawModalVisible(false)} style={[styles.modalBtn, { borderColor: theme.border }]}>
+                <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleWithdrawal} style={[styles.modalBtn, { backgroundColor: theme.primary }]}>
+                <ThemedText style={{ color: '#111' }}>{isWithdrawing ? 'Submitting...' : 'Withdraw'}</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </ThemedView>
   );
 }

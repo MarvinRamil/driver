@@ -48,7 +48,7 @@ export default function IncomeScreen() {
         <View style={[styles.balanceCard, { backgroundColor: theme.primary }]}>
           <View style={styles.balanceHeader}>
             <ThemedText style={[styles.balanceLabel, { color: '#111' + 'B3' }]}>
-              Available Balance
+              Net Earnings (95%)
             </ThemedText>
             <View style={[styles.iconContainer, { backgroundColor: '#111' }]}>
               <Ionicons name="cube-outline" size={16} color={theme.primary} />
@@ -66,6 +66,9 @@ export default function IncomeScreen() {
               +12% vs last {period.toLowerCase()}
             </ThemedText>
           </View>
+          <ThemedText style={{ color: '#111' + '99', fontSize: 12, marginTop: 4 }}>
+            5% Platform Commission deducted
+          </ThemedText>
           <View style={styles.balanceActions}>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: '#111' }]}

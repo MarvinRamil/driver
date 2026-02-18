@@ -97,3 +97,18 @@ export interface CashJobEligibility {
   blockThreshold: number;
   allowedNegativeLimit: number;
 }
+
+export interface WithdrawalRequest {
+  id: string;
+  driverId: string;
+  walletId: string;
+  amount: number;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Failed';
+  bankAccountNumber: string;
+  bankName: string;
+  accountHolderName: string;
+  rejectionReason?: string | null;
+  xenditDisbursementId?: string | null;
+  requestedAt: Date;
+  processedAt?: Date | null;
+}

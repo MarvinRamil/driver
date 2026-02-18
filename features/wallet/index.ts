@@ -9,6 +9,7 @@ export { useTopUp } from './hooks/useTopUp';
 export { useCashEligibility } from './hooks/useCashEligibility';
 export { useTopUpHistory } from './hooks/useTopUpHistory';
 export { useWalletTopUpEvents } from './hooks/useWalletTopUpEvents';
+export { useWithdrawals } from './hooks/useWithdrawals';
 
 // Export services
 export { walletService } from './services/walletService';
@@ -22,5 +23,6 @@ export type {
   WalletTransaction,
   WalletBucket,
   WalletTransactionType,
+  WithdrawalRequest,
 } from './types';
 
