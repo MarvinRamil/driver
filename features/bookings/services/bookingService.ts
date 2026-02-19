@@ -614,6 +614,31 @@ class BookingService {
   }
 
   /**
+   * Get all bookings for a driver by ID.
+   * GET /api/bookings/driver/{driverId}
+   * Used by trip history and any feature that needs the driver's booking list.
+   */
+  async getBookingsByDriverId(driverId: string): Promise<Booking[]> {
+    const response = await apiClient.get<any>(`/api/bookings/driver/${driverId}`, {
+      requiresAuth: true,
+    });
+    if (!response.success || !response.data) {
+      return [];
+    }
+    const raw = (response.data as any)?.data ?? response.data;
+    const list = Array.isArray(raw) ? raw : [];
+    return list
+      .map((apiBooking: any) => {
+        try {
+          return this.mapApiBookingToBooking(apiBooking);
+        } catch {
+          return null;
+        }
+      })
+      .filter((b): b is Booking => b !== null);
+  }
+
+  /**
    * Update booking status
    * @param id - Booking ID
    * @param status - New status
