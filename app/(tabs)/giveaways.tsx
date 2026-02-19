@@ -65,9 +65,22 @@ export default function GiveawaysScreen() {
               <ThemedText style={[styles.date, { color: theme.textSecondary }]}>
                 Ends: {new Date(item.endDate).toLocaleString()}
               </ThemedText>
-              <TouchableOpacity style={[styles.joinButton, { backgroundColor: theme.primary }]} onPress={() => onEnter(item.id)}>
-                <ThemedText style={styles.joinText}>Join Giveaway</ThemedText>
-              </TouchableOpacity>
+              {!!item.dtiPermitNumber && (
+                <ThemedText style={[styles.date, { color: '#888', fontStyle: 'italic', marginTop: 4 }]}>
+                  DTI Fair Trade Permit No. {item.dtiPermitNumber}
+                </ThemedText>
+              )}
+              {item.entryMode === 'Manual' ? (
+                <TouchableOpacity style={[styles.joinButton, { backgroundColor: theme.primary }]} onPress={() => onEnter(item.id)}>
+                  <ThemedText style={styles.joinText}>Join Giveaway</ThemedText>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.joinButton, { backgroundColor: theme.card, shadowColor: 'transparent', elevation: 0 }]}>
+                  <ThemedText style={[styles.joinText, { color: theme.textSecondary, fontSize: 13, textAlign: 'center' }]}>
+                    Complete deliveries to earn automatic entries! (Max {item.maxEntriesPerDriver} entries)
+                  </ThemedText>
+                </View>
+              )}
             </View>
           ))
         )}

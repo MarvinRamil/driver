@@ -7,4 +7,8 @@ export interface Giveaway {
   rewardDetails?: string | null;
   isActive: boolean;
   imageUrl?: string | null;
+  entryMode: 'Manual' | 'PerDelivery';
+  maxEntriesPerDriver: number;
+  dtiPermitNumber?: string | null;
+  dtiPermitImageUrl?: string | null;
 }
