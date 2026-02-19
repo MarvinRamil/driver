@@ -85,7 +85,7 @@ export function useDashboardStats(): DashboardStats {
       incomingDeliveries,
       ongoingDeliveries,
       doneDeliveries,
-      walletBalance: canAccessWallet ? wallet?.balance ?? null : null,
+      walletBalance: canAccessWallet ? (wallet?.personalBalance ?? null) : null,
       canAccessWallet,
     };
   }, [allBookings, wallet, canAccessWallet]);

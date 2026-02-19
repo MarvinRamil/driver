@@ -43,7 +43,19 @@ export function useEarnings(driverId: string): UseEarningsReturn {
       }
 
       const data = await earningsService.getEarnings(driverId, startDate, endDate);
-      setEarnings(data);
+      // Use period-specific total for display (today / thisWeek / thisMonth from API)
+      const periodKey = period === 'Today' ? 'today' : period === 'Week' ? 'thisWeek' : 'thisMonth';
+      const periodTotal =
+        periodKey === 'today'
+          ? data.today
+          : periodKey === 'thisWeek'
+            ? data.thisWeek
+            : data.thisMonth;
+      setEarnings({
+        ...data,
+        totalEarnings:
+          typeof periodTotal === 'number' ? periodTotal : data.totalEarnings,
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch earnings';
       setError(errorMessage);
