@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, TextInput, Modal, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
@@ -7,6 +7,13 @@ import { useHistory, type HistoryFilter } from '@/features/history';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
+
+const FILTER_LABELS: Record<HistoryFilter, string> = {
+  'All': 'All time',
+  'Today': 'Today',
+  'This Week': 'This week',
+  'Last Month': 'Last month',
+};
 
 /**
  * History screen
@@ -18,8 +25,9 @@ export default function HistoryScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { trips, stats, isLoading, error, filter, setFilter, refresh, filteredTrips } = useHistory();
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
-  const filters: HistoryFilter[] = ['All', 'Today', 'This Week', 'Last Month'];
+  const filterOptions: HistoryFilter[] = ['All', 'Today', 'This Week', 'Last Month'];
 
   // Group trips by date
   const groupedTrips = React.useMemo(() => {
@@ -112,35 +120,62 @@ export default function HistoryScreen() {
         </View>
       </View>
 
-      {/* Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filtersContainer}
-        contentContainerStyle={styles.filtersContent}>
-        {filters.map((filterOption) => (
-          <TouchableOpacity
-            key={filterOption}
-            style={[
-              styles.filterChip,
-              filter === filterOption
-                ? { backgroundColor: theme.primary, borderColor: theme.primary }
-                : { backgroundColor: theme.surface, borderColor: theme.border },
-            ]}
-            onPress={() => setFilter(filterOption)}>
-            <ThemedText
-              style={[
-                styles.filterText,
-                {
-                  color: filter === filterOption ? '#111' : theme.text,
-                  fontWeight: filter === filterOption ? '600' : '500',
-                },
-              ]}>
-              {filterOption}
-            </ThemedText>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* Period dropdown */}
+      <View style={styles.filterDropdownRow}>
+        <ThemedText style={[styles.filterDropdownLabel, { color: theme.textSecondary }]}>
+          Period
+        </ThemedText>
+        <TouchableOpacity
+          style={[styles.filterDropdown, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          onPress={() => setShowFilterModal(true)}
+          activeOpacity={0.7}>
+          <ThemedText style={[styles.filterDropdownValue, { color: theme.text }]}>
+            {FILTER_LABELS[filter]}
+          </ThemedText>
+          <Ionicons name="chevron-down" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFilterModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterModal(false)}>
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]} onStartShouldSetResponder={() => true}>
+            <ThemedText style={[styles.modalTitle, { color: theme.text }]}>Time period</ThemedText>
+            {filterOptions.map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.modalOption,
+                  filter === option && { backgroundColor: theme.primary + '20' },
+                ]}
+                onPress={() => {
+                  setFilter(option);
+                  setShowFilterModal(false);
+                }}>
+                <ThemedText
+                  style={[
+                    styles.modalOptionText,
+                    { color: theme.text },
+                    filter === option && { color: theme.primary, fontWeight: '600' },
+                  ]}>
+                  {FILTER_LABELS[option]}
+                </ThemedText>
+                {filter === option && (
+                  <Ionicons name="checkmark" size={22} color={theme.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.modalCancel, { borderColor: theme.border }]}
+              onPress={() => setShowFilterModal(false)}>
+              <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Trip History List */}
       <ScrollView
@@ -333,21 +368,65 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
   },
-  filtersContainer: {
+  filterDropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  filterDropdownLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterDropdown: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    maxWidth: 220,
+  },
+  filterDropdownValue: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     marginBottom: 16,
   },
-  filtersContent: {
-    paddingHorizontal: 16,
-    gap: 8,
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
   },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
+  modalOptionText: {
+    fontSize: 16,
   },
-  filterText: {
-    fontSize: 14,
+  modalCancel: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
   },
   scrollView: {
     flex: 1,
