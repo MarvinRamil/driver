@@ -50,4 +50,3 @@ export interface DriverEarningsHistory {
   totalPlatformFee: number;
   totalNet: number;
 }
-
