@@ -11,6 +11,8 @@ import {
   Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as WebBrowser from "expo-web-browser";
+import { useAuth } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useWallet } from "@/features/wallet";
 import { useWalletTransactions } from "@/features/wallet";
@@ -26,6 +28,15 @@ import { ThemedView } from "@/shared/components/themed-view";
 import { ThemedText } from "@/shared/components/themed-text";
 import { Ionicons } from "@expo/vector-icons";
 import { useEarningsHistory } from "@/features/earnings";
+
+// In-app browser options for top-up invoice (match customer app payment flow)
+const TOP_UP_BROWSER_OPTIONS: WebBrowser.WebBrowserOpenOptions = {
+  presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+  enableBarCollapsing: false,
+  showTitle: true,
+  toolbarColor: "#ffcd36",
+  controlsColor: "#000000",
+};
 
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
@@ -187,20 +198,27 @@ export default function WalletScreen() {
       setTopUpModalVisible(false);
       if (topUp.xenditInvoiceUrl) {
         try {
-          const canOpen = await Linking.canOpenURL(topUp.xenditInvoiceUrl);
-          if (canOpen) {
-            await Linking.openURL(topUp.xenditInvoiceUrl);
-          } else {
+          await WebBrowser.openBrowserAsync(
+            topUp.xenditInvoiceUrl,
+            TOP_UP_BROWSER_OPTIONS,
+          );
+        } catch {
+          try {
+            const canOpen = await Linking.canOpenURL(topUp.xenditInvoiceUrl);
+            if (canOpen) {
+              await Linking.openURL(topUp.xenditInvoiceUrl);
+            } else {
+              Alert.alert(
+                "Top-up Created",
+                "Invoice was created, but your device cannot open the payment link.",
+              );
+            }
+          } catch {
             Alert.alert(
               "Top-up Created",
-              "Invoice was created, but your device cannot open the payment link.",
+              "Invoice created, but failed to open link automatically.",
             );
           }
-        } catch {
-          Alert.alert(
-            "Top-up Created",
-            "Invoice created, but failed to open link automatically.",
-          );
         }
       } else {
         Alert.alert(
@@ -284,14 +302,18 @@ export default function WalletScreen() {
     }
 
     try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        Alert.alert("Cannot Open Link", "Your device cannot open this URL.");
-        return;
-      }
-      await Linking.openURL(url);
+      await WebBrowser.openBrowserAsync(url, TOP_UP_BROWSER_OPTIONS);
     } catch {
-      Alert.alert("Open Failed", "Failed to open invoice URL.");
+      try {
+        const canOpen = await Linking.canOpenURL(url);
+        if (!canOpen) {
+          Alert.alert("Cannot Open Link", "Your device cannot open this URL.");
+          return;
+        }
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert("Open Failed", "Failed to open invoice URL.");
+      }
     }
   };
 
