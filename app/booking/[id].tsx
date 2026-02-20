@@ -72,7 +72,7 @@ export default function BookingDetailsScreen() {
       // Fetch booking
       const bookingData = await bookingService.getBookingById(params.id);
       setBooking(bookingData);
-      
+
       // Only fetch dispatch if driver is under operator
       if (isDriverUnderOperator) {
         try {
@@ -185,7 +185,7 @@ export default function BookingDetailsScreen() {
       // Update booking status to DriverAssigned - driver going to pickup location
       const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'DriverAssigned');
       setBooking(updatedBooking);
-      
+
       Alert.alert('Success', 'Transport started. Navigate to the pickup location.', [{ text: 'OK' }]);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
@@ -206,7 +206,7 @@ export default function BookingDetailsScreen() {
       // Update booking status to PickedUp
       const updatedBooking = await bookingService.updateBookingStatus(booking.id, 'PickedUp');
       setBooking(updatedBooking);
-      
+
       // Refresh dispatch if driver is under operator
       if (isDriverUnderOperator) {
         setTimeout(async () => {
@@ -220,7 +220,7 @@ export default function BookingDetailsScreen() {
           }
         }, 500);
       }
-      
+
       Alert.alert('Success', 'Cargo marked as picked up. You can now proceed to delivery.', [{ text: 'OK' }]);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update status';
@@ -232,22 +232,32 @@ export default function BookingDetailsScreen() {
 
   const handleSingleStopPickupComplete = async (pickupStopId: string) => {
     if (!booking || isUpdatingStatus) return;
-    
+
     setIsUpdatingStatus(true);
     try {
+      // For lesser clicks, if stop is Pending or OnTheWay, simulate Arrive first
+      const stop = orderedStops.find((s) => s.id === pickupStopId);
+      if (stop && (stop.status === 'Pending' || stop.status === 'OnTheWay')) {
+        try {
+          await bookingService.arriveStop(booking.id, pickupStopId);
+        } catch (err) {
+          console.warn('Arrive failed, continuing to complete:', err);
+        }
+      }
+
       // Complete the pickup stop
       const updated = await bookingService.completeStop(booking.id, pickupStopId);
       setBooking(updated);
-      
+
       // Update booking status to PickedUp (not InTransit for single-stop)
       const bookingUpdated = await bookingService.updateBookingStatus(booking.id, 'PickedUp');
       setBooking(bookingUpdated);
-      
+
       if (isDriverUnderOperator) {
         const d = await dispatchService.getDispatchByBookingId(booking.id).catch(() => null);
         if (d) setDispatch(d);
       }
-      
+
       Alert.alert('Success', 'Cargo marked as picked up. You can now proceed to delivery.', [{ text: 'OK' }]);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to complete pickup');
@@ -329,8 +339,8 @@ export default function BookingDetailsScreen() {
       Alert.alert('Success', 'Stop marked as arrived.', [{ text: 'OK' }]);
     } catch (err) {
       console.error(`[BookingDetails] Failed to mark stop as arrived:`, err);
-      const errorMessage = err instanceof Error 
-        ? err.message 
+      const errorMessage = err instanceof Error
+        ? err.message
         : typeof err === 'object' && err !== null && 'message' in err
           ? String((err as { message: unknown }).message)
           : 'Failed to update stop status. Please try again.';
@@ -347,11 +357,20 @@ export default function BookingDetailsScreen() {
       // Find the stop being completed to check if it's a pickup
       const stop = orderedStops.find((s) => s.id === stopId);
       const isPickupStop = stop?.type === 'Pickup';
-      
+
+      // For lesser clicks, if stop is Pending or OnTheWay, simulate Arrive first
+      if (stop && (stop.status === 'Pending' || stop.status === 'OnTheWay')) {
+        try {
+          await bookingService.arriveStop(booking.id, stopId);
+        } catch (err) {
+          console.warn('Arrive failed, continuing to complete:', err);
+        }
+      }
+
       // Complete the stop
       const updated = await bookingService.completeStop(booking.id, stopId);
       setBooking(updated);
-      
+
       // If it's a pickup stop, also update booking status to InTransit
       if (isPickupStop) {
         try {
@@ -362,7 +381,7 @@ export default function BookingDetailsScreen() {
           // Don't fail the whole operation if status update fails
         }
       }
-      
+
       if (isDriverUnderOperator) {
         const d = await dispatchService.getDispatchByBookingId(booking.id).catch(() => null);
         if (d) setDispatch(d);
@@ -377,7 +396,7 @@ export default function BookingDetailsScreen() {
 
   const handleCancelBooking = async (reason: CancellationReason, customReason?: string) => {
     if (!booking || isUpdatingStatus) return;
-    
+
     try {
       const updated = await bookingService.cancelBooking(booking.id, reason, customReason);
       setBooking(updated);
@@ -532,7 +551,7 @@ export default function BookingDetailsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        
+
         {/* Booking Header Card */}
         <View style={[styles.bookingHeaderCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.bookingHeaderTop}>
@@ -576,7 +595,7 @@ export default function BookingDetailsScreen() {
           <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
             Route
           </ThemedText>
-          
+
           <View style={styles.timeline}>
             <View style={[styles.timelineLine, { backgroundColor: theme.border }]} />
 
@@ -651,7 +670,7 @@ export default function BookingDetailsScreen() {
           <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
             Cargo Details
           </ThemedText>
-          
+
           <View style={styles.detailsGrid}>
             <View style={styles.detailItem}>
               <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
@@ -661,7 +680,7 @@ export default function BookingDetailsScreen() {
                 {booking.truckType}
               </ThemedText>
             </View>
-            
+
             {booking.weightKg && (
               <View style={styles.detailItem}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
@@ -672,7 +691,7 @@ export default function BookingDetailsScreen() {
                 </ThemedText>
               </View>
             )}
-            
+
             {booking.size && (
               <View style={styles.detailItem}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
@@ -739,7 +758,7 @@ export default function BookingDetailsScreen() {
                 Call Customer
               </ThemedText>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: theme.primary }]}
               onPress={handleNavigate}>
@@ -816,24 +835,8 @@ export default function BookingDetailsScreen() {
                   </View>
                 )}
 
-                {/* Mark Arrived at Pickup - Show when DriverAssigned and pickup is Pending */}
-                {isDriverAssigned && pickupStatus === 'Pending' && pickupStop && (
-                  <TouchableOpacity
-                    style={[
-                      styles.statusUpdateButton,
-                      { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 },
-                    ]}
-                    onPress={() => handleArriveStop(pickupStop.id)}
-                    disabled={isUpdatingStatus}>
-                    <Ionicons name="location" size={24} color={theme.surface} />
-                    <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
-                      {isUpdatingStatus ? 'Updating...' : 'Mark Arrived at Pickup'}
-                    </ThemedText>
-                  </TouchableOpacity>
-                )}
-
-                {/* Mark as Picked Up - Show when pickup is Arrived */}
-                {pickupStatus === 'Arrived' && pickupStop && (
+                {/* Mark as Picked Up - Show when DriverAssigned and pickup is not completed */}
+                {isDriverAssigned && (pickupStatus === 'Pending' || pickupStatus === 'Arrived') && pickupStop && (
                   <TouchableOpacity
                     style={[
                       styles.statusUpdateButton,
@@ -858,24 +861,8 @@ export default function BookingDetailsScreen() {
                   </View>
                 )}
 
-                {/* Mark Arrived at Delivery - Show when PickedUp and delivery is Pending */}
-                {(isPickedUp || (pickupStatus === 'Completed' && !isDriverAssigned)) && deliveryStatus === 'Pending' && deliveryStop && (
-                  <TouchableOpacity
-                    style={[
-                      styles.statusUpdateButton,
-                      { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 },
-                    ]}
-                    onPress={() => handleArriveStop(deliveryStop.id)}
-                    disabled={isUpdatingStatus}>
-                    <Ionicons name="location" size={24} color={theme.surface} />
-                    <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
-                      {isUpdatingStatus ? 'Updating...' : 'Mark Arrived at Delivery'}
-                    </ThemedText>
-                  </TouchableOpacity>
-                )}
-
-                {/* Complete Delivery - Show when delivery is Arrived */}
-                {deliveryStatus === 'Arrived' && deliveryStop && (
+                {/* Complete Delivery & Upload POD - Show when PickedUp and delivery is not completed */}
+                {(isPickedUp || (pickupStatus === 'Completed' && !isDriverAssigned)) && (deliveryStatus === 'Pending' || deliveryStatus === 'Arrived') && deliveryStop && (
                   <View style={styles.statusUpdateContainer}>
                     <TouchableOpacity
                       style={[
@@ -886,7 +873,7 @@ export default function BookingDetailsScreen() {
                       disabled={isUpdatingStatus}>
                       <Ionicons name="checkmark-circle" size={24} color={theme.surface} />
                       <ThemedText style={[styles.statusUpdateButtonText, { color: theme.surface }]}>
-                        {isUpdatingStatus ? 'Updating...' : 'Complete Delivery'}
+                        {isUpdatingStatus ? 'Updating...' : 'Mark as Delivered (Completed)'}
                       </ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -974,7 +961,7 @@ export default function BookingDetailsScreen() {
                       // Find pickup stop to check if it's completed
                       const pickupStop = orderedStops.find((s) => s.type === 'Pickup');
                       const pickupCompleted = pickupStop?.status === 'Completed';
-                      
+
                       // Hide dropoff stops if they're already completed or if pickup is not completed
                       if (stop.type === 'Dropoff') {
                         const stopStatus = stop.status ?? 'Pending';
@@ -985,90 +972,90 @@ export default function BookingDetailsScreen() {
                       return true;
                     })
                     .map((stop) => {
-                    const stopStatus = stop.status ?? 'Pending';
-                    const canShowOnTheWay = stopStatus === 'Pending' && stop.type === 'Dropoff';
-                    // For pickup: show "Mark Arrived" when Pending
-                    // For dropoff: show "Mark Arrived" when OnTheWay (already in transit) - hide when "On The Way" button is showing
-                    const canArrive = stop.type === 'Pickup' 
-                      ? stopStatus === 'Pending' 
-                      : stopStatus === 'OnTheWay';
-                    const canComplete = stopStatus === 'Arrived';
-                    const isStopCompleted = stopStatus === 'Completed';
-                    const showPodAction = stop.type === 'Dropoff' && !isStopCompleted;
+                      const stopStatus = stop.status ?? 'Pending';
+                      const canShowOnTheWay = stopStatus === 'Pending' && stop.type === 'Dropoff';
+                      // For pickup: show "Mark Arrived" when Pending
+                      // For dropoff: show "Mark Arrived" when OnTheWay (already in transit) - hide when "On The Way" button is showing
+                      const canArrive = stop.type === 'Pickup'
+                        ? stopStatus === 'Pending'
+                        : stopStatus === 'OnTheWay';
+                      const canComplete = stopStatus === 'Arrived';
+                      const isStopCompleted = stopStatus === 'Completed';
+                      const showPodAction = stop.type === 'Dropoff' && !isStopCompleted;
 
-                    return (
-                      <View
-                        key={`stop-action-${stop.id || `${stop.type}-${stop.sequence}`}`}
-                        style={[styles.stopActionCard, { borderColor: theme.border, backgroundColor: theme.surface }]}
-                      >
-                        <View style={styles.stopActionHeader}>
-                          <ThemedText style={[styles.stopActionTitle, { color: theme.text }]}>
-                            {stop.type === 'Pickup' ? 'Pickup' : `Dropoff ${stop.sequence > 0 ? stop.sequence : ''}`.trim()}
+                      return (
+                        <View
+                          key={`stop-action-${stop.id || `${stop.type}-${stop.sequence}`}`}
+                          style={[styles.stopActionCard, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                        >
+                          <View style={styles.stopActionHeader}>
+                            <ThemedText style={[styles.stopActionTitle, { color: theme.text }]}>
+                              {stop.type === 'Pickup' ? 'Pickup' : `Dropoff ${stop.sequence > 0 ? stop.sequence : ''}`.trim()}
+                            </ThemedText>
+                            <ThemedText style={[styles.timelineCoords, { color: theme.textSecondary }]}>
+                              {stopStatus}
+                            </ThemedText>
+                          </View>
+                          <ThemedText style={[styles.stopActionAddress, { color: theme.textSecondary }]}>
+                            {stop.address}
                           </ThemedText>
-                          <ThemedText style={[styles.timelineCoords, { color: theme.textSecondary }]}>
-                            {stopStatus}
-                          </ThemedText>
+                          <View style={styles.stopActionButtons}>
+                            {canShowOnTheWay && (
+                              <TouchableOpacity
+                                style={[styles.stopActionButton, { backgroundColor: theme.info, opacity: isUpdatingStatus ? 0.6 : 1 }]}
+                                onPress={() => handleOnTheWayStop(stop.id)}
+                                disabled={isUpdatingStatus}
+                              >
+                                <Ionicons name="navigate-outline" size={16} color={theme.surface} />
+                                <ThemedText style={[styles.stopActionButtonText, { color: theme.surface }]}>
+                                  On The Way
+                                </ThemedText>
+                              </TouchableOpacity>
+                            )}
+                            {canArrive && (
+                              <TouchableOpacity
+                                style={[styles.stopActionButton, { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 }]}
+                                onPress={() => handleArriveStop(stop.id)}
+                                disabled={isUpdatingStatus}
+                              >
+                                <ThemedText style={[styles.stopActionButtonText, { color: theme.surface }]}>
+                                  Mark Arrived
+                                </ThemedText>
+                              </TouchableOpacity>
+                            )}
+                            {canComplete && (
+                              <TouchableOpacity
+                                style={[styles.stopActionButton, { backgroundColor: theme.success, opacity: isUpdatingStatus ? 0.6 : 1 }]}
+                                onPress={() => handleCompleteStop(stop.id)}
+                                disabled={isUpdatingStatus}
+                              >
+                                <ThemedText style={[styles.stopActionButtonText, { color: theme.surface }]}>
+                                  Complete Stop
+                                </ThemedText>
+                              </TouchableOpacity>
+                            )}
+                            {showPodAction && (
+                              <TouchableOpacity
+                                style={[styles.stopActionButton, { backgroundColor: theme.primary, opacity: isUpdatingStatus ? 0.6 : 1 }]}
+                                onPress={() => handleOpenPodModal(stop.id)}
+                                disabled={isUpdatingStatus}
+                              >
+                                <ThemedText style={[styles.stopActionButtonText, { color: theme.primaryText }]}>
+                                  Upload POD
+                                </ThemedText>
+                              </TouchableOpacity>
+                            )}
+                            {isStopCompleted && (
+                              <View style={[styles.stopCompletedBadge, { borderColor: theme.success }]}>
+                                <ThemedText style={[styles.timelineCoords, { color: theme.success }]}>
+                                  Completed
+                                </ThemedText>
+                              </View>
+                            )}
+                          </View>
                         </View>
-                        <ThemedText style={[styles.stopActionAddress, { color: theme.textSecondary }]}>
-                          {stop.address}
-                        </ThemedText>
-                        <View style={styles.stopActionButtons}>
-                          {canShowOnTheWay && (
-                            <TouchableOpacity
-                              style={[styles.stopActionButton, { backgroundColor: theme.info, opacity: isUpdatingStatus ? 0.6 : 1 }]}
-                              onPress={() => handleOnTheWayStop(stop.id)}
-                              disabled={isUpdatingStatus}
-                            >
-                              <Ionicons name="navigate-outline" size={16} color={theme.surface} />
-                              <ThemedText style={[styles.stopActionButtonText, { color: theme.surface }]}>
-                                On The Way
-                              </ThemedText>
-                            </TouchableOpacity>
-                          )}
-                          {canArrive && (
-                            <TouchableOpacity
-                              style={[styles.stopActionButton, { backgroundColor: theme.warning, opacity: isUpdatingStatus ? 0.6 : 1 }]}
-                              onPress={() => handleArriveStop(stop.id)}
-                              disabled={isUpdatingStatus}
-                            >
-                              <ThemedText style={[styles.stopActionButtonText, { color: theme.surface }]}>
-                                Mark Arrived
-                              </ThemedText>
-                            </TouchableOpacity>
-                          )}
-                          {canComplete && (
-                            <TouchableOpacity
-                              style={[styles.stopActionButton, { backgroundColor: theme.success, opacity: isUpdatingStatus ? 0.6 : 1 }]}
-                              onPress={() => handleCompleteStop(stop.id)}
-                              disabled={isUpdatingStatus}
-                            >
-                              <ThemedText style={[styles.stopActionButtonText, { color: theme.surface }]}>
-                                Complete Stop
-                              </ThemedText>
-                            </TouchableOpacity>
-                          )}
-                          {showPodAction && (
-                            <TouchableOpacity
-                              style={[styles.stopActionButton, { backgroundColor: theme.primary, opacity: isUpdatingStatus ? 0.6 : 1 }]}
-                              onPress={() => handleOpenPodModal(stop.id)}
-                              disabled={isUpdatingStatus}
-                            >
-                              <ThemedText style={[styles.stopActionButtonText, { color: theme.primaryText }]}>
-                                Upload POD
-                              </ThemedText>
-                            </TouchableOpacity>
-                          )}
-                          {isStopCompleted && (
-                            <View style={[styles.stopCompletedBadge, { borderColor: theme.success }]}>
-                              <ThemedText style={[styles.timelineCoords, { color: theme.success }]}>
-                                Completed
-                              </ThemedText>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                    );
-                  })}
+                      );
+                    })}
                 </View>
               )}
             </View>
