@@ -23,6 +23,7 @@ import {
   useWalletTopUpEvents,
   walletService,
   useWithdrawals,
+  useSavedWithdrawalMethods,
 } from "@/features/wallet";
 import { ThemedView } from "@/shared/components/themed-view";
 import { ThemedText } from "@/shared/components/themed-text";
@@ -39,6 +40,7 @@ const TOP_UP_BROWSER_OPTIONS: WebBrowser.WebBrowserOpenOptions = {
 };
 
 export default function WalletScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { user } = useAuth();
@@ -63,6 +65,9 @@ export default function WalletScreen() {
   const [bankAccount, setBankAccount] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
+  const [saveBankAccount, setSaveBankAccount] = useState(false);
+  const { methods: savedMethods, isLoading: isLoadingSavedMethods, create: createSavedMethod } = useSavedWithdrawalMethods();
   const [transferFrom, setTransferFrom] = useState<"Personal" | "TopUp">(
     "Personal",
   );
@@ -272,15 +277,56 @@ export default function WalletScreen() {
       Alert.alert("Invalid Amount", "Please enter a valid amount.");
       return;
     }
-    if (!bankAccount || !accountHolder) {
-      Alert.alert("Missing Details", "Please fill in all bank details.");
-      return;
+
+    // If using saved method, no need to validate manual bank details
+    if (!selectedSavedMethodId) {
+      if (!bankAccount || !accountHolder || !bankName) {
+        Alert.alert("Missing Details", "Please fill in all bank details or select a saved method.");
+        return;
+      }
     }
 
     setIsWithdrawing(true);
     try {
-      await requestWithdrawal(amount, bankAccount, bankName, accountHolder);
+      // If saving bank account, create saved method first
+      let savedMethodIdToUse = selectedSavedMethodId;
+      if (saveBankAccount && !selectedSavedMethodId && bankAccount && bankName && accountHolder) {
+        try {
+          const newSavedMethod = await createSavedMethod({
+            bankName,
+            bankCode: bankName, // Use bank name as bank code (matches backend behavior)
+            accountNumber: bankAccount,
+            accountHolderName: accountHolder,
+            isDefault: savedMethods.length === 0, // Set as default if first method
+          });
+          savedMethodIdToUse = newSavedMethod.id;
+        } catch (saveErr) {
+          console.error('[Wallet] Failed to save bank account:', saveErr);
+          // Continue with withdrawal even if save fails
+          Alert.alert(
+            "Warning",
+            "Withdrawal will proceed, but failed to save bank account. You can save it later."
+          );
+        }
+      }
+
+      // Request withdrawal with saved method or manual details
+      await requestWithdrawal(
+        amount,
+        savedMethodIdToUse || undefined,
+        savedMethodIdToUse ? undefined : bankAccount,
+        savedMethodIdToUse ? undefined : bankName,
+        savedMethodIdToUse ? undefined : accountHolder
+      );
+
+      // Reset form
       setWithdrawModalVisible(false);
+      setSelectedSavedMethodId(null);
+      setSaveBankAccount(false);
+      setBankAccount("");
+      setAccountHolder("");
+      setBankName("BPI");
+
       Alert.alert(
         "Request Sent",
         "Your withdrawal request has been submitted.",
@@ -999,6 +1045,15 @@ export default function WalletScreen() {
             >
               Withdrawals
             </ThemedText>
+            <TouchableOpacity
+              onPress={() => router.push('/wallet/saved-withdrawal-methods')}
+              style={styles.headerLink}
+            >
+              <ThemedText style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>
+                Manage Accounts
+              </ThemedText>
+              <Ionicons name="chevron-forward" size={16} color={theme.primary} />
+            </TouchableOpacity>
           </View>
           {withdrawals.length === 0 ? (
             <View
@@ -1225,13 +1280,32 @@ export default function WalletScreen() {
         visible={withdrawModalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setWithdrawModalVisible(false)}
+        onRequestClose={() => {
+          setWithdrawModalVisible(false);
+          setSelectedSavedMethodId(null);
+          setSaveBankAccount(false);
+        }}
       >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
-            <ThemedText type="subtitle" style={{ color: theme.text }}>
-              Request Withdrawal
-            </ThemedText>
+          <ScrollView
+            style={[styles.modalCard, { backgroundColor: theme.surface }]}
+            contentContainerStyle={styles.modalCardContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle" style={{ color: theme.text }}>
+                Request Withdrawal
+              </ThemedText>
+              <TouchableOpacity
+                onPress={() => {
+                  setWithdrawModalVisible(false);
+                  setSelectedSavedMethodId(null);
+                  setSaveBankAccount(false);
+                }}
+              >
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
 
             <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
               Amount
@@ -1252,78 +1326,228 @@ export default function WalletScreen() {
               placeholderTextColor={theme.textMuted}
             />
 
-            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
-              Bank Name
-            </ThemedText>
-            <TextInput
-              value={bankName}
-              onChangeText={setBankName}
-              style={[
-                styles.input,
-                {
-                  borderColor: theme.border,
-                  color: theme.text,
-                  marginBottom: 16,
-                },
-              ]}
-              placeholder="e.g. BPI, BDO, GCASH"
-              placeholderTextColor={theme.textMuted}
-            />
+            {/* Saved Methods Selector */}
+            {savedMethods.length > 0 && (
+              <>
+                <ThemedText style={{ color: theme.textSecondary, marginBottom: 8 }}>
+                  Use Saved Bank Account
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 16 }}
+                >
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedSavedMethodId(null);
+                      setBankAccount("");
+                      setAccountHolder("");
+                      setBankName("BPI");
+                    }}
+                    style={[
+                      styles.savedMethodCard,
+                      {
+                        backgroundColor: selectedSavedMethodId === null ? theme.primary + '20' : theme.surface,
+                        borderColor: selectedSavedMethodId === null ? theme.primary : theme.border,
+                        marginRight: 8,
+                      },
+                    ]}
+                  >
+                    <ThemedText style={{ color: theme.text, fontWeight: '600', fontSize: 12 }}>
+                      Manual Entry
+                    </ThemedText>
+                  </TouchableOpacity>
+                  {savedMethods.map((method) => (
+                    <TouchableOpacity
+                      key={method.id}
+                      onPress={() => {
+                        setSelectedSavedMethodId(method.id);
+                        setBankAccount("");
+                        setAccountHolder("");
+                        setBankName("");
+                      }}
+                      style={[
+                        styles.savedMethodCard,
+                        {
+                          backgroundColor: selectedSavedMethodId === method.id ? theme.primary + '20' : theme.surface,
+                          borderColor: selectedSavedMethodId === method.id ? theme.primary : theme.border,
+                          marginRight: 8,
+                        },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {method.isDefault && (
+                          <Ionicons name="star" size={14} color={theme.primary} />
+                        )}
+                        <ThemedText style={{ color: theme.text, fontWeight: '600', fontSize: 12 }}>
+                          {method.bankName}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>
+                        {method.maskedAccountNumber}
+                      </ThemedText>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 10, marginTop: 2 }}>
+                        {method.accountHolderName}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )}
 
-            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
-              Account Number
-            </ThemedText>
-            <TextInput
-              value={bankAccount}
-              onChangeText={setBankAccount}
-              keyboardType="numeric"
-              style={[
-                styles.input,
-                {
-                  borderColor: theme.border,
-                  color: theme.text,
-                  marginBottom: 16,
-                },
-              ]}
-              placeholder="Account Number"
-              placeholderTextColor={theme.textMuted}
-            />
+            {/* Manual Bank Details (shown when no saved method selected or when "Manual Entry" is selected) */}
+            {!selectedSavedMethodId && (
+              <>
+                <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                  Bank Name
+                </ThemedText>
+                <TextInput
+                  value={bankName}
+                  onChangeText={setBankName}
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: theme.border,
+                      color: theme.text,
+                      marginBottom: 16,
+                    },
+                  ]}
+                  placeholder="e.g. BPI, BDO, GCASH"
+                  placeholderTextColor={theme.textMuted}
+                />
 
-            <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
-              Account Holder Name
-            </ThemedText>
-            <TextInput
-              value={accountHolder}
-              onChangeText={setAccountHolder}
-              style={[
-                styles.input,
-                {
-                  borderColor: theme.border,
-                  color: theme.text,
-                  marginBottom: 24,
-                },
-              ]}
-              placeholder="Account Name"
-              placeholderTextColor={theme.textMuted}
-            />
+                <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                  Account Number
+                </ThemedText>
+                <TextInput
+                  value={bankAccount}
+                  onChangeText={setBankAccount}
+                  keyboardType="numeric"
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: theme.border,
+                      color: theme.text,
+                      marginBottom: 16,
+                    },
+                  ]}
+                  placeholder="Account Number"
+                  placeholderTextColor={theme.textMuted}
+                />
+
+                <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                  Account Holder Name
+                </ThemedText>
+                <TextInput
+                  value={accountHolder}
+                  onChangeText={setAccountHolder}
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: theme.border,
+                      color: theme.text,
+                      marginBottom: 16,
+                    },
+                  ]}
+                  placeholder="Account Name"
+                  placeholderTextColor={theme.textMuted}
+                />
+
+                {/* Save Bank Account Checkbox */}
+                <TouchableOpacity
+                  onPress={() => setSaveBankAccount(!saveBankAccount)}
+                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        backgroundColor: saveBankAccount ? theme.primary : 'transparent',
+                        borderColor: saveBankAccount ? theme.primary : theme.border,
+                      },
+                    ]}
+                  >
+                    {saveBankAccount && (
+                      <Ionicons name="checkmark" size={16} color="#fff" />
+                    )}
+                  </View>
+                  <ThemedText style={{ color: theme.text, marginLeft: 8, fontSize: 14 }}>
+                    Save this bank account for future withdrawals
+                  </ThemedText>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Selected Saved Method Display */}
+            {selectedSavedMethodId && (
+              <View
+                style={[
+                  styles.selectedMethodDisplay,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    marginBottom: 16,
+                  },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <ThemedText style={{ color: theme.text, fontWeight: '600' }}>
+                    Selected Bank Account
+                  </ThemedText>
+                  <TouchableOpacity
+                    onPress={() => setSelectedSavedMethodId(null)}
+                  >
+                    <ThemedText style={{ color: theme.primary, fontSize: 12 }}>
+                      Change
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+                {(() => {
+                  const selectedMethod = savedMethods.find(m => m.id === selectedSavedMethodId);
+                  if (!selectedMethod) return null;
+                  return (
+                    <>
+                      <ThemedText style={{ color: theme.text, fontSize: 14 }}>
+                        {selectedMethod.bankName}
+                      </ThemedText>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 13, marginTop: 4 }}>
+                        {selectedMethod.maskedAccountNumber}
+                      </ThemedText>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 13 }}>
+                        {selectedMethod.accountHolderName}
+                      </ThemedText>
+                    </>
+                  );
+                })()}
+              </View>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                onPress={() => setWithdrawModalVisible(false)}
+                onPress={() => {
+                  setWithdrawModalVisible(false);
+                  setSelectedSavedMethodId(null);
+                  setSaveBankAccount(false);
+                }}
                 style={[styles.modalBtn, { borderColor: theme.border }]}
               >
                 <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleWithdrawal}
-                style={[styles.modalBtn, { backgroundColor: theme.primary }]}
+                disabled={isWithdrawing}
+                style={[
+                  styles.modalBtn,
+                  { backgroundColor: theme.primary },
+                  isWithdrawing && { opacity: 0.6 },
+                ]}
               >
                 <ThemedText style={{ color: "#111" }}>
                   {isWithdrawing ? "Submitting..." : "Withdraw"}
                 </ThemedText>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
     </ThemedView>
@@ -1600,6 +1824,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-end",
   },
+  headerLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   activityTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -1692,6 +1921,36 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     gap: 12,
+    maxHeight: "90%",
+  },
+  modalCardContent: {
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  savedMethodCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    minWidth: 120,
+    alignItems: "center",
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectedMethodDisplay: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
   },
   input: {
     borderWidth: 1,

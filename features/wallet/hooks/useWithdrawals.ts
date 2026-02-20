@@ -8,7 +8,13 @@ interface UseWithdrawalsReturn {
     isLoading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
-    requestWithdrawal: (amount: number, bankAccountNumber: string, bankName: string, accountHolderName: string) => Promise<void>;
+    requestWithdrawal: (
+        amount: number,
+        savedWithdrawalMethodId?: string | null,
+        bankAccountNumber?: string,
+        bankName?: string,
+        accountHolderName?: string
+    ) => Promise<void>;
 }
 
 export function useWithdrawals(): UseWithdrawalsReturn {
@@ -40,13 +46,21 @@ export function useWithdrawals(): UseWithdrawalsReturn {
 
     const requestWithdrawal = useCallback(async (
         amount: number,
-        bankAccountNumber: string,
-        bankName: string,
-        accountHolderName: string
+        savedWithdrawalMethodId?: string | null,
+        bankAccountNumber?: string,
+        bankName?: string,
+        accountHolderName?: string
     ) => {
         if (!user) throw new Error('User not authenticated');
 
-        await walletService.requestWithdrawal(user.id, amount, bankAccountNumber, bankName, accountHolderName);
+        await walletService.requestWithdrawal(
+            user.id,
+            amount,
+            savedWithdrawalMethodId,
+            bankAccountNumber,
+            bankName,
+            accountHolderName
+        );
         await fetchRequests();
     }, [user, fetchRequests]);
 

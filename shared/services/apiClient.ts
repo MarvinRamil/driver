@@ -141,12 +141,22 @@ class ApiClient {
       }
       return false;
     }
+    
+    // SECURITY: Include device fingerprinting for enhanced security (OWASP Top 10 - A07:2021)
+    const { getDeviceId, getDeviceFingerprint } = await import('./deviceFingerprint');
+    const deviceId = await getDeviceId();
+    const deviceFingerprint = await getDeviceFingerprint();
+    
     const url = `${this.config.baseURL}/api/auth/refresh`;
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({ 
+          refreshToken,
+          deviceId,
+          deviceFingerprint,
+        }),
       });
       const text = await res.text();
       const data = (() => {

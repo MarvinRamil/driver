@@ -175,28 +175,42 @@ class WalletService {
    * POST /api/drivers/{driverId}/wallet/withdraw
    * @param driverId - Driver ID
    * @param amount - Withdrawal amount
-   * @param bankAccountNumber - Bank account number
-   * @param bankName - Bank name
-   * @param accountHolderName - Account holder name
+   * @param savedWithdrawalMethodId - Optional saved withdrawal method ID (if using saved method)
+   * @param bankAccountNumber - Bank account number (required if not using saved method)
+   * @param bankName - Bank name (required if not using saved method)
+   * @param accountHolderName - Account holder name (required if not using saved method)
    * @returns Promise resolving when withdrawal is requested
    */
   async requestWithdrawal(
     driverId: string,
     amount: number,
-    bankAccountNumber: string,
-    bankName: string,
-    accountHolderName: string
+    savedWithdrawalMethodId?: string | null,
+    bankAccountNumber?: string,
+    bankName?: string,
+    accountHolderName?: string
   ): Promise<void> {
     try {
+      const body: any = {
+        amount,
+      };
+
+      // If using saved withdrawal method, include its ID
+      if (savedWithdrawalMethodId) {
+        body.savedWithdrawalMethodId = savedWithdrawalMethodId;
+      } else {
+        // Otherwise, require manual bank details
+        if (!bankAccountNumber || !bankName || !accountHolderName) {
+          throw new Error('Bank account details are required when not using a saved withdrawal method');
+        }
+        body.bankAccountNumber = bankAccountNumber;
+        body.bankName = bankName;
+        body.accountHolderName = accountHolderName;
+      }
+
       const response = await apiClient.post(
         `/api/drivers/${driverId}/wallet/withdraw`,
         {
-          body: {
-            amount,
-            bankAccountNumber,
-            bankName,
-            accountHolderName,
-          },
+          body,
           requiresAuth: true,
         }
       );

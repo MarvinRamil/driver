@@ -112,3 +112,36 @@ export interface WithdrawalRequest {
   requestedAt: Date;
   processedAt?: Date | null;
 }
+
+/**
+ * Saved Withdrawal Method types
+ */
+export interface SavedWithdrawalMethod {
+  id: string;
+  driverId: string;
+  bankName: string;
+  bankCode: string;
+  maskedAccountNumber: string; // Last 4 digits only (e.g., "****1234")
+  accountHolderName: string;
+  isDefault: boolean;
+  isActive: boolean;
+  lastUsedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateSavedWithdrawalMethodRequest {
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountHolderName: string;
+  isDefault?: boolean;
+}
+
+export interface UpdateSavedWithdrawalMethodRequest {
+  bankName?: string;
+  bankCode?: string;
+  accountNumber?: string;
+  accountHolderName?: string;
+  isDefault?: boolean;
+}
