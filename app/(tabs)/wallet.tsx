@@ -66,6 +66,7 @@ export default function WalletScreen() {
   const [transferFrom, setTransferFrom] = useState<"Personal" | "TopUp">(
     "Personal",
   );
+  const [showEarningsBreakdown, setShowEarningsBreakdown] = useState(false);
 
   const { history, refresh: refreshHistory } = useEarningsHistory(
     user?.id ?? "",
@@ -419,16 +420,29 @@ export default function WalletScreen() {
           </View>
         </View>
 
-        {/* Earnings & Fees Breakdown */}
+        {/* Earnings & Fees Breakdown (collapsed by default; expand via header or "View breakdown" in Recent Activity) */}
         <View style={styles.earningsBreakdownSection}>
-          <ThemedText
-            style={[
-              styles.sectionTitle,
-              { color: theme.text, paddingHorizontal: 24, marginBottom: 12 },
-            ]}
+          <TouchableOpacity
+            onPress={() => setShowEarningsBreakdown((v) => !v)}
+            style={{ paddingHorizontal: 24, marginBottom: showEarningsBreakdown ? 12 : 0 }}
           >
-            Earnings & Fees Breakdown
-          </ThemedText>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <ThemedText
+                style={[
+                  styles.sectionTitle,
+                  { color: theme.text },
+                ]}
+              >
+                Earnings & Fees Breakdown
+              </ThemedText>
+              <Ionicons
+                name={showEarningsBreakdown ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.textSecondary}
+              />
+            </View>
+          </TouchableOpacity>
+          {showEarningsBreakdown && (
           <View
             style={[
               styles.earningsCard,
@@ -557,6 +571,7 @@ export default function WalletScreen() {
               </View>
             </View>
           </View>
+          )}
         </View>
 
         {/* Top-up wallet status */}
@@ -681,11 +696,18 @@ export default function WalletScreen() {
             >
               Recent Activity
             </ThemedText>
-            <TouchableOpacity>
-              <ThemedText style={[styles.seeAllText, { color: theme.primary }]}>
-                See All
-              </ThemedText>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TouchableOpacity onPress={() => setShowEarningsBreakdown((v) => !v)}>
+                <ThemedText style={[styles.seeAllText, { color: theme.primary }]}>
+                  {showEarningsBreakdown ? "Hide breakdown" : "View breakdown"}
+                </ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ marginLeft: 16 }}>
+                <ThemedText style={[styles.seeAllText, { color: theme.primary }]}>
+                  See All
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {error ? (
