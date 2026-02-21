@@ -137,6 +137,20 @@ export default function WalletScreen() {
     return `Threshold: ₱${threshold.toFixed(2)} | Current: ₱${current.toFixed(2)}`;
   }, [cashEligibility]);
 
+  const cashlessEarnings = useMemo(() => {
+    if (!history?.items) return 0;
+    return history.items
+      .filter((item) => item.paymentMethod === "PayOnline")
+      .reduce((sum, item) => sum + item.netAmount, 0);
+  }, [history?.items]);
+
+  const cashEarnings = useMemo(() => {
+    if (!history?.items) return 0;
+    return history.items
+      .filter((item) => item.paymentMethod === "Cash")
+      .reduce((sum, item) => sum + item.netAmount, 0);
+  }, [history?.items]);
+
   const canAccessWallet = user?.role === "Driver";
 
   if (!canAccessWallet) {
@@ -174,20 +188,6 @@ export default function WalletScreen() {
   const totalGross = history?.totalGross ?? 0;
   const totalNet = history?.totalNet ?? 0;
   const totalPlatformFee = history?.totalPlatformFee ?? 0;
-
-  const cashlessEarnings = useMemo(() => {
-    if (!history?.items) return 0;
-    return history.items
-      .filter((item) => item.paymentMethod === "PayOnline")
-      .reduce((sum, item) => sum + item.netAmount, 0);
-  }, [history?.items]);
-
-  const cashEarnings = useMemo(() => {
-    if (!history?.items) return 0;
-    return history.items
-      .filter((item) => item.paymentMethod === "Cash")
-      .reduce((sum, item) => sum + item.netAmount, 0);
-  }, [history?.items]);
 
   const handleCancelTopUp = (topUpId: string) => {
     if (!user?.id) return;
