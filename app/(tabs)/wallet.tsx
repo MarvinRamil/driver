@@ -49,7 +49,7 @@ export default function WalletScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   const { wallet, isLoading, error, refresh } = useWallet();
-  const { transactions } = useWalletTransactions();
+  const { transactions, refresh: refreshTransactions } = useWalletTransactions();
   const { data: cashEligibility, refresh: refreshEligibility } =
     useCashEligibility();
   const { topUps, refresh: refreshTopUps } = useTopUpHistory();
@@ -86,6 +86,7 @@ export default function WalletScreen() {
   const onRefreshAll = useCallback(async () => {
     await Promise.all([
       refresh(),
+      refreshTransactions(),
       refreshEligibility(),
       refreshTopUps(),
       refreshWithdrawals(),
@@ -93,6 +94,7 @@ export default function WalletScreen() {
     ]);
   }, [
     refresh,
+    refreshTransactions,
     refreshEligibility,
     refreshTopUps,
     refreshWithdrawals,
