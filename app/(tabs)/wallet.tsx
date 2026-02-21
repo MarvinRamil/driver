@@ -48,7 +48,7 @@ export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { user } = useAuth();
-  const { wallet, isLoading, error, refresh } = useWallet();
+  const { wallet, isLoading, error, refresh, clearError: clearWalletError } = useWallet();
   const { transactions, refresh: refreshTransactions } = useWalletTransactions();
   const { data: cashEligibility, refresh: refreshEligibility } =
     useCashEligibility();
@@ -78,6 +78,7 @@ export default function WalletScreen() {
   );
   const [showEarningsBreakdown, setShowEarningsBreakdown] = useState(false);
   const withdrawIdempotencyKeyRef = useRef<string | null>(null);
+  const withdrawalSuccessGraceRef = useRef<number>(0);
 
   const { history, refresh: refreshHistory } = useEarningsHistory(
     user?.id ?? "",
@@ -109,8 +110,15 @@ export default function WalletScreen() {
     setBankAccount("");
     setAccountHolder("");
     setBankName("BPI");
-    await onRefreshAll();
-  }, [onRefreshAll]);
+    // Grace period: don't show fetch error for a few seconds after success (transient refresh failures)
+    withdrawalSuccessGraceRef.current = Date.now();
+    clearWalletError();
+    try {
+      await onRefreshAll();
+    } catch {
+      // Ignore so success state isn't overwritten by a transient fetch failure
+    }
+  }, [onRefreshAll, clearWalletError]);
 
   useEffect(() => {
     if (!withdrawalSuccessProcessing || !withdrawModalVisible) return;
@@ -780,7 +788,7 @@ export default function WalletScreen() {
             </View>
           </View>
 
-          {error ? (
+          {error && (Date.now() - withdrawalSuccessGraceRef.current > 5000) ? (
             <View
               style={[styles.errorCard, { backgroundColor: theme.surface }]}
             >
