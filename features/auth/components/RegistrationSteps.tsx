@@ -177,7 +177,7 @@ export function RegistrationSteps() {
     setIsLoading(true);
     try {
       await authService.verifyOtp({
-        email: registrationData.email.trim(),
+        email: registrationData.email.trim().toLowerCase(),
         otp: registrationData.otp.trim(),
       });
       Alert.alert(
@@ -204,21 +204,22 @@ export function RegistrationSteps() {
     setIsLoading(true);
     setError(null);
     try {
+      const normalizedEmail = registrationData.email.trim().toLowerCase();
       await authService.register({
-        email: registrationData.email.trim(),
+        email: normalizedEmail,
         password: registrationData.password,
         fullName: registrationData.fullName.trim(),
         role: 'Driver',
         ...buildSecurityQuestionsPayload(),
       });
       await authService.login({
-        email: registrationData.email.trim(),
+        email: normalizedEmail,
         password: registrationData.password,
       });
       await refreshUser();
       Alert.alert(
         'Account created',
-        'Please log in to continue with your driver registration and submit your documents.',
+        "You're logged in. Continue to complete your registration and upload your documents.",
         [
           {
             text: 'Continue',

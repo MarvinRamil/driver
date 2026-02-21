@@ -330,9 +330,13 @@ class AuthService {
         throw new Error('Only Driver role is allowed for driver registration');
       }
 
+      // Normalize email so it matches the key used by verify-otp (email-verified-for-registration cache)
+      const normalizedEmail = registrationData.email.trim().toLowerCase();
+      const body = { ...registrationData, email: normalizedEmail };
+
       // Call register API endpoint
       const response = await apiClient.post<RegisterResponse>('api/auth/register', {
-        body: registrationData,
+        body,
         requiresAuth: false, // Register endpoint doesn't require authentication
       });
 
@@ -429,9 +433,10 @@ class AuthService {
    * POST /api/auth/verify-otp
    */
   async verifyOtp(request: VerifyOtpRequest): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = request.email.trim().toLowerCase();
     const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/verify-otp', {
       body: {
-        email: request.email.trim().toLowerCase(),
+        email: normalizedEmail,
         otp: request.otp.trim(),
       },
       requiresAuth: false,
