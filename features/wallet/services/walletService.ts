@@ -187,7 +187,8 @@ class WalletService {
     savedWithdrawalMethodId?: string | null,
     bankAccountNumber?: string,
     bankName?: string,
-    accountHolderName?: string
+    accountHolderName?: string,
+    idempotencyKey?: string | null
   ): Promise<void> {
     try {
       const body: any = {
@@ -207,11 +208,19 @@ class WalletService {
         body.accountHolderName = accountHolderName;
       }
 
+      if (idempotencyKey != null && idempotencyKey.trim()) {
+        body.idempotencyKey = idempotencyKey.trim();
+      }
+
       const response = await apiClient.post(
         `/api/drivers/${driverId}/wallet/withdraw`,
         {
           body,
           requiresAuth: true,
+          headers:
+            idempotencyKey != null && idempotencyKey.trim()
+              ? { 'Idempotency-Key': idempotencyKey.trim() }
+              : undefined,
         }
       );
 

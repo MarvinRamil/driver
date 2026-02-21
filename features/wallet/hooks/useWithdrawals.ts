@@ -13,7 +13,8 @@ interface UseWithdrawalsReturn {
         savedWithdrawalMethodId?: string | null,
         bankAccountNumber?: string,
         bankName?: string,
-        accountHolderName?: string
+        accountHolderName?: string,
+        idempotencyKey?: string | null
     ) => Promise<void>;
 }
 
@@ -49,7 +50,8 @@ export function useWithdrawals(): UseWithdrawalsReturn {
         savedWithdrawalMethodId?: string | null,
         bankAccountNumber?: string,
         bankName?: string,
-        accountHolderName?: string
+        accountHolderName?: string,
+        idempotencyKey?: string | null
     ) => {
         if (!user) throw new Error('User not authenticated');
 
@@ -59,7 +61,8 @@ export function useWithdrawals(): UseWithdrawalsReturn {
             savedWithdrawalMethodId,
             bankAccountNumber,
             bankName,
-            accountHolderName
+            accountHolderName,
+            idempotencyKey
         );
         await fetchRequests();
     }, [user, fetchRequests]);

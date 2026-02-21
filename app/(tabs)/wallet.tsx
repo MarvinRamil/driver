@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   StyleSheet,
   ScrollView,
@@ -9,6 +9,9 @@ import {
   TextInput,
   Alert,
   Linking,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
@@ -65,6 +68,7 @@ export default function WalletScreen() {
   const [bankAccount, setBankAccount] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawalSuccessProcessing, setWithdrawalSuccessProcessing] = useState(false);
   const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
   const [saveBankAccount, setSaveBankAccount] = useState(false);
   const { methods: savedMethods, isLoading: isLoadingSavedMethods, create: createSavedMethod } = useSavedWithdrawalMethods();
@@ -72,6 +76,7 @@ export default function WalletScreen() {
     "Personal",
   );
   const [showEarningsBreakdown, setShowEarningsBreakdown] = useState(false);
+  const withdrawIdempotencyKeyRef = useRef<string | null>(null);
 
   const { history, refresh: refreshHistory } = useEarningsHistory(
     user?.id ?? "",
@@ -92,6 +97,25 @@ export default function WalletScreen() {
     refreshWithdrawals,
     refreshHistory,
   ]);
+
+  const closeWithdrawalSuccessAndRefresh = useCallback(async () => {
+    setWithdrawalSuccessProcessing(false);
+    setWithdrawModalVisible(false);
+    setSelectedSavedMethodId(null);
+    setSaveBankAccount(false);
+    setBankAccount("");
+    setAccountHolder("");
+    setBankName("BPI");
+    await onRefreshAll();
+  }, [onRefreshAll]);
+
+  useEffect(() => {
+    if (!withdrawalSuccessProcessing || !withdrawModalVisible) return;
+    const t = setTimeout(() => {
+      closeWithdrawalSuccessAndRefresh();
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [withdrawalSuccessProcessing, withdrawModalVisible, closeWithdrawalSuccessAndRefresh]);
 
   // Real-time: when webhook marks top-up as paid, backend pushes TopUpPaid via SignalR; refresh wallet and history
   useWalletTopUpEvents(user?.id, () => {
@@ -310,28 +334,25 @@ export default function WalletScreen() {
         }
       }
 
+      // Idempotency: one key per submit so retries return the same withdrawal
+      if (!withdrawIdempotencyKeyRef.current) {
+        withdrawIdempotencyKeyRef.current = `wd-${user?.id ?? ""}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      }
+      const idempotencyKey = withdrawIdempotencyKeyRef.current;
+
       // Request withdrawal with saved method or manual details
       await requestWithdrawal(
         amount,
         savedMethodIdToUse || undefined,
         savedMethodIdToUse ? undefined : bankAccount,
         savedMethodIdToUse ? undefined : bankName,
-        savedMethodIdToUse ? undefined : accountHolder
+        savedMethodIdToUse ? undefined : accountHolder,
+        idempotencyKey
       );
 
-      // Reset form
-      setWithdrawModalVisible(false);
-      setSelectedSavedMethodId(null);
-      setSaveBankAccount(false);
-      setBankAccount("");
-      setAccountHolder("");
-      setBankName("BPI");
-
-      Alert.alert(
-        "Request Sent",
-        "Your withdrawal request has been submitted.",
-      );
-      await onRefreshAll();
+      // Show "Processing your withdrawal…" in-modal; close and refresh on Done or after 3s
+      withdrawIdempotencyKeyRef.current = null;
+      setWithdrawalSuccessProcessing(true);
     } catch (err) {
       Alert.alert(
         "Withdrawal Failed",
@@ -1281,17 +1302,42 @@ export default function WalletScreen() {
         animationType="slide"
         transparent
         onRequestClose={() => {
+          withdrawIdempotencyKeyRef.current = null;
+          setWithdrawalSuccessProcessing(false);
           setWithdrawModalVisible(false);
           setSelectedSavedMethodId(null);
           setSaveBankAccount(false);
         }}
       >
         <View style={styles.modalBackdrop}>
-          <ScrollView
-            style={[styles.modalCard, { backgroundColor: theme.surface }]}
-            contentContainerStyle={styles.modalCardContent}
-            keyboardShouldPersistTaps="handled"
+          <KeyboardAvoidingView
+            style={{ flex: 1, maxHeight: "90%" }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
           >
+            {withdrawalSuccessProcessing ? (
+              <View style={[styles.modalCard, styles.modalCardContent, { backgroundColor: theme.surface, paddingVertical: 32, paddingHorizontal: 24 }]}>
+                <ActivityIndicator size="large" color={theme.primary} style={{ marginBottom: 16 }} />
+                <ThemedText type="subtitle" style={{ color: theme.text, marginBottom: 8, textAlign: "center" }}>
+                  Processing your withdrawal…
+                </ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, textAlign: "center", marginBottom: 24 }}>
+                  Transfer to your bank is in progress. You can track status under Withdrawals.
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={closeWithdrawalSuccessAndRefresh}
+                  style={[styles.modalBtn, { backgroundColor: theme.primary }]}
+                >
+                  <ThemedText style={{ color: "#111" }}>Done</ThemedText>
+                </TouchableOpacity>
+              </View>
+            ) : (
+            <ScrollView
+              style={[styles.modalCard, { backgroundColor: theme.surface }]}
+              contentContainerStyle={[styles.modalCardContent, { paddingBottom: 120 }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+            >
             <View style={styles.modalHeader}>
               <ThemedText type="subtitle" style={{ color: theme.text }}>
                 Request Withdrawal
@@ -1548,6 +1594,8 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
           </ScrollView>
+            )}
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </ThemedView>
