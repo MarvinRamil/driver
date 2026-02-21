@@ -9,6 +9,7 @@ import type {
   User,
   SendOtpRequest,
   VerifyOtpRequest,
+  VerifyOtpResponse,
   VerifyOtpAndRegisterRequest,
   VerifyOtpAndRegisterResponse,
 } from '../types';
@@ -432,19 +433,19 @@ class AuthService {
    * Call register(email, fullName, password, role) next, then login.
    * POST /api/auth/verify-otp
    */
-  async verifyOtp(request: VerifyOtpRequest): Promise<{ success: boolean; message: string }> {
+  async verifyOtp(request: VerifyOtpRequest): Promise<VerifyOtpResponse> {
     const normalizedEmail = request.email.trim().toLowerCase();
-    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/verify-otp', {
+    const response = await apiClient.post<VerifyOtpResponse>('api/auth/verify-otp', {
       body: {
         email: normalizedEmail,
         otp: request.otp.trim(),
       },
       requiresAuth: false,
     });
-    if (!response.success) {
+    if (!response.success || !response.data) {
       throw new Error(response.message || 'Invalid or expired code. Please try again.');
     }
-    return { success: true, message: response.message || 'Email verified.' };
+    return response.data as VerifyOtpResponse;
   }
 
   /**

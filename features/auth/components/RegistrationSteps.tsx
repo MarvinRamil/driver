@@ -78,6 +78,8 @@ export function RegistrationSteps() {
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<[number | null, number | null, number | null]>([null, null, null]);
   const [questionAnswers, setQuestionAnswers] = useState<[string, string, string]>(['', '', '']);
   const [questionPickerIndex, setQuestionPickerIndex] = useState<number | null>(null);
+  /** Token from verify-otp; sent with register so backend trusts OTP when cache is not shared (e.g. multiple API instances) */
+  const [registrationToken, setRegistrationToken] = useState<string | null>(null);
 
   useEffect(() => {
     authService.getSecurityQuestions().then(setSecurityQuestionsList).catch(() => {});
@@ -176,10 +178,11 @@ export function RegistrationSteps() {
     }
     setIsLoading(true);
     try {
-      await authService.verifyOtp({
+      const verifyResponse = await authService.verifyOtp({
         email: registrationData.email.trim().toLowerCase(),
         otp: registrationData.otp.trim(),
       });
+      setRegistrationToken(verifyResponse.registrationToken ?? null);
       Alert.alert(
         'Code verified',
         'Your email is verified. Enter your name and password to create your account.',
@@ -211,6 +214,7 @@ export function RegistrationSteps() {
         fullName: registrationData.fullName.trim(),
         role: 'Driver',
         ...buildSecurityQuestionsPayload(),
+        ...(registrationToken ? { registrationToken } : {}),
       });
       await authService.login({
         email: normalizedEmail,

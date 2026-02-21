@@ -154,6 +154,8 @@ export interface RegisterRequest {
   securityQuestion2?: SecurityQuestionRequest;
   /** Security question 3 (required for account recovery) */
   securityQuestion3?: SecurityQuestionRequest;
+  /** Token from verify-otp response; proves OTP was verified when cache is not shared (e.g. multiple API instances) */
+  registrationToken?: string | null;
 }
 
 /**
@@ -178,6 +180,13 @@ export interface SendOtpRequest {
 export interface VerifyOtpRequest {
   email: string;
   otp: string;
+}
+
+/** Response from verify-otp; includes registrationToken for register (works when cache is not shared across API instances) */
+export interface VerifyOtpResponse {
+  success: boolean;
+  message: string;
+  registrationToken?: string;
 }
 
 /** OTP verify and register request - POST /api/auth/verify-otp-and-register (deprecated: use verify-otp + register + login) */
