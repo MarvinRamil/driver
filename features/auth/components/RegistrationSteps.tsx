@@ -27,6 +27,7 @@ import { DriverLicenseScanner } from './DriverLicenseScanner';
 import { SelfieCapture } from './SelfieCapture';
 import { apiClient } from '@/shared/services/apiClient';
 import { useAuthContext } from '../context/AuthContext';
+import { biometricStorage } from '@/shared/services/biometricStorage';
 
 type RegistrationStep =
   | 'enter-email'
@@ -216,18 +217,19 @@ export function RegistrationSteps() {
         ...buildSecurityQuestionsPayload(),
         ...(registrationToken ? { registrationToken } : {}),
       });
-      await authService.login({
-        email: normalizedEmail,
-        password: registrationData.password,
-      });
-      await refreshUser();
+      // Clear any previously stored biometric credentials (e.g. from old account on same device)
+      try {
+        await biometricStorage.clearCredentials();
+      } catch {
+        // Non-fatal; continue to show success
+      }
       Alert.alert(
         'Account created',
-        "You're logged in. Continue to complete your registration and upload your documents.",
+        'Please log in to the app to complete registration.',
         [
           {
-            text: 'Continue',
-            onPress: () => router.replace('/(tabs)'),
+            text: 'OK',
+            onPress: () => router.replace('/login'),
           },
         ]
       );
