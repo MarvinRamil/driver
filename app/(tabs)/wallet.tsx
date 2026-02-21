@@ -1322,12 +1322,13 @@ export default function WalletScreen() {
       >
         <View style={styles.modalBackdrop}>
           <KeyboardAvoidingView
-            style={{ flex: 1, maxHeight: "90%" }}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.withdrawModalKeyboardView}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
           >
+            <View style={styles.withdrawModalContentWrap}>
             {withdrawalSuccessProcessing ? (
-              <View style={[styles.modalCard, styles.modalCardContent, { backgroundColor: theme.surface, paddingVertical: 32, paddingHorizontal: 24 }]}>
+              <View style={[styles.modalCard, styles.modalCardContent, styles.withdrawSuccessCard, { backgroundColor: theme.surface, paddingVertical: 32, paddingHorizontal: 24 }]}>
                 <ActivityIndicator size="large" color={theme.primary} style={{ marginBottom: 16 }} />
                 <ThemedText type="subtitle" style={{ color: theme.text, marginBottom: 8, textAlign: "center" }}>
                   Processing your withdrawal…
@@ -1344,9 +1345,10 @@ export default function WalletScreen() {
               </View>
             ) : (
             <ScrollView
-              style={[styles.modalCard, { backgroundColor: theme.surface }]}
+              style={[styles.modalCard, styles.withdrawFormScroll, { backgroundColor: theme.surface }]}
               contentContainerStyle={[styles.modalCardContent, { paddingBottom: 120 }]}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={true}
             >
             <View style={styles.modalHeader}>
@@ -1606,6 +1608,7 @@ export default function WalletScreen() {
             </View>
           </ScrollView>
             )}
+            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -1975,6 +1978,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     padding: 24,
+  },
+  withdrawModalKeyboardView: {
+    maxHeight: "90%",
+    width: "100%",
+  },
+  withdrawModalContentWrap: {
+    minHeight: 320,
+    maxHeight: "90%",
+  },
+  withdrawSuccessCard: {
+    minHeight: 280,
+  },
+  withdrawFormScroll: {
+    maxHeight: "90%",
   },
   modalCard: {
     borderRadius: 16,
