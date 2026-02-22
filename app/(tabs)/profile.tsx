@@ -145,11 +145,20 @@ export default function ProfileScreen() {
 
     try {
       await changePassword(currentPassword, newPassword);
-      Alert.alert('Success', 'Password changed successfully');
+      try {
+        await biometricStorage.clearCredentials();
+      } catch {
+        // non-fatal
+      }
+      Alert.alert(
+        'Success',
+        'Password changed successfully. Biometric login has been cleared; log in with your new password next time, then you can turn on biometric again in Settings.'
+      );
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setShowPasswordForm(false);
+      setBiometricEnabled(false);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to change password');
     }
@@ -354,7 +363,9 @@ export default function ProfileScreen() {
                     {biometricType} Login
                   </ThemedText>
                   <ThemedText style={[styles.onlineStatusSubtitle, { color: theme.textSecondary }]}>
-                    {biometricEnabled ? `Use ${biometricType} to login quickly` : 'Enable quick login with biometric'}
+                    {biometricEnabled
+                      ? `Turn off to clear saved login. You can turn it on again after your next email/password login.`
+                      : 'Turn on after logging in with email/password to re-enable biometric login.'}
                   </ThemedText>
                 </View>
               </View>

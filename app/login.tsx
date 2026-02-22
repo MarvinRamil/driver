@@ -16,8 +16,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  AppState,
-  AppStateStatus,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -57,7 +55,6 @@ export default function LoginScreen() {
   const [biometricType, setBiometricType] = useState<string>('Biometric');
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
   const [hasAutoPrompted, setHasAutoPrompted] = useState(false);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
   const autoPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
@@ -119,39 +116,9 @@ export default function LoginScreen() {
     };
   }, [hasAutoPrompted, isLoading]);
 
-  /**
-   * Handle app state changes for auto-biometric on resume
-   */
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      // When app comes to foreground and user is not authenticated
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active' &&
-        !isLoading &&
-        isBiometricReady &&
-        !hasAutoPrompted
-      ) {
-        // Small delay to ensure UI is ready
-        if (autoPromptTimeoutRef.current) {
-          clearTimeout(autoPromptTimeoutRef.current);
-        }
-        autoPromptTimeoutRef.current = setTimeout(() => {
-          attemptAutoBiometricLogin();
-        }, 500);
-      }
-      appState.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      subscription.remove();
-      if (autoPromptTimeoutRef.current) {
-        clearTimeout(autoPromptTimeoutRef.current);
-        autoPromptTimeoutRef.current = null;
-      }
-    };
-  }, [isLoading, isBiometricReady, hasAutoPrompted]);
+  // Do NOT auto-prompt on app state change (e.g. returning from background) to avoid
+  // biometric popping "randomly" when user switches apps and comes back to login.
+  // Auto-prompt only once on mount (see effect below).
 
   /**
    * Handle biometric login
