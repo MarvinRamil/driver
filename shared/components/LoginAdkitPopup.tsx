@@ -1,18 +1,24 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import { useAuth } from '@/features/auth';
 import { campaignService, type CampaignItem } from '@/features/campaigns';
 import { ThemedText } from '@/shared/components/themed-text';
 import { useTheme } from '@/shared/hooks/use-theme';
 
+/** Delay before showing popup so dashboard has time to load and paint (avoids race). */
+const POPUP_DELAY_MS = 1800;
+
 export function LoginAdkitPopup() {
   const { user, isLoading } = useAuth();
   const theme = useTheme();
   const router = useRouter();
+  const segments = useSegments();
   const [visible, setVisible] = useState(false);
   const [items, setItems] = useState<CampaignItem[]>([]);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isOnDashboardRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
@@ -22,22 +28,37 @@ export function LoginAdkitPopup() {
     }
   }, [user]);
 
+  const isOnDashboard = segments[0] === '(tabs)';
+  isOnDashboardRef.current = isOnDashboard;
+
   useEffect(() => {
     const load = async () => {
+      if (showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
       // Only show campaigns/giveaways if user is fully onboarded
       if (isLoading || !user || !user.isOnboarded) {
         setVisible(false);
         setItems([]);
         return;
       }
-      
+
       const currentKey = `${user.id}:${Date.now()}`;
       if (sessionKey && sessionKey.startsWith(`${user.id}:`)) return;
 
       try {
         const active = await campaignService.getActiveCampaigns();
         setItems(active);
-        setVisible(active.length > 0);
+        if (active.length > 0) {
+          // Defer showing so dashboard can load first; only show if still on dashboard when timer fires
+          showTimeoutRef.current = setTimeout(() => {
+            showTimeoutRef.current = null;
+            if (isOnDashboardRef.current) setVisible(true);
+          }, POPUP_DELAY_MS);
+        } else {
+          setVisible(false);
+        }
       } catch {
         setItems([]);
         setVisible(false);
@@ -46,6 +67,12 @@ export function LoginAdkitPopup() {
       }
     };
     load();
+    return () => {
+      if (showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
+    };
   }, [isLoading, user, sessionKey]);
 
   const firstItem = useMemo(() => items[0], [items]);
