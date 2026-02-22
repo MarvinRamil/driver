@@ -64,6 +64,7 @@ function NavigationGuard() {
       const inTabsGroup = currentRoute === "(tabs)";
       const isLoginPage = currentRoute === "login";
       const isSignupPage = currentRoute === "signup";
+      const isForgotPasswordPage = currentRoute === "forgot-password";
       const isLivenessPage = currentRoute === "liveness";
       const isDriverCompletePage = currentRoute === "driver-complete";
 
@@ -76,8 +77,8 @@ function NavigationGuard() {
       // CRITICAL: If no user, redirect to login immediately
       // This ensures home page never loads when there's no authenticated user
       if (!isAuthenticated) {
-        // If already on login or signup page, stay there
-        if (isLoginPage || isSignupPage) {
+        // If already on login, signup, or forgot-password page, stay there
+        if (isLoginPage || isSignupPage || isForgotPasswordPage) {
           return;
         }
         // Otherwise, redirect to login
@@ -151,7 +152,8 @@ function NavigationGuard() {
         const currentRoute = segments[0];
         const isLoginPage = currentRoute === "login";
         const isSignupPage = currentRoute === "signup";
-        if (!isLoginPage && !isSignupPage) {
+        const isForgotPasswordPage = currentRoute === "forgot-password";
+        if (!isLoginPage && !isSignupPage && !isForgotPasswordPage) {
           router.replace("/login");
         }
       } catch (navError) {
@@ -212,6 +214,7 @@ function RootLayoutNav() {
               <Stack>
                 <Stack.Screen name="login" options={{ headerShown: false }} />
                 <Stack.Screen name="signup" options={{ headerShown: false }} />
+                <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
                 <Stack.Screen name="liveness" options={{ headerShown: false }} />
                 <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

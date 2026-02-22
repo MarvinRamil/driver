@@ -351,7 +351,7 @@ export default function LoginScreen() {
 
             {/* Forgot Password Link */}
             <View style={styles.forgotPasswordContainer}>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/forgot-password')}>
                 <Text style={[styles.forgotPasswordText, { color: theme.textSecondary }]}>
                   Forgot Password?
                 </Text>

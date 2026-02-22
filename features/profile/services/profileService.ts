@@ -62,20 +62,20 @@ class ProfileService {
   }
 
   /**
-   * Change user password
-   * PATCH /api/users/{id}/password
-   * @param userId - User ID
+   * Change user password (authenticated user)
+   * POST /api/auth/change-password
+   * @param _userId - Unused; API uses authenticated user from token
    * @param currentPassword - Current password
    * @param newPassword - New password
    * @returns Promise resolving when password is changed
    */
   async changePassword(
-    userId: string,
+    _userId: string,
     currentPassword: string,
     newPassword: string
   ): Promise<void> {
     try {
-      const response = await apiClient.patch(`/api/users/${userId}/password`, {
+      const response = await apiClient.post<{ success: boolean; message?: string }>('/api/auth/change-password', {
         body: {
           currentPassword,
           newPassword,

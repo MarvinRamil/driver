@@ -208,6 +208,37 @@ export interface VerifyOtpAndRegisterResponse {
   user: User;
 }
 
+/** Security answer for forgot password - POST /api/auth/forgot-password/get-questions, reset-password */
+export interface SecurityAnswerRequest {
+  questionNumber: number;
+  answer: string;
+}
+
+/** Forgot password (request OTP) - POST /api/auth/forgot-password/mobile */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/** Forgot password response */
+export interface ForgotPasswordResponse {
+  success: boolean;
+  message: string;
+}
+
+/** Reset password (OTP + security answers) - POST /api/auth/reset-password */
+export interface ResetPasswordRequest {
+  email: string;
+  otp: string;
+  newPassword: string;
+  securityAnswers?: SecurityAnswerRequest[];
+}
+
+/** Reset password response */
+export interface ResetPasswordResponse {
+  success: boolean;
+  message: string;
+}
+
 /**
  * Complete driver registration request
  * Used after email verification to complete registration with documents

@@ -12,6 +12,10 @@ import type {
   VerifyOtpResponse,
   VerifyOtpAndRegisterRequest,
   VerifyOtpAndRegisterResponse,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
 } from '../types';
 
 /**
@@ -504,6 +508,68 @@ class AuthService {
       refreshTokenExpiration,
       user,
     };
+  }
+
+  /**
+   * Request password reset OTP (forgot password - mobile flow)
+   * POST /api/auth/forgot-password/mobile
+   */
+  async forgotPasswordMobile(payload: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
+    const email = payload.email.trim().toLowerCase();
+    const response = await apiClient.post<ForgotPasswordResponse>('api/auth/forgot-password/mobile', {
+      body: { email },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to send verification code');
+    }
+    return response.data ?? { success: true, message: response.message ?? '' };
+  }
+
+  /**
+   * Get user's security questions for password reset
+   * POST /api/auth/forgot-password/get-questions
+   */
+  async getForgotPasswordQuestions(email: string): Promise<Array<{ number: number; questionId: number; question: string }>> {
+    const response = await apiClient.post<{ success: boolean; questions?: Array<{ number: number; questionId: number; question: string }> }>(
+      'api/auth/forgot-password/get-questions',
+      { body: { email: email.trim().toLowerCase() }, requiresAuth: false }
+    );
+    const questions = response.data?.questions ?? [];
+    return questions;
+  }
+
+  /**
+   * Reset password with OTP and security answers (forgot password - mobile flow)
+   * POST /api/auth/reset-password
+   * Clears local tokens on success (backend invalidates all tokens).
+   */
+  async resetPassword(payload: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+    const email = payload.email.trim().toLowerCase();
+    if (!payload.otp || !payload.newPassword || payload.newPassword.length < 8) {
+      throw new Error('OTP and new password (min 8 characters) are required');
+    }
+    const body: Record<string, unknown> = {
+      email,
+      otp: payload.otp.trim().replace(/\D/g, '').slice(0, 6),
+      newPassword: payload.newPassword,
+    };
+    if (payload.securityAnswers && payload.securityAnswers.length > 0) {
+      body.securityAnswers = payload.securityAnswers.map((a) => ({ questionNumber: a.questionNumber, answer: a.answer }));
+    }
+    const response = await apiClient.post<ResetPasswordResponse>('api/auth/reset-password', {
+      body,
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to reset password');
+    }
+    try {
+      await tokenStorage.clearAllTokens();
+    } catch {
+      // best effort
+    }
+    return response.data ?? { success: true, message: response.message ?? '' };
   }
 }
 
