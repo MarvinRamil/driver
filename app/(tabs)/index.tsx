@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, ScrollView, View, RefreshControl, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useDashboardStats } from '@/features/dashboard';
 import { useBookings } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
-import { useEarningsHistory } from '@/features/earnings';
+import { useEarnings } from '@/features/earnings';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { useLocationTrackingStatus } from '@/features/driver/hooks/useLocationTracking';
 import { useGiveaways } from '@/features/giveaways';
@@ -39,20 +39,20 @@ export default function DashboardScreen() {
   // All drivers are independent (solo)
   const isSoloDriver = user?.role === 'Driver';
 
-  // Today's earnings from earnings history (sum of today's completed trip net amounts)
-  const { history: earningsHistory } = useEarningsHistory(user?.id ?? '', { limit: 50 });
-  const todayEarnings = useMemo(() => {
-    if (!earningsHistory?.items?.length) return 0;
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
-    return earningsHistory.items
-      .filter((item) => {
-        const d = new Date(item.date);
-        return d >= todayStart && d <= todayEnd;
-      })
-      .reduce((sum, item) => sum + item.netAmount, 0);
-  }, [earningsHistory?.items]);
+  // Today's earnings from main earnings API (server-computed today value)
+  const { earnings, refresh: refreshEarnings } = useEarnings(user?.id ?? '');
+  const todayEarnings = earnings?.today ?? 0;
+
+  // Refresh earnings when dashboard is focused (e.g. after completing a trip)
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) refreshEarnings();
+    }, [user?.id, refreshEarnings])
+  );
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([refreshEarnings(), refreshGiveaways()]);
+  }, [refreshEarnings, refreshGiveaways]);
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
@@ -62,13 +62,7 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl
             refreshing={giveawaysLoading}
-            onRefresh={async () => {
-              try {
-                await refreshGiveaways();
-              } catch (error) {
-                console.error('Error refreshing dashboard:', error);
-              }
-            }}
+            onRefresh={handleRefresh}
           />
         }
         showsVerticalScrollIndicator={false}>

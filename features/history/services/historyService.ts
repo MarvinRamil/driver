@@ -38,16 +38,21 @@ class HistoryService {
         COMPLETED_STATUSES.includes(b.status)
       );
 
+      const PLATFORM_FEE_RATE = 0.05; // 5% platform fee; driver gets 95%
+
       const history: TripHistory[] = completed.map((booking) => {
         const completedAt = booking.updatedAt ?? booking.createdAt;
         const completedAtDate =
           completedAt instanceof Date ? completedAt : new Date(completedAt as unknown as string);
-        const earnings =
+        const gross =
           booking.finalFare != null
             ? Number(booking.finalFare)
             : booking.estimatedFare != null
               ? Number(booking.estimatedFare)
               : 0;
+        // Driver earnings after 5% platform fee (net take-home)
+        const earnings =
+          booking.status === 'Cancelled' ? 0 : Math.round(gross * (1 - PLATFORM_FEE_RATE) * 100) / 100;
 
         return {
           id: booking.id,

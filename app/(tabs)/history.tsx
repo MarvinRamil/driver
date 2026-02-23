@@ -95,7 +95,7 @@ export default function HistoryScreen() {
             ₱{stats.totalEarnings.toFixed(2)}
           </ThemedText>
           <ThemedText style={[styles.statLabel, { color: '#111', opacity: 0.8 }]}>
-            {filter === 'All' ? 'Total Earnings' : `${filter} Earnings`}
+            {filter === 'All' ? 'Your earnings (after 5% fee)' : `${filter} (after 5% fee)`}
           </ThemedText>
         </View>
         <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
