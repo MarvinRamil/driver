@@ -49,16 +49,16 @@ class ApiClient {
   private getUrl(endpoint: string): string {
     // Remove leading slash if present to avoid double slashes
     let cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-    
+
     // Ensure endpoint starts with 'api/' if it doesn't already
     // This handles both 'api/auth/login' and 'auth/login' formats
     // All endpoints should use /api/ prefix to match backend routes
     if (!cleanEndpoint.startsWith('api/')) {
       cleanEndpoint = `api/${cleanEndpoint}`;
     }
-    
+
     const fullUrl = `${this.config.baseURL}/${cleanEndpoint}`;
-    
+
     // Debug: Log URL construction for troubleshooting
     if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
       console.log(`[API] URL Construction:`, {
@@ -68,7 +68,7 @@ class ApiClient {
         fullUrl,
       });
     }
-    
+
     return fullUrl;
   }
 
@@ -133,7 +133,7 @@ class ApiClient {
    * Used on 401 to recover session without logging out.
    * @returns true if new tokens were saved and the original request can be retried; false otherwise
    */
-  private async tryRefreshToken(): Promise<boolean> {
+  private async tryRefreshToken(endpoint?: string): Promise<boolean> {
     const refreshToken = await tokenStorage.getRefreshToken();
     if (!refreshToken) {
       if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
@@ -141,18 +141,27 @@ class ApiClient {
       }
       return false;
     }
-    
+
     // SECURITY: Include device fingerprinting for enhanced security (OWASP Top 10 - A07:2021)
     const { getDeviceId, getDeviceFingerprint } = await import('./deviceFingerprint');
     const deviceId = await getDeviceId();
     const deviceFingerprint = await getDeviceFingerprint();
-    
+
+    // Prevent concurrent refreshes
+    if (this.isRefreshing) {
+      if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
+        console.log('[API] Refresh already in progress, returning false to wait');
+      }
+      return false; // Wait for the active refresh to finish
+    }
+
+    this.isRefreshing = true;
     const url = `${this.config.baseURL}/api/auth/refresh`;
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           refreshToken,
           deviceId,
           deviceFingerprint,
@@ -170,7 +179,16 @@ class ApiClient {
         if (process.env.EXPO_PUBLIC_API_DEBUG === 'true') {
           console.log('[API] Refresh failed:', res.status, data);
         }
-        await tokenStorage.clearAllTokens();
+
+        // Only clear tokens if the failed request wasn't a background location update.
+        // Location updates can fire in bursts or during poor connectivity, causing
+        // transient refresh failures that shouldn't log the user out.
+        const isLocationEndpoint = endpoint && (endpoint.includes('/locations/') || endpoint.includes('locations/batch'));
+        if (!isLocationEndpoint) {
+          await tokenStorage.clearAllTokens();
+        } else {
+          console.warn('[API] Refresh failed during location update. Preserving tokens to prevent unexpected logout.');
+        }
         return false;
       }
       const newToken = data.token ?? data.Token;
@@ -189,6 +207,8 @@ class ApiClient {
         console.log('[API] Refresh request error:', e);
       }
       return false;
+    } finally {
+      this.isRefreshing = false;
     }
   }
 
@@ -224,7 +244,7 @@ class ApiClient {
     config: RequestConfig = {}
   ): Promise<ApiResponse<T>> {
     const url = this.getUrl(endpoint);
-    
+
     // Build URL with query parameters
     let fullUrl = url;
     if (config.params && Object.keys(config.params).length > 0) {
@@ -250,7 +270,8 @@ class ApiClient {
         if (config.body instanceof FormData) {
           fetchOptions.body = config.body;
           // Remove Content-Type header for FormData - browser will set it with boundary
-          delete headers['Content-Type'];
+          const headersRecord = headers as Record<string, string>;
+          delete headersRecord['Content-Type'];
         } else {
           fetchOptions.body = JSON.stringify(config.body);
         }
@@ -294,9 +315,10 @@ class ApiClient {
         console.log(`[API] Endpoint: ${endpoint}`);
         console.log(`[API] Base URL: ${this.config.baseURL}`);
         console.log(`[API] Requires Auth: ${config.requiresAuth !== false}`);
-        console.log(`[API] Has Authorization Header: ${!!headers.Authorization}`);
-        if (headers.Authorization) {
-          const tokenPreview = headers.Authorization.substring(0, 20) + '...';
+        const headersRecord = headers as Record<string, string>;
+        console.log(`[API] Has Authorization Header: ${!!headersRecord.Authorization}`);
+        if (headersRecord.Authorization) {
+          const tokenPreview = headersRecord.Authorization.substring(0, 20) + '...';
           console.log(`[API] Authorization Header Preview: ${tokenPreview}`);
         }
         if (config.body) {
@@ -310,7 +332,7 @@ class ApiClient {
       const timeoutMs = config.timeout ?? defaultTimeout;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      
+
       // Add abort signal to fetch options
       fetchOptions.signal = controller.signal;
 
@@ -321,7 +343,7 @@ class ApiClient {
       } catch (error) {
         // Clear timeout if request completes
         clearTimeout(timeoutId);
-        
+
         // Handle abort (timeout)
         if (error instanceof Error && error.name === 'AbortError') {
           throw {
@@ -331,7 +353,7 @@ class ApiClient {
         }
         throw error;
       }
-      
+
       // Clear timeout on successful fetch
       clearTimeout(timeoutId);
 
@@ -345,7 +367,7 @@ class ApiClient {
       const responseText = await response.text().catch(() => '');
       let data: any = {};
       const contentType = response.headers.get('content-type');
-      
+
       if (contentType && contentType.includes('application/json') && responseText) {
         // Try to parse as JSON
         try {
@@ -364,20 +386,21 @@ class ApiClient {
         console.error(`[API] ✗ Error: ${method} ${fullUrl} - Status: ${response.status} ${response.statusText}`);
         console.error(`[API] Error Response Body:`, responseText);
         console.error(`[API] Parsed Error Data:`, data);
-        
+
         // For 401 errors, log authentication details
         if (response.status === 401) {
           console.error(`[API] 401 Unauthorized - Authentication failed`);
-          console.error(`[API]   Has Authorization Header: ${!!headers.Authorization}`);
-          if (headers.Authorization) {
-            const tokenPreview = headers.Authorization.substring(0, 30) + '...';
+          const headersRecord = headers as Record<string, string>;
+          console.error(`[API]   Has Authorization Header: ${!!headersRecord.Authorization}`);
+          if (headersRecord.Authorization) {
+            const tokenPreview = headersRecord.Authorization.substring(0, 30) + '...';
             console.error(`[API]   Token Preview: ${tokenPreview}`);
           } else {
             console.error(`[API]   ⚠️ No Authorization header found!`);
           }
           console.error(`[API]   Response:`, responseText);
         }
-        
+
         // Log registration/authentication errors with more detail
         if (endpoint.includes('/register') || endpoint.includes('/auth/')) {
           console.error(`[API] Registration/Auth Error Details:`, {
@@ -391,9 +414,10 @@ class ApiClient {
             hasAuthHeader: !!headers.Authorization,
           });
         }
-        
+
         // Log location API errors with more detail
         if (endpoint.includes('/locations/')) {
+          const headersRecord = headers as Record<string, string>;
           console.error(`[API] Location API Error Details:`, {
             status: response.status,
             statusText: response.statusText,
@@ -401,7 +425,7 @@ class ApiClient {
             endpoint,
             responseText,
             parsedData: data,
-            hasAuthHeader: !!headers.Authorization,
+            hasAuthHeader: !!headersRecord.Authorization,
           });
         }
       } else if (endpoint.includes('/bookings') || endpoint.includes('/dispatches') || endpoint.includes('/locations/')) {
@@ -410,7 +434,7 @@ class ApiClient {
 
       // Handle 401: try refresh token once and retry (driver app session recovery)
       if (response.status === 401 && config.requiresAuth !== false && !config.isRetry && !endpoint.includes('auth/refresh')) {
-        const refreshed = await this.tryRefreshToken();
+        const refreshed = await this.tryRefreshToken(endpoint);
         if (refreshed) {
           return this.request<T>(method, endpoint, { ...config, isRetry: true });
         }
@@ -420,7 +444,7 @@ class ApiClient {
       if (!response.ok) {
         // For 401 errors, the API may return plain text, so use data.message or the text itself
         const errorMessage = data.message || data.error || responseText || `HTTP ${response.status}: ${response.statusText}`;
-        
+
         const error: ApiError = {
           message: typeof errorMessage === 'string' ? errorMessage : `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,

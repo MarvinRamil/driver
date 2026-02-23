@@ -26,9 +26,9 @@ export default function BookingsScreen() {
   const { isOnline } = useDriverStatusContext();
   const { bookings, isLoading: bookingsLoading, error, refresh: refreshBookings, allBookings } = useBookings();
   const { offers, isLoading: offersLoading, refresh: refreshOffers, acceptOffer, rejectOffer } = useOffers({ limit: 10, pollingInterval: 5000 });
-  
+
   const [activeTab, setActiveTab] = useState<TabType>('INCOMING');
-  
+
   // Filter valid (non-expired) offers
   const validOffers = filterValidOffers(offers);
   const validOffersRef = useRef(validOffers);
@@ -52,7 +52,7 @@ export default function BookingsScreen() {
   }, []);
 
   const isSoloDriver = user?.role === 'Driver';
-  
+
   // Filter bookings based on active tab
   const filteredBookings = React.useMemo(() => {
     if (activeTab === 'INCOMING') {
@@ -62,12 +62,12 @@ export default function BookingsScreen() {
       // Show Confirmed + active/in-progress bookings
       return allBookings.filter((booking) => {
         const status = booking.status;
-        return status === 'Confirmed' || 
-               status === 'DriverAssigned' || 
-               status === 'OnTheWayToPickup' ||
-               status === 'PickedUp' ||
-               status === 'InTransit' ||
-               status === 'InProgress';
+        return status === 'Confirmed' ||
+          status === 'DriverAssigned' ||
+          status === 'OnTheWayToPickup' ||
+          status === 'PickedUp' ||
+          status === 'InTransit' ||
+          status === 'InProgress';
       });
     }
     if (activeTab === 'COMPLETED') {
@@ -87,7 +87,7 @@ export default function BookingsScreen() {
   }, [activeTab, allBookings]);
 
   const isLoading = activeTab === 'INCOMING' ? offersLoading : bookingsLoading;
-  
+
   const refresh = async () => {
     if (activeTab === 'INCOMING') {
       await refreshOffers();
@@ -181,7 +181,7 @@ export default function BookingsScreen() {
               const minutes = Math.floor(remaining / 60);
               const seconds = remaining % 60;
               const isExpiringSoon = remaining < 60;
-              
+
               return (
                 <View
                   key={offer.id}
@@ -209,16 +209,16 @@ export default function BookingsScreen() {
                       )}
                     </View>
                   </View>
-                  
+
                   {/* Countdown Timer */}
                   <View style={[styles.countdownContainer, { backgroundColor: isExpiringSoon ? theme.error + '10' : theme.border + '40' }]}>
-                    <Ionicons 
-                      name="time-outline" 
-                      size={14} 
-                      color={isExpiringSoon ? theme.error : theme.textSecondary} 
+                    <Ionicons
+                      name="time-outline"
+                      size={14}
+                      color={isExpiringSoon ? theme.error : theme.textSecondary}
                     />
                     <ThemedText style={[styles.countdownText, { color: isExpiringSoon ? theme.error : theme.textSecondary }]}>
-                      {remaining > 0 
+                      {remaining > 0
                         ? `Expires in ${minutes}:${seconds.toString().padStart(2, '0')}`
                         : 'Expired'}
                     </ThemedText>
@@ -263,7 +263,7 @@ export default function BookingsScreen() {
                       </View>
                     )}
                   </View>
-                  
+
                   {offer.cargoDescription && (
                     <View style={styles.cargoInfo}>
                       <Ionicons name="cube-outline" size={14} color={theme.textSecondary} />
@@ -285,6 +285,7 @@ export default function BookingsScreen() {
                         setAcceptingOfferId(offer.id);
                         try {
                           await acceptOffer(offer.id);
+                          setAcceptingOfferId(null);
                           Alert.alert('Success', 'Offer accepted! Check your bookings.');
                         } catch (error) {
                           setAcceptingOfferId(null);
@@ -322,13 +323,16 @@ export default function BookingsScreen() {
           <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
             <Ionicons name="calendar-outline" size={48} color={theme.textMuted} />
             <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {activeTab === 'ONGOING' 
-                ? 'No ongoing bookings' 
+              {activeTab === 'ONGOING'
+                ? 'No ongoing bookings'
                 : activeTab === 'COMPLETED'
-                ? 'No completed bookings'
-                : activeTab === 'CANCELLED'
-                ? 'No cancelled bookings'
-                : 'No bookings'}
+                  ? 'No completed bookings'
+                  : activeTab === 'CANCELLED'
+                    ? 'No cancelled bookings'
+                    : 'No bookings'}
+            </ThemedText>
+            <ThemedText style={[{ color: theme.textMuted, fontSize: 14, marginTop: 8 }]}>
+              Pull down to refresh
             </ThemedText>
           </View>
         ) : (
