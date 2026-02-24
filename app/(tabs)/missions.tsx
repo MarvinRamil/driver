@@ -8,7 +8,6 @@ import { useAuth } from '@/features/auth';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
-import { LocationLogger } from '@/shared/components/LocationLogger';
 
 export default function MissionsScreen() {
   const insets = useSafeAreaInsets();
@@ -63,10 +62,6 @@ export default function MissionsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Temporary Location Debugger */}
-        <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-          <LocationLogger />
-        </View>
 
         {/* Stats */}
         <View style={styles.statsContainer}>
