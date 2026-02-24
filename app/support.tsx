@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Linking, Alert, TextInput, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -24,6 +24,7 @@ export default function SupportScreen() {
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketDescription, setTicketDescription] = useState('');
+  const createTicketKeyRef = useRef<string | null>(null);
 
   const handleCall = () => {
     Linking.openURL('tel:+1234567890');
@@ -61,13 +62,17 @@ export default function SupportScreen() {
       return;
     }
 
+    const key = createTicketKeyRef.current ?? (createTicketKeyRef.current = crypto.randomUUID());
     try {
-      await supportService.createTicket({
-        subject: ticketSubject,
-        description: ticketDescription,
-        category: 'General',
-        priority: 'Normal',
-      });
+      await supportService.createTicket(
+        {
+          subject: ticketSubject,
+          description: ticketDescription,
+          category: 'General',
+          priority: 'Normal',
+        },
+        key
+      );
       Alert.alert('Success', 'Ticket created successfully');
       setShowCreateTicket(false);
       setTicketSubject('');
@@ -75,6 +80,8 @@ export default function SupportScreen() {
       refresh();
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create ticket');
+    } finally {
+      createTicketKeyRef.current = null;
     }
   };
 
