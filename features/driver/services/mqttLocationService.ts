@@ -45,7 +45,7 @@ class MqttLocationService {
   private credentials: MqttCredentials | null = null;
   private isConnecting: boolean = false;
   private reconnectAttempts: number = 0;
-  private readonly maxReconnectAttempts: number = 5;
+  private readonly maxReconnectAttempts: number = 999999; // Effectively infinite for OTA survival
   private reconnectTimer: NodeJS.Timeout | null = null;
   private lastError: string | null = null;
   private debugInfo: MqttDebugInfo = {
@@ -394,7 +394,7 @@ class MqttLocationService {
    */
   private async handleReconnect(): Promise<void> {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached');
+      console.error('MQTT Max reconnection attempts reached. Giving up permanently.');
       return;
     }
 
@@ -402,7 +402,9 @@ class MqttLocationService {
       clearTimeout(this.reconnectTimer);
     }
 
+    // Exponential backoff, max 30 seconds
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    console.log(`[MQTT] Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts} in ${delay}ms...`);
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();
@@ -566,6 +568,33 @@ class MqttLocationService {
    */
   async refreshCredentials(): Promise<void> {
     await this.fetchCredentials();
+  }
+
+  /**
+   * Forcefully reconnect to MQTT (useful when reviving from background)
+   */
+  async forceReconnect(): Promise<void> {
+    console.log('[MQTT] Forcing connection resume/reconnect...');
+    if (this.client?.connected) {
+      console.log('[MQTT] Already connected, skipping force reconnect');
+      return;
+    }
+
+    // Clear any pending timers
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    // Reset attempts and try connecting immediately
+    this.reconnectAttempts = 0;
+    try {
+      await this.connect();
+    } catch (error) {
+      console.error('[MQTT] Force reconnect failed:', error);
+      // Let the normal reconnect loop take over if it fails
+      this.handleReconnect();
+    }
   }
 }
 

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { locationTrackingService } from '../services/locationTrackingService';
+import { mqttLocationService } from '../services/mqttLocationService';
 import { useAuth } from '@/features/auth';
 
 interface UseLocationTrackingReturn {
@@ -29,16 +31,19 @@ export function useLocationTracking(autoStart: boolean = false): UseLocationTrac
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Track AppState for reconnections
+  const appState = useRef(AppState.currentState);
+
   const startTracking = useCallback(async (updateInterval: number = 5000) => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Set driver ID if available
       if (user?.id) {
         locationTrackingService.setDriverId(user.id);
       }
-      
+
       await locationTrackingService.startTracking(updateInterval, user?.id);
       setIsTracking(true);
     } catch (err) {
@@ -95,6 +100,34 @@ export function useLocationTracking(autoStart: boolean = false): UseLocationTrac
       }
     };
   }, [autoStart, isTracking, startTracking, stopTracking]);
+
+  // Handle AppState changes to revive MQTT immediately when returning to foreground
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      // If returning to the foreground (active) and we should be tracking
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active' &&
+        isTracking
+      ) {
+        console.log('[useLocationTracking] App returned to foreground. Verifying MQTT health...');
+        if (!mqttLocationService.isConnected()) {
+          console.log('[useLocationTracking] MQTT disconnected while in background. Reviving...');
+          mqttLocationService.forceReconnect().catch(err => {
+            console.warn('[useLocationTracking] Failed to revive MQTT on foreground:', err);
+          });
+        } else {
+          console.log('[useLocationTracking] MQTT is still healthy on foreground.');
+        }
+      }
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [isTracking]);
 
   return {
     isTracking,

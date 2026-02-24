@@ -17,6 +17,8 @@ export interface SupportTicket {
   updatedAt: Date | null;
   resolvedAt: Date | null;
   resolution: string | null;
+  zammadTicketId: number | null;
+  userType: string;
 }
 
 /**
@@ -43,6 +45,7 @@ export interface CreateTicketRequest {
   category: TicketCategory;
   priority: TicketPriority;
   bookingId?: string;
+  userType?: string;
 }
 
 /**

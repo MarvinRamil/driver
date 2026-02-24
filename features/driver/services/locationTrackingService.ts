@@ -223,6 +223,15 @@ class LocationTrackingService {
     const batch = [...this.locationBuffer];
     this.locationBuffer = [];
 
+    // Periodic MQTT Health Check:
+    // If we're tracking but MQTT is dead (e.g., stuck due to backgrounding), try to revive it over time.
+    if (!mqttLocationService.isConnected()) {
+      console.log('[LocationTrackingService] Health Check: MQTT is disconnected. Requesting force reconnect...');
+      mqttLocationService.forceReconnect().catch(err => {
+        console.warn('[LocationTrackingService] MQTT force reconnect failed during flush:', err);
+      });
+    }
+
     try {
       // Try MQTT first (preferred method - real-time, lighter)
       if (mqttLocationService.isConnected()) {
@@ -313,7 +322,7 @@ class LocationTrackingService {
     } catch (error) {
       // Extract full error message from various error types
       let errorMessage = 'Unknown error';
-      
+
       if (error instanceof Error) {
         errorMessage = error.message;
       } else if (error && typeof error === 'object') {
@@ -331,7 +340,7 @@ class LocationTrackingService {
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
-      
+
       this.lastError = errorMessage;
       this.notifyStatusListeners();
       console.error('Error sending location batch:', {
@@ -428,6 +437,7 @@ class LocationTrackingService {
 
       return await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
+        // @ts-ignore - maximumAge not officially in the types but sometimes supported by native code
         maximumAge: 60000, // Accept location up to 1 minute old
         timeout: 15000, // 15 second timeout
       });

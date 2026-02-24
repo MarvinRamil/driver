@@ -57,8 +57,8 @@ class SupportService {
       const items = Array.isArray(data.items)
         ? data.items
         : Array.isArray(data)
-        ? data
-        : [];
+          ? data
+          : [];
 
       return items.map((ticket) => ({
         id: ticket.id,
@@ -72,6 +72,8 @@ class SupportService {
         updatedAt: this.parseDate(ticket.updatedAt),
         resolvedAt: this.parseDate(ticket.resolvedAt),
         resolution: ticket.resolution ?? null,
+        zammadTicketId: ticket.zammadTicketId ?? null,
+        userType: ticket.userType || 'driver',
       }));
     } catch (error) {
       console.error('Failed to fetch tickets:', error);
@@ -89,7 +91,10 @@ class SupportService {
     try {
       const response = await apiClient.post<SupportTicket>('/api/tickets', {
         requiresAuth: true,
-        body: data,
+        body: {
+          ...data,
+          userType: 'driver', // Always 'driver' from this app
+        },
       });
 
       if (!response.success || !response.data) {
@@ -162,9 +167,9 @@ class SupportService {
         lastMessageAt: this.parseDate(conv.lastMessageAt as any),
         lastMessage: conv.lastMessage
           ? {
-              ...conv.lastMessage,
-              createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
-            }
+            ...conv.lastMessage,
+            createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
+          }
           : null,
         participants: (conv.participants || []).map((p) => ({
           ...p,
@@ -204,9 +209,9 @@ class SupportService {
         lastMessageAt: this.parseDate(conv.lastMessageAt as any),
         lastMessage: conv.lastMessage
           ? {
-              ...conv.lastMessage,
-              createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
-            }
+            ...conv.lastMessage,
+            createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
+          }
           : null,
         participants: (conv.participants || []).map((p) => ({
           ...p,
