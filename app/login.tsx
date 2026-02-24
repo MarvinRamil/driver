@@ -23,6 +23,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Import images as constants for reliable bundling in release builds
 const adaptiveIcon = require('../assets/images/adaptive-icon.png');
 
+/** Once true, we do not auto-prompt biometric again this app session (avoids retrigger on remount/return to login). */
+let hasAutoPromptedBiometricThisSession = false;
+
 /**
  * Login screen component
  * Allows drivers to authenticate with email and password
@@ -58,20 +61,21 @@ export default function LoginScreen() {
   const autoPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
-   * Attempt auto biometric login
+   * Attempt auto biometric login. Only once per app session (no retrigger on remount or return to login).
    */
   const attemptAutoBiometricLogin = async () => {
-    if (isBiometricLoading || isLoading || hasAutoPrompted) {
+    if (isBiometricLoading || isLoading || hasAutoPrompted || hasAutoPromptedBiometricThisSession) {
       return;
     }
 
     try {
+      hasAutoPromptedBiometricThisSession = true;
       setHasAutoPrompted(true);
       await handleTouchIDLogin();
     } catch (err) {
-      // Silently fail - user can login manually
+      // Silently fail - user can login manually; do not reset session flag so we don't retrigger
       console.log('[LoginScreen] Auto biometric login skipped');
-      setHasAutoPrompted(false); // Allow retry
+      setHasAutoPrompted(false);
     }
   };
 
@@ -89,8 +93,8 @@ export default function LoginScreen() {
         setIsBiometricReady(ready);
         setBiometricType(type);
 
-        // Auto-prompt biometric login if ready and user hasn't been prompted
-        if (ready && !hasAutoPrompted && !isLoading) {
+        // Auto-prompt only once per session; skip if already prompted (e.g. remount after signup/background)
+        if (ready && !hasAutoPrompted && !hasAutoPromptedBiometricThisSession && !isLoading) {
           // Small delay to ensure UI is ready
           if (autoPromptTimeoutRef.current) {
             clearTimeout(autoPromptTimeoutRef.current);
@@ -116,9 +120,8 @@ export default function LoginScreen() {
     };
   }, [hasAutoPrompted, isLoading]);
 
-  // Do NOT auto-prompt on app state change (e.g. returning from background) to avoid
-  // biometric popping "randomly" when user switches apps and comes back to login.
-  // Auto-prompt only once on mount (see effect below).
+  // Do NOT auto-prompt on app state change or when returning to login (remount).
+  // Session flag hasAutoPromptedBiometricThisSession ensures we only prompt once per app launch.
 
   /**
    * Handle biometric login
