@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSegments } from 'expo-router';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
 import { useBiometricPrompt } from '@/shared/hooks/useBiometricPrompt';
 import { BiometricEnablePrompt } from './BiometricEnablePrompt';
@@ -12,19 +13,25 @@ interface TempCredentials {
 
 /**
  * Biometric prompt manager component
- * Shows biometric enable prompt after successful login
- * Should be placed in the app layout after AuthProvider
+ * Shows biometric enable prompt after successful login ONLY on the main app screens (tabs).
+ * Does NOT show during registration, onboarding (liveness, driver-complete), or other auth flows.
+ * Should be placed in the app layout after AuthProvider.
  */
 export function BiometricPromptManager() {
   const { isAuthenticated, user } = useAuthContext();
+  const segments = useSegments();
   const { shouldShowPrompt, checkPrompt } = useBiometricPrompt();
   const [showPrompt, setShowPrompt] = useState(false);
   const [tempCredentials, setTempCredentials] = useState<TempCredentials | null>(null);
 
+  // Only show the biometric prompt on the main authenticated screens (tabs),
+  // NOT during signup, liveness, driver-complete, or other onboarding flows.
+  const isOnMainAppScreens = segments[0] === '(tabs)';
+
   // Check for temporary credentials and show prompt if needed (only when user does NOT already have biometric enabled)
   useEffect(() => {
     const loadTempCredentials = async () => {
-      if (!isAuthenticated || !user) {
+      if (!isAuthenticated || !user || !isOnMainAppScreens) {
         return;
       }
 
@@ -52,7 +59,7 @@ export function BiometricPromptManager() {
     };
 
     loadTempCredentials();
-  }, [isAuthenticated, user, checkPrompt]);
+  }, [isAuthenticated, user, checkPrompt, isOnMainAppScreens]);
 
   const handleDismiss = async () => {
     setShowPrompt(false);
