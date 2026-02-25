@@ -160,13 +160,12 @@ class SupportService {
         throw new Error('Failed to create ticket');
       }
 
-      const ticket = response.data;
-      return {
-        ...ticket,
-        createdAt: this.parseDate(ticket.createdAt as any) || new Date(),
-        updatedAt: this.parseDate(ticket.updatedAt as any),
-        resolvedAt: this.parseDate(ticket.resolvedAt as any),
-      };
+      // API returns { data: ticketDto } - unwrap if wrapped
+      const raw = response.data as { data?: SupportTicket } | SupportTicket;
+      const ticket = raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw;
+      if (!ticket) throw new Error('Failed to create ticket');
+
+      return this.mapTicket(ticket as any, 'driver');
     } catch (error) {
       console.error('Failed to create ticket:', error);
       throw new Error(
