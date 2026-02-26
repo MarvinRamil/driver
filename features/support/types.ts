@@ -2,6 +2,17 @@
  * Support feature types
  */
 
+/** Zammad article (conversation message from support) */
+export interface ZammadArticle {
+  body: string;
+  subject?: string | null;
+  from?: string | null;
+  sender: string;
+  createdAt?: string | null;
+  contentType?: string;
+  internal?: boolean;
+}
+
 /**
  * Support ticket
  */
@@ -19,6 +30,8 @@ export interface SupportTicket {
   resolution: string | null;
   zammadTicketId: number | null;
   userType: string;
+  /** Updates from Zammad (when fetched with includeZammad) */
+  zammadArticles?: ZammadArticle[];
 }
 
 /**
@@ -35,6 +48,16 @@ export type TicketPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
  * Ticket status
  */
 export type TicketStatus = 'Open' | 'InProgress' | 'WaitingCustomer' | 'Resolved' | 'Closed';
+
+/** API response when includeZammad=true */
+export interface TicketWithZammadResponse {
+  ticket: Record<string, unknown>;
+  zammad?: {
+    title: string;
+    state: string;
+    articles?: ZammadArticle[];
+  };
+}
 
 /**
  * Create ticket request

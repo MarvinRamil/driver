@@ -64,9 +64,10 @@ export default function SupportScreen() {
     }
     if (isSubmitting) return;
 
+    console.log('[Support] handleCreateTicket: starting...');
     Keyboard.dismiss();
     setIsSubmitting(true);
-    const key = createTicketKeyRef.current ?? (createTicketKeyRef.current = crypto.randomUUID());
+    const key = createTicketKeyRef.current ?? (createTicketKeyRef.current = `${Date.now()}-${Math.random().toString(36).slice(2, 15)}`);
     try {
       await supportService.createTicket(
         {
@@ -77,12 +78,14 @@ export default function SupportScreen() {
         },
         key
       );
+      console.log('[Support] handleCreateTicket: success');
       setShowCreateTicket(false);
       setTicketSubject('');
       setTicketDescription('');
       await refresh();
       Alert.alert('Success', 'Ticket created successfully');
     } catch (err) {
+      console.error('[Support] handleCreateTicket error:', err);
       const msg = err && typeof err === 'object' && 'message' in err
         ? String((err as { message: string }).message)
         : err instanceof Error ? err.message : 'Failed to create ticket';
@@ -248,7 +251,8 @@ export default function SupportScreen() {
             tickets.slice(0, 2).map((ticket) => (
               <TouchableOpacity
                 key={ticket.id}
-                style={[styles.ticketCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                style={[styles.ticketCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => router.push(`/support/ticket/${ticket.id}`)}>
                 <View style={styles.ticketLeft}>
                   <View
                     style={[

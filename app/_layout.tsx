@@ -222,6 +222,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="in-ride" options={{ headerShown: false }} />
                 <Stack.Screen name="rating" options={{ headerShown: false }} />
                 <Stack.Screen name="support" options={{ headerShown: false }} />
+                <Stack.Screen name="support/ticket/[id]" options={{ headerShown: false }} />
                 <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
                 <Stack.Screen
                   name="modal"

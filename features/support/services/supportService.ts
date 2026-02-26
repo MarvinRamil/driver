@@ -99,21 +99,37 @@ class SupportService {
   }
 
   /**
-   * Get a single ticket by ID.
-   * GET /api/tickets/{id}
+   * Get a single ticket by ID, optionally with Zammad updates/articles.
+   * GET /api/tickets/{id}?includeZammad=true returns { ticket, zammad: { title, state, articles } }
    */
-  async getTicket(ticketId: string): Promise<SupportTicket | null> {
+  async getTicket(ticketId: string, includeZammad = true): Promise<SupportTicket | null> {
     try {
-      const response = await apiClient.get<SupportTicket>(`/api/tickets/${ticketId}`, {
+      const params = includeZammad ? { includeZammad: true } : undefined;
+      const response = await apiClient.get<SupportTicket | TicketWithZammadResponse>(`/api/tickets/${ticketId}`, {
         requiresAuth: true,
+        params: params as Record<string, string | number | boolean> | undefined,
       });
 
       if (!response.success || !response.data) {
         return null;
       }
 
-      const ticket = response.data as any;
-      return this.mapTicket(ticket, 'driver');
+      // API returns { data: ticketDto } or { data: { ticket, zammad } } - unwrap
+      const raw = response.data as { data?: unknown } | TicketWithZammadResponse | SupportTicket;
+      const payload = raw && typeof raw === 'object' && 'data' in raw ? (raw as { data: unknown }).data : raw;
+      if (!payload) return null;
+
+      const withZammad = payload as TicketWithZammadResponse;
+      if (withZammad.ticket) {
+        const t = this.mapTicket(withZammad.ticket as any, 'driver');
+        const zammad = withZammad.zammad;
+        return {
+          ...t,
+          subject: t.subject || zammad?.title || t.subject,
+          zammadArticles: zammad?.articles ?? [],
+        };
+      }
+      return this.mapTicket(payload as any, 'driver');
     } catch (error) {
       console.error('Failed to fetch ticket:', error);
       return null;
@@ -135,6 +151,7 @@ class SupportService {
       resolution: ticket.resolution ?? null,
       zammadTicketId: ticket.zammadTicketId ?? null,
       userType: ticket.userType || defaultUserType,
+      zammadArticles: ticket.zammadArticles,
     };
   }
 
@@ -145,6 +162,7 @@ class SupportService {
    */
   async createTicket(data: CreateTicketRequest, idempotencyKey?: string): Promise<SupportTicket> {
     try {
+      console.log('[Support] createTicket: sending request...', { subject: data.subject?.slice(0, 30) });
       const headers: Record<string, string> = {};
       if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
       const response = await apiClient.post<SupportTicket>('/api/tickets', {
@@ -154,8 +172,10 @@ class SupportService {
           ...data,
           userType: 'driver', // Always 'driver' from this app
         },
+        timeout: 20000, // 20s - fail fast if backend hangs
       });
 
+      console.log('[Support] createTicket: got response', { success: response.success, hasData: !!response.data });
       if (!response.success || !response.data) {
         throw new Error('Failed to create ticket');
       }
@@ -165,12 +185,30 @@ class SupportService {
       const ticket = raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw;
       if (!ticket) throw new Error('Failed to create ticket');
 
+      console.log('[Support] createTicket: success');
       return this.mapTicket(ticket as any, 'driver');
     } catch (error) {
-      console.error('Failed to create ticket:', error);
-      throw new Error(
-        `Failed to create ticket: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      const msg = error && typeof error === 'object' && 'message' in error
+        ? String((error as { message: string }).message)
+        : error instanceof Error ? error.message : 'Unknown error';
+      console.error('[Support] createTicket failed:', msg, error);
+      throw new Error(msg.includes('Failed to create ticket') ? msg : `Failed to create ticket: ${msg}`);
+    }
+  }
+
+  /**
+   * Add a comment to a ticket (syncs to Zammad).
+   * POST /api/tickets/{id}/comments
+   * Only allowed for open tickets; closed/resolved tickets cannot receive comments.
+   */
+  async addComment(ticketId: string, body: string): Promise<void> {
+    const response = await apiClient.post(`/api/tickets/${ticketId}/comments`, {
+      requiresAuth: true,
+      body: { body },
+    });
+
+    if (!response.success) {
+      throw new Error('Failed to add comment');
     }
   }
 

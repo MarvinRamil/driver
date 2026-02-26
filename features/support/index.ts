@@ -4,6 +4,7 @@ export { useSupport } from './hooks/useSupport';
 export { useChat } from './hooks/useChat';
 export type {
   SupportTicket,
+  ZammadArticle,
   CreateTicketRequest,
   FAQArticle,
   Conversation,

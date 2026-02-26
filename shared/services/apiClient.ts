@@ -277,8 +277,8 @@ class ApiClient {
         }
       }
 
-      // Always log API calls for bookings and dispatches
-      if (endpoint.includes('/bookings') || endpoint.includes('/dispatches')) {
+      // Always log API calls for bookings, dispatches, and tickets
+      if (endpoint.includes('/bookings') || endpoint.includes('/dispatches') || endpoint.includes('/tickets')) {
         console.log(`[API] ===== API CALL =====`);
         console.log(`[API] Method: ${method}`);
         console.log(`[API] URL: ${fullUrl}`);
@@ -428,7 +428,7 @@ class ApiClient {
             hasAuthHeader: !!headersRecord.Authorization,
           });
         }
-      } else if (endpoint.includes('/bookings') || endpoint.includes('/dispatches') || endpoint.includes('/locations/')) {
+      } else if (endpoint.includes('/bookings') || endpoint.includes('/dispatches') || endpoint.includes('/locations/') || endpoint.includes('/tickets')) {
         console.log(`[API] ✓ Success: ${method} ${fullUrl} - Status: ${response.status}`);
       }
 
