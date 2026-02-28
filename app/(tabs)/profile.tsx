@@ -728,6 +728,16 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={[styles.logoutButton, { backgroundColor: theme.error + '15', marginBottom: 12, flexDirection: 'row', justifyContent: 'center', gap: 8 }]}
+          onPress={() => router.push('/account/delete-account')}>
+          <Ionicons name="trash-outline" size={20} color={theme.error} />
+          <ThemedText style={[styles.logoutButtonText, { color: theme.error }]}>
+            Delete Account
+          </ThemedText>
+        </TouchableOpacity>
+
         {/* Logout */}
         <TouchableOpacity
           style={[styles.logoutButton, { backgroundColor: theme.error + '20' }]}

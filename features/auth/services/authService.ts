@@ -259,6 +259,22 @@ class AuthService {
   }
 
   /**
+   * Delete the current user's account (Right to Erasure).
+   * Calls DELETE api/users/me - anonymizes PII and deactivates the account.
+   * @returns Promise resolving when account is deleted
+   * @throws Error if deletion fails
+   */
+  async deleteAccount(): Promise<void> {
+    const response = await apiClient.delete<{ success: boolean; message: string }>('api/users/me', {
+      requiresAuth: true,
+    });
+    if (!response.success || !response.data?.success) {
+      throw new Error(response.message || response.data?.message || 'Failed to delete account');
+    }
+    await tokenStorage.clearAllTokens();
+  }
+
+  /**
    * Logout user and clear all stored tokens
    * Calls API to blacklist token first (with current token), then clears local tokens.
    * This order prevents "No Authorization header" errors from the logout call itself.
