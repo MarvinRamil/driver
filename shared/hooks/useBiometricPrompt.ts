@@ -9,8 +9,8 @@ interface UseBiometricPromptReturn {
   isBiometricAvailable: boolean;
   /** Biometric type name (Face ID, Touch ID, etc.) */
   biometricType: string;
-  /** Check if prompt should be shown */
-  checkPrompt: () => Promise<void>;
+  /** Check if prompt should be shown; returns true only when biometric available and credentials not yet stored (avoids race with state) */
+  checkPrompt: () => Promise<boolean>;
 }
 
 /**
@@ -22,7 +22,7 @@ export function useBiometricPrompt(): UseBiometricPromptReturn {
   const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometric');
 
-  const checkPrompt = async () => {
+  const checkPrompt = async (): Promise<boolean> => {
     try {
       const [available, hasCredentials] = await Promise.all([
         biometricAuth.isAvailable(),
@@ -33,13 +33,14 @@ export function useBiometricPrompt(): UseBiometricPromptReturn {
 
       setIsBiometricAvailable(available);
       setBiometricType(type);
-      
-      // Show prompt if biometric is available but credentials are not stored
-      setShouldShowPrompt(available && !hasCredentials);
+      const show = available && !hasCredentials;
+      setShouldShowPrompt(show);
+      return show;
     } catch (error) {
       console.warn('[useBiometricPrompt] Error checking prompt:', error);
       setIsBiometricAvailable(false);
       setShouldShowPrompt(false);
+      return false;
     }
   };
 

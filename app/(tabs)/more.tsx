@@ -74,6 +74,13 @@ export default function MoreScreen() {
       show: true,
     },
     {
+      id: 'giveaways',
+      title: 'Giveaways',
+      icon: 'gift-outline',
+      route: '/(tabs)/giveaways',
+      show: true,
+    },
+    {
       id: 'history',
       title: 'Trip History',
       icon: 'time-outline',
@@ -135,8 +142,8 @@ export default function MoreScreen() {
         <View style={styles.statsGrid}>
           <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Ionicons name="cube-outline" size={24} color={theme.primary} />
-            <ThemedText style={[styles.statValue, { color: theme.text }]}>{safeStats.totalBookings}</ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Total Trips</ThemedText>
+            <ThemedText style={[styles.statValue, { color: theme.text }]}>{safeStats.completedBookings}</ThemedText>
+            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Completed Trips</ThemedText>
           </View>
           <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Ionicons name="star-outline" size={24} color={theme.warning} />

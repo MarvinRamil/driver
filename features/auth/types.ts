@@ -64,6 +64,14 @@ export interface User {
   profilePictureUrl?: string | null;
   /** When the user completed face liveness verification (ISO date string, optional) */
   livenessVerifiedAt?: string | null;
+  /** Vehicle license plate (driver) */
+  vehiclePlate?: string | null;
+  /** Vehicle model (driver) */
+  vehicleModel?: string | null;
+  /** Vehicle color (driver) */
+  vehicleColor?: string | null;
+  /** Vehicle type (driver) - e.g. Motorcycle, Sedan, SUV, Van, Pickup, L300, etc. */
+  vehicleType?: string | null;
 }
 
 /**
@@ -146,6 +154,8 @@ export interface RegisterRequest {
   securityQuestion2?: SecurityQuestionRequest;
   /** Security question 3 (required for account recovery) */
   securityQuestion3?: SecurityQuestionRequest;
+  /** Token from verify-otp response; proves OTP was verified when cache is not shared (e.g. multiple API instances) */
+  registrationToken?: string | null;
 }
 
 /**
@@ -172,6 +182,13 @@ export interface VerifyOtpRequest {
   otp: string;
 }
 
+/** Response from verify-otp; includes registrationToken for register (works when cache is not shared across API instances) */
+export interface VerifyOtpResponse {
+  success: boolean;
+  message: string;
+  registrationToken?: string;
+}
+
 /** OTP verify and register request - POST /api/auth/verify-otp-and-register (deprecated: use verify-otp + register + login) */
 export interface VerifyOtpAndRegisterRequest {
   email: string;
@@ -189,6 +206,37 @@ export interface VerifyOtpAndRegisterResponse {
   refreshToken?: string;
   refreshTokenExpiration?: string;
   user: User;
+}
+
+/** Security answer for forgot password - POST /api/auth/forgot-password/get-questions, reset-password */
+export interface SecurityAnswerRequest {
+  questionNumber: number;
+  answer: string;
+}
+
+/** Forgot password (request OTP) - POST /api/auth/forgot-password/mobile */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/** Forgot password response */
+export interface ForgotPasswordResponse {
+  success: boolean;
+  message: string;
+}
+
+/** Reset password (OTP + security answers) - POST /api/auth/reset-password */
+export interface ResetPasswordRequest {
+  email: string;
+  otp: string;
+  newPassword: string;
+  securityAnswers?: SecurityAnswerRequest[];
+}
+
+/** Reset password response */
+export interface ResetPasswordResponse {
+  success: boolean;
+  message: string;
 }
 
 /**

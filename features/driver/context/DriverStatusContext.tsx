@@ -41,6 +41,51 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<DriverStatus | null>(null);
 
+  /**
+   * Ensure location tracking is started if status is online
+   * This is a separate function to allow retries and better error handling
+   */
+  const ensureLocationTracking = useCallback(async (retryCount: number = 0): Promise<void> => {
+    if (!user?.id) {
+      // User not available yet, will retry when user becomes available
+      return;
+    }
+
+    const isCurrentlyTracking = locationTrackingService.getIsTracking();
+    if (isCurrentlyTracking) {
+      // Already tracking, verify it's still active
+      console.log('[DriverStatusContext] Location tracking already active');
+      return;
+    }
+
+    try {
+      locationTrackingService.setDriverId(user.id);
+      const hasPermission = await locationTrackingService.hasPermissions();
+      if (hasPermission) {
+        await locationTrackingService.startTracking(5000, user.id);
+        console.log('[DriverStatusContext] Location tracking started successfully');
+      } else {
+        // Request permissions if not granted
+        const granted = await locationTrackingService.requestPermissions();
+        if (granted) {
+          await locationTrackingService.startTracking(5000, user.id);
+          console.log('[DriverStatusContext] Location tracking started after permission grant');
+        } else {
+          console.warn('[DriverStatusContext] Location permissions not granted');
+        }
+      }
+    } catch (err) {
+      console.warn('[DriverStatusContext] Failed to start location tracking:', err);
+      // Retry once after a short delay if user is available
+      if (retryCount === 0 && user?.id) {
+        console.log('[DriverStatusContext] Retrying location tracking start...');
+        setTimeout(() => {
+          ensureLocationTracking(1).catch(console.error);
+        }, 2000);
+      }
+    }
+  }, [user]);
+
   const fetchStatus = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -51,14 +96,18 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
 
       // If driver is already online on app launch, ensure tracking is started
       if (driverStatus.isOnline) {
-        if (user?.id) {
-          locationTrackingService.setDriverId(user.id);
-          const hasPermission = await locationTrackingService.hasPermissions();
-          if (hasPermission) {
-            // Don't await this so we don't block the UI rendering
-            locationTrackingService.startTracking(5000, user.id).catch(err =>
-              console.warn('[DriverStatusContext] Failed to resume tracking on startup:', err)
-            );
+        // Don't await this so we don't block the UI rendering
+        ensureLocationTracking().catch(err =>
+          console.warn('[DriverStatusContext] Failed to resume tracking on startup:', err)
+        );
+      } else {
+        // If status is offline, ensure tracking is stopped
+        const isCurrentlyTracking = locationTrackingService.getIsTracking();
+        if (isCurrentlyTracking) {
+          try {
+            await locationTrackingService.stopTracking();
+          } catch (err) {
+            console.warn('[DriverStatusContext] Failed to stop tracking:', err);
           }
         }
       }
@@ -72,7 +121,7 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
       setIsLoading(false);
       setIsInitialLoading(false); // Mark initial fetch as complete
     }
-  }, [user]);
+  }, [ensureLocationTracking]);
 
   const updateStatus = useCallback(async (newStatus: boolean) => {
     try {
@@ -84,30 +133,11 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
       // Start/stop location tracking based on online status
       if (response.isOnline) {
         // Driver went online - start location tracking
-        try {
-          // Set driver ID if available
-          if (user?.id) {
-            locationTrackingService.setDriverId(user.id);
-          }
-
-          const hasPermission = await locationTrackingService.hasPermissions();
-          if (hasPermission) {
-            await locationTrackingService.startTracking(5000, user?.id); // Update every 5 seconds
-          } else {
-            // Request permissions if not granted
-            const granted = await locationTrackingService.requestPermissions();
-            if (granted) {
-              await locationTrackingService.startTracking(5000, user?.id);
-            }
-          }
-        } catch (locationError) {
-          // Log but don't fail the status update if location tracking fails
-          console.warn('Failed to start location tracking:', locationError);
-        }
+        await ensureLocationTracking();
       } else {
         // Driver went offline - stop location tracking
         try {
-          locationTrackingService.stopTracking();
+          await locationTrackingService.stopTracking();
         } catch (locationError) {
           // Log but don't fail the status update if location tracking fails
           console.warn('Failed to stop location tracking:', locationError);
@@ -130,7 +160,7 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [status, fetchStatus]);
+  }, [status, fetchStatus, ensureLocationTracking]);
 
   const toggleOnlineStatus = useCallback(async () => {
     await updateStatus(!isOnline);
@@ -145,8 +175,28 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
       setIsInitialLoading(false);
       setIsOnline(false);
       setIsLoading(false);
+      // Stop tracking when user logs out (void = fire-and-forget; AuthContext logout already awaits)
+      try {
+        void locationTrackingService.stopTracking();
+      } catch (err) {
+        console.warn('[DriverStatusContext] Failed to stop tracking on logout:', err);
+      }
     }
   }, [fetchStatus, user]);
+
+  // Additional effect to ensure tracking starts when user becomes available and status is online
+  useEffect(() => {
+    if (user?.id && isOnline && !isInitialLoading) {
+      // Verify tracking is actually active
+      const isCurrentlyTracking = locationTrackingService.getIsTracking();
+      if (!isCurrentlyTracking) {
+        console.log('[DriverStatusContext] Status is online but tracking not active, starting tracking...');
+        ensureLocationTracking().catch(err =>
+          console.warn('[DriverStatusContext] Failed to start tracking after user/login:', err)
+        );
+      }
+    }
+  }, [user?.id, isOnline, isInitialLoading, ensureLocationTracking]);
 
   const value: DriverStatusContextValue = {
     isOnline,

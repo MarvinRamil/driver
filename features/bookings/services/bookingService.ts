@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/services/apiClient';
-import type { Booking, Dispatch } from '@/shared/types/booking';
+import type { Booking, Dispatch, CancellationReason } from '@/shared/types/booking';
 import type { User } from '@/features/auth/types';
 
 /**
@@ -232,9 +232,174 @@ class BookingService {
       pickupLongitude: pickupLongitude !== null && !isNaN(pickupLongitude) ? pickupLongitude : null,
       dropoffLatitude: dropoffLatitude !== null && !isNaN(dropoffLatitude) ? dropoffLatitude : null,
       dropoffLongitude: dropoffLongitude !== null && !isNaN(dropoffLongitude) ? dropoffLongitude : null,
+      estimatedFare: apiBooking.estimatedFare != null && !isNaN(Number(apiBooking.estimatedFare)) ? Number(apiBooking.estimatedFare) : null,
+      finalFare: apiBooking.finalFare != null && !isNaN(Number(apiBooking.finalFare)) ? Number(apiBooking.finalFare) : null,
+      cancellationReason: apiBooking.cancellationReason ?? null,
+      cancelledBy: apiBooking.cancelledBy ?? null,
+      cancelledAt: this.parseDate(apiBooking.cancelledAt),
       description: apiBooking.cargoDescription || apiBooking.description,
       weight: weightKg ?? apiBooking.weight,
+      stops: Array.isArray(apiBooking.stops)
+        ? apiBooking.stops.map((s: any) => ({
+            id: s.id ?? '',
+            sequence: s.sequence ?? 0,
+            address: s.address ?? '',
+            type: (s.type === 'Dropoff' ? 'Dropoff' : 'Pickup') as 'Pickup' | 'Dropoff',
+            status: (() => {
+              const apiStatus = s.status;
+              if (!apiStatus) return 'Pending';
+              
+              // Normalize to handle case variations
+              const normalizedStatus = String(apiStatus).trim();
+              
+              // Map API statuses to our StopStatus type
+              if (normalizedStatus === 'InTransit' || normalizedStatus === 'OnTheWay' || normalizedStatus.toLowerCase() === 'intransit' || normalizedStatus.toLowerCase() === 'ontheway') {
+                return 'OnTheWay';
+              }
+              if (normalizedStatus === 'Arrived' || normalizedStatus === 'ArrivedAt' || normalizedStatus.toLowerCase() === 'arrived') {
+                return 'Arrived';
+              }
+              if (normalizedStatus === 'Completed' || normalizedStatus === 'Delivered' || normalizedStatus.toLowerCase() === 'completed' || normalizedStatus.toLowerCase() === 'delivered') {
+                return 'Completed';
+              }
+              if (normalizedStatus === 'Pending' || normalizedStatus.toLowerCase() === 'pending') {
+                return 'Pending';
+              }
+              return 'Pending';
+            })(),
+            arrivedAt: this.parseDate(s.arrivedAt),
+            completedAt: this.parseDate(s.completedAt),
+            latitude: s.latitude != null ? Number(s.latitude) : null,
+            longitude: s.longitude != null ? Number(s.longitude) : null,
+            contactName: s.contactName ?? null,
+            contactPhone: s.contactPhone ?? null,
+            notes: s.notes ?? null,
+          }))
+        : undefined,
     };
+  }
+
+  /**
+   * Upload proof of delivery (POD) for a stop.
+   * Requires delivery photo (image). Signature is optional.
+   * @param bookingId Booking ID
+   * @param stopId Dropoff stop ID (from booking.stops)
+   * @param imageUri Local URI of delivery photo (required)
+   * @param signatureUri Optional local URI of signature image
+   * @param recipientName Optional recipient name
+   * @param notes Optional notes
+   */
+  async uploadPod(
+    bookingId: string,
+    stopId: string,
+    imageUri: string,
+    signatureUri?: string | null,
+    recipientName?: string | null,
+    notes?: string | null
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('Image', {
+      uri: imageUri,
+      name: 'delivery.jpg',
+      type: 'image/jpeg',
+    } as unknown as Blob);
+    if (signatureUri) {
+      formData.append('Signature', {
+        uri: signatureUri,
+        name: 'signature.jpg',
+        type: 'image/jpeg',
+      } as unknown as Blob);
+    }
+    if (recipientName?.trim()) formData.append('RecipientName', recipientName.trim());
+    if (notes?.trim()) formData.append('Notes', notes.trim());
+
+    const response = await apiClient.post<{ success: boolean; message?: string; data?: unknown }>(
+      `/api/bookings/${bookingId}/stops/${stopId}/pod`,
+      {
+        body: formData,
+        requiresAuth: true,
+      }
+    );
+
+    if (!response.success) {
+      throw new Error(response.message ?? 'Failed to upload proof of delivery');
+    }
+  }
+
+  /**
+   * Mark a stop as arrived.
+   */
+  async arriveStop(bookingId: string, stopId: string): Promise<Booking> {
+    console.log(`[BookingService] Marking stop ${stopId} as arrived for booking ${bookingId}`);
+    
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/arrive`, {
+      requiresAuth: true,
+    });
+
+    console.log(`[BookingService] Arrive response:`, {
+      success: response.success,
+      statusCode: response.statusCode,
+      message: response.message,
+      hasData: !!response.data,
+    });
+
+    if (!response.success || !response.data) {
+      const errorMsg = response.message ?? `Failed to mark stop as arrived. Status: ${response.statusCode ?? 'unknown'}`;
+      console.error(`[BookingService] Arrive failed:`, errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Mark a stop as in transit (driver heading to stop location).
+   */
+  async onTheWayStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/in-transit`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to mark stop as in transit');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Complete an arrived stop.
+   */
+  async completeStop(bookingId: string, stopId: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/stops/${stopId}/complete`, {
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to complete stop');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
+  }
+
+  /**
+   * Cancel a booking with reason
+   * POST /api/bookings/{id}/cancel
+   */
+  async cancelBooking(bookingId: string, reason: CancellationReason, customReason?: string): Promise<Booking> {
+    const response = await apiClient.post<Booking>(`/api/bookings/${bookingId}/cancel`, {
+      body: {
+        reason,
+        customReason,
+      },
+      requiresAuth: true,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message ?? 'Failed to cancel booking');
+    }
+
+    return this.mapApiBookingToBooking(response.data);
   }
 
   /**
@@ -377,7 +542,7 @@ class BookingService {
 
         if (!response.success || !response.data) {
           console.warn('[BookingService] No bookings found or request failed');
-          return [];
+        return [];
         }
 
         // Handle API response structure
@@ -446,6 +611,31 @@ class BookingService {
         `Failed to fetch booking: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Get all bookings for a driver by ID.
+   * GET /api/bookings/driver/{driverId}
+   * Used by trip history and any feature that needs the driver's booking list.
+   */
+  async getBookingsByDriverId(driverId: string): Promise<Booking[]> {
+    const response = await apiClient.get<any>(`/api/bookings/driver/${driverId}`, {
+      requiresAuth: true,
+    });
+    if (!response.success || !response.data) {
+      return [];
+    }
+    const raw = (response.data as any)?.data ?? response.data;
+    const list = Array.isArray(raw) ? raw : [];
+    return list
+      .map((apiBooking: any) => {
+        try {
+          return this.mapApiBookingToBooking(apiBooking);
+        } catch {
+          return null;
+        }
+      })
+      .filter((b): b is Booking => b !== null);
   }
 
   /**

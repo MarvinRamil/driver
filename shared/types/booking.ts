@@ -13,11 +13,16 @@ export type BookingStatus =
   | "Broadcasting"
   | "Confirmed"
   | "Dispatched"
+  | "DriverAssigned"
   | "OnTheWayToPickup"
+  | "PickedUp"
+  | "InTransit"
   | "InProgress"
   | "Delivered"
   | "Completed"
   | "Cancelled";
+
+export type StopStatus = "Pending" | "OnTheWay" | "Arrived" | "Completed";
 
 /**
  * Assignment status enumeration
@@ -63,6 +68,24 @@ export interface LocationCoordinates {
   latitude: number;
   /** Longitude */
   longitude: number;
+}
+
+/**
+ * Delivery stop (pickup or dropoff) with id for POD upload
+ */
+export interface DeliveryStop {
+  id: string;
+  sequence: number;
+  address: string;
+  type: 'Pickup' | 'Dropoff';
+  status?: StopStatus;
+  arrivedAt?: Date | null;
+  completedAt?: Date | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  notes?: string | null;
 }
 
 /**
@@ -116,6 +139,16 @@ export interface Booking {
   dropoffLatitude: number | null;
   /** GPS longitude of dropoff location (nullable) */
   dropoffLongitude: number | null;
+  /** Estimated fare amount (nullable) */
+  estimatedFare: number | null;
+  /** Final fare amount after completion (nullable) */
+  finalFare: number | null;
+  /** Cancellation reason (nullable) */
+  cancellationReason: string | null;
+  /** User ID who cancelled the booking (nullable) */
+  cancelledBy: string | null;
+  /** When booking was cancelled (nullable) */
+  cancelledAt: Date | null;
 
   // Legacy fields for backward compatibility
   /** Optional description of cargo (legacy - use cargoDescription) */
@@ -126,6 +159,48 @@ export interface Booking {
   driverId?: string;
   /** Optional driver location coordinates (legacy) */
   driverLocation?: LocationCoordinates;
+  /** Stops (pickup/dropoff) with ids for POD upload */
+  stops?: DeliveryStop[];
+}
+
+/**
+ * Cancellation reason enum matching backend
+ */
+export enum CancellationReason {
+  CustomerRequest = 'CustomerRequest',
+  DriverUnavailable = 'DriverUnavailable',
+  NoDriverFound = 'NoDriverFound',
+  PickupLocationInaccessible = 'PickupLocationInaccessible',
+  DeliveryLocationInaccessible = 'DeliveryLocationInaccessible',
+  ItemNotReady = 'ItemNotReady',
+  WeatherConditions = 'WeatherConditions',
+  VehicleBreakdown = 'VehicleBreakdown',
+  Emergency = 'Emergency',
+  Other = 'Other',
+}
+
+/**
+ * Cancellation reason display text
+ */
+export const CancellationReasonLabels: Record<CancellationReason, string> = {
+  [CancellationReason.CustomerRequest]: 'Customer requested cancellation',
+  [CancellationReason.DriverUnavailable]: 'Driver unavailable',
+  [CancellationReason.NoDriverFound]: 'No driver found',
+  [CancellationReason.PickupLocationInaccessible]: 'Pickup location inaccessible',
+  [CancellationReason.DeliveryLocationInaccessible]: 'Delivery location inaccessible',
+  [CancellationReason.ItemNotReady]: 'Item not ready for pickup',
+  [CancellationReason.WeatherConditions]: 'Weather conditions',
+  [CancellationReason.VehicleBreakdown]: 'Vehicle breakdown',
+  [CancellationReason.Emergency]: 'Emergency situation',
+  [CancellationReason.Other]: 'Other',
+};
+
+/**
+ * Cancel booking request DTO
+ */
+export interface CancelBookingDto {
+  reason: CancellationReason;
+  customReason?: string;
 }
 
 /**

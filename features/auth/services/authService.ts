@@ -9,8 +9,13 @@ import type {
   User,
   SendOtpRequest,
   VerifyOtpRequest,
+  VerifyOtpResponse,
   VerifyOtpAndRegisterRequest,
   VerifyOtpAndRegisterResponse,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
 } from '../types';
 
 /**
@@ -103,6 +108,14 @@ class AuthService {
 
       // Store token securely (only if role is allowed)
       await tokenStorage.setAccessToken(token);
+
+      // Store refresh token if returned (for 401 refresh/retry)
+      const refreshToken = (loginData as any).refreshToken ?? (loginData as any).RefreshToken;
+      const refreshTokenExpiration = (loginData as any).refreshTokenExpiration ?? (loginData as any).RefreshTokenExpiration;
+      if (refreshToken) {
+        await tokenStorage.setRefreshToken(refreshToken);
+        console.log('[AuthService] ✓ Refresh token stored');
+      }
       
       // Verify token was stored (for debugging)
       const storedToken = await tokenStorage.getAccessToken();
@@ -119,9 +132,6 @@ class AuthService {
         expiration: expiration || new Date().toISOString(),
         user: user || (loginData as any).user,
       };
-
-      // Note: API doesn't provide refresh token, so we only store access token
-      // If refresh token becomes available, store it here
 
       return normalizedResponse;
     } catch (error) {
@@ -249,13 +259,38 @@ class AuthService {
   }
 
   /**
+   * Delete the current user's account (Right to Erasure).
+   * Calls DELETE api/users/me - anonymizes PII and deactivates the account.
+   * @returns Promise resolving when account is deleted
+   * @throws Error if deletion fails
+   */
+  async deleteAccount(): Promise<void> {
+    const response = await apiClient.delete<{ success: boolean; message: string }>('api/users/me', {
+      requiresAuth: true,
+    });
+    if (!response.success || !response.data?.success) {
+      throw new Error(response.message || response.data?.message || 'Failed to delete account');
+    }
+    await tokenStorage.clearAllTokens();
+  }
+
+  /**
    * Logout user and clear all stored tokens
-   * Clears tokens from secure storage
+   * Calls API to blacklist token first (with current token), then clears local tokens.
+   * This order prevents "No Authorization header" errors from the logout call itself.
    * @returns Promise resolving when logout is complete
    */
   async logout(): Promise<void> {
     try {
-      // Clear all stored tokens
+      // Call logout API first while we still have the token (server can blacklist it).
+      // Use requiresAuth: true so the Authorization header is sent. Ignore errors so we always clear locally.
+      try {
+        await apiClient.post('api/auth/logout', { requiresAuth: true });
+      } catch (apiErr) {
+        // Ignore - we still clear tokens locally so the user is logged out
+        console.warn('[AuthService] Logout API call failed (clearing tokens anyway):', apiErr);
+      }
+      // Clear all stored tokens after API call (or if API not available)
       await tokenStorage.clearAllTokens();
     } catch (error) {
       throw new Error(
@@ -316,9 +351,13 @@ class AuthService {
         throw new Error('Only Driver role is allowed for driver registration');
       }
 
+      // Normalize email so it matches the key used by verify-otp (email-verified-for-registration cache)
+      const normalizedEmail = registrationData.email.trim().toLowerCase();
+      const body = { ...registrationData, email: normalizedEmail };
+
       // Call register API endpoint
       const response = await apiClient.post<RegisterResponse>('api/auth/register', {
-        body: registrationData,
+        body,
         requiresAuth: false, // Register endpoint doesn't require authentication
       });
 
@@ -414,18 +453,19 @@ class AuthService {
    * Call register(email, fullName, password, role) next, then login.
    * POST /api/auth/verify-otp
    */
-  async verifyOtp(request: VerifyOtpRequest): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.post<{ success: boolean; message: string }>('api/auth/verify-otp', {
+  async verifyOtp(request: VerifyOtpRequest): Promise<VerifyOtpResponse> {
+    const normalizedEmail = request.email.trim().toLowerCase();
+    const response = await apiClient.post<VerifyOtpResponse>('api/auth/verify-otp', {
       body: {
-        email: request.email.trim().toLowerCase(),
+        email: normalizedEmail,
         otp: request.otp.trim(),
       },
       requiresAuth: false,
     });
-    if (!response.success) {
+    if (!response.success || !response.data) {
       throw new Error(response.message || 'Invalid or expired code. Please try again.');
     }
-    return { success: true, message: response.message || 'Email verified.' };
+    return response.data as VerifyOtpResponse;
   }
 
   /**
@@ -484,6 +524,68 @@ class AuthService {
       refreshTokenExpiration,
       user,
     };
+  }
+
+  /**
+   * Request password reset OTP (forgot password - mobile flow)
+   * POST /api/auth/forgot-password/mobile
+   */
+  async forgotPasswordMobile(payload: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
+    const email = payload.email.trim().toLowerCase();
+    const response = await apiClient.post<ForgotPasswordResponse>('api/auth/forgot-password/mobile', {
+      body: { email },
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to send verification code');
+    }
+    return response.data ?? { success: true, message: response.message ?? '' };
+  }
+
+  /**
+   * Get user's security questions for password reset
+   * POST /api/auth/forgot-password/get-questions
+   */
+  async getForgotPasswordQuestions(email: string): Promise<Array<{ number: number; questionId: number; question: string }>> {
+    const response = await apiClient.post<{ success: boolean; questions?: Array<{ number: number; questionId: number; question: string }> }>(
+      'api/auth/forgot-password/get-questions',
+      { body: { email: email.trim().toLowerCase() }, requiresAuth: false }
+    );
+    const questions = response.data?.questions ?? [];
+    return questions;
+  }
+
+  /**
+   * Reset password with OTP and security answers (forgot password - mobile flow)
+   * POST /api/auth/reset-password
+   * Clears local tokens on success (backend invalidates all tokens).
+   */
+  async resetPassword(payload: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+    const email = payload.email.trim().toLowerCase();
+    if (!payload.otp || !payload.newPassword || payload.newPassword.length < 8) {
+      throw new Error('OTP and new password (min 8 characters) are required');
+    }
+    const body: Record<string, unknown> = {
+      email,
+      otp: payload.otp.trim().replace(/\D/g, '').slice(0, 6),
+      newPassword: payload.newPassword,
+    };
+    if (payload.securityAnswers && payload.securityAnswers.length > 0) {
+      body.securityAnswers = payload.securityAnswers.map((a) => ({ questionNumber: a.questionNumber, answer: a.answer }));
+    }
+    const response = await apiClient.post<ResetPasswordResponse>('api/auth/reset-password', {
+      body,
+      requiresAuth: false,
+    });
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to reset password');
+    }
+    try {
+      await tokenStorage.clearAllTokens();
+    } catch {
+      // best effort
+    }
+    return response.data ?? { success: true, message: response.message ?? '' };
   }
 }
 

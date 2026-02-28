@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Linking, Alert, TextInput, RefreshControl } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Linking, Alert, TextInput, RefreshControl, Modal, ActivityIndicator, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
@@ -24,6 +24,8 @@ export default function SupportScreen() {
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketDescription, setTicketDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const createTicketKeyRef = useRef<string | null>(null);
 
   const handleCall = () => {
     Linking.openURL('tel:+1234567890');
@@ -57,24 +59,40 @@ export default function SupportScreen() {
 
   const handleCreateTicket = async () => {
     if (!ticketSubject.trim() || !ticketDescription.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Error', 'Please fill in subject and description');
       return;
     }
+    if (isSubmitting) return;
 
+    console.log('[Support] handleCreateTicket: starting...');
+    Keyboard.dismiss();
+    setIsSubmitting(true);
+    const key = createTicketKeyRef.current ?? (createTicketKeyRef.current = `${Date.now()}-${Math.random().toString(36).slice(2, 15)}`);
     try {
-      await supportService.createTicket({
-        subject: ticketSubject,
-        description: ticketDescription,
-        category: 'General',
-        priority: 'Normal',
-      });
-      Alert.alert('Success', 'Ticket created successfully');
+      await supportService.createTicket(
+        {
+          subject: ticketSubject.trim(),
+          description: ticketDescription.trim(),
+          category: 'General',
+          priority: 'Normal',
+        },
+        key
+      );
+      console.log('[Support] handleCreateTicket: success');
       setShowCreateTicket(false);
       setTicketSubject('');
       setTicketDescription('');
-      refresh();
+      await refresh();
+      Alert.alert('Success', 'Ticket created successfully');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create ticket');
+      console.error('[Support] handleCreateTicket error:', err);
+      const msg = err && typeof err === 'object' && 'message' in err
+        ? String((err as { message: string }).message)
+        : err instanceof Error ? err.message : 'Failed to create ticket';
+      Alert.alert('Error', msg);
+    } finally {
+      setIsSubmitting(false);
+      createTicketKeyRef.current = null;
     }
   };
 
@@ -233,7 +251,8 @@ export default function SupportScreen() {
             tickets.slice(0, 2).map((ticket) => (
               <TouchableOpacity
                 key={ticket.id}
-                style={[styles.ticketCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                style={[styles.ticketCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => router.push(`/support/ticket/${ticket.id}`)}>
                 <View style={styles.ticketLeft}>
                   <View
                     style={[
@@ -338,14 +357,24 @@ export default function SupportScreen() {
       </ScrollView>
 
       {/* Create Ticket Modal */}
-      {showCreateTicket && (
-        <View style={[styles.modalOverlay, { backgroundColor: '#000' + '80' }]}>
-          <View style={[styles.modal, { backgroundColor: theme.surface }]}>
+      <Modal
+        visible={showCreateTicket}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isSubmitting && setShowCreateTicket(false)}>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+          onPress={() => !isSubmitting && setShowCreateTicket(false)}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.modal, { backgroundColor: theme.surface }]}
+            onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHeader}>
               <ThemedText type="title" style={[styles.modalTitle, { color: theme.text }]}>
                 Report an Issue
               </ThemedText>
-              <TouchableOpacity onPress={() => setShowCreateTicket(false)}>
+              <TouchableOpacity onPress={() => !isSubmitting && setShowCreateTicket(false)}>
                 <Ionicons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
@@ -355,6 +384,7 @@ export default function SupportScreen() {
               placeholderTextColor={theme.textSecondary}
               value={ticketSubject}
               onChangeText={setTicketSubject}
+              editable={!isSubmitting}
             />
             <TextInput
               style={[
@@ -367,26 +397,37 @@ export default function SupportScreen() {
               onChangeText={setTicketDescription}
               multiline
               numberOfLines={4}
+              editable={!isSubmitting}
             />
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.border }]}
-                onPress={() => setShowCreateTicket(false)}>
+                onPress={() => !isSubmitting && setShowCreateTicket(false)}
+                disabled={isSubmitting}>
                 <ThemedText style={[styles.modalButtonText, { color: theme.text }]}>
                   Cancel
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.primary }]}
-                onPress={handleCreateTicket}>
-                <ThemedText style={[styles.modalButtonText, { color: theme.primaryText }]}>
-                  Submit
-                </ThemedText>
+                style={[
+                  styles.modalButton,
+                  { backgroundColor: theme.primary },
+                  isSubmitting && { opacity: 0.7 },
+                ]}
+                onPress={handleCreateTicket}
+                disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color={theme.primaryText} />
+                ) : (
+                  <ThemedText style={[styles.modalButtonText, { color: theme.primaryText }]}>
+                    Submit
+                  </ThemedText>
+                )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ThemedView>
   );
 }

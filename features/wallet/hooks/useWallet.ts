@@ -15,6 +15,8 @@ interface UseWalletReturn {
   error: string | null;
   /** Function to refresh wallet */
   refresh: () => Promise<void>;
+  /** Clear current error (e.g. before a post-action refresh) */
+  clearError: () => void;
 }
 
 /**
@@ -66,6 +68,10 @@ export function useWallet(): UseWalletReturn {
     await fetchWallet();
   }, [fetchWallet]);
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
   // Fetch wallet on mount and when user changes
   useEffect(() => {
     fetchWallet();
@@ -76,6 +82,7 @@ export function useWallet(): UseWalletReturn {
     isLoading,
     error,
     refresh,
+    clearError,
   };
 }
 

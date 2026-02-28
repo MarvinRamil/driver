@@ -1,5 +1,5 @@
 import { BeeColors, BRAND_YELLOW } from "@/constants/theme";
-import { useLogin } from "@/features/auth";
+import { useAuth, useLogin } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { biometricAuth } from "@/shared/services/biometricAuth";
 import { biometricStorage } from "@/shared/services/biometricStorage";
@@ -16,14 +16,16 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  AppState,
-  AppStateStatus,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LIMITS, trimToMax } from "@/shared/constants/validation";
 
 // Import images as constants for reliable bundling in release builds
 const adaptiveIcon = require('../assets/images/adaptive-icon.png');
+
+/** Once true, we do not auto-prompt biometric again this app session (avoids retrigger on remount/return to login). */
+let hasAutoPromptedBiometricThisSession = false;
 
 /**
  * Login screen component
@@ -35,6 +37,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
+  const { login: authLogin } = useAuth();
   const {
     email,
     password,
@@ -44,6 +47,7 @@ export default function LoginScreen() {
     setPassword,
     handleLogin,
     clearError,
+    setError,
   } = useLogin();
 
   // Password visibility state
@@ -55,23 +59,24 @@ export default function LoginScreen() {
   const [biometricType, setBiometricType] = useState<string>('Biometric');
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
   const [hasAutoPrompted, setHasAutoPrompted] = useState(false);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const autoPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
-   * Attempt auto biometric login
+   * Attempt auto biometric login. Only once per app session (no retrigger on remount or return to login).
    */
   const attemptAutoBiometricLogin = async () => {
-    if (isBiometricLoading || isLoading || hasAutoPrompted) {
+    if (isBiometricLoading || isLoading || hasAutoPrompted || hasAutoPromptedBiometricThisSession) {
       return;
     }
 
     try {
+      hasAutoPromptedBiometricThisSession = true;
       setHasAutoPrompted(true);
       await handleTouchIDLogin();
     } catch (err) {
-      // Silently fail - user can login manually
+      // Silently fail - user can login manually; do not reset session flag so we don't retrigger
       console.log('[LoginScreen] Auto biometric login skipped');
-      setHasAutoPrompted(false); // Allow retry
+      setHasAutoPrompted(false);
     }
   };
 
@@ -89,10 +94,13 @@ export default function LoginScreen() {
         setIsBiometricReady(ready);
         setBiometricType(type);
 
-        // Auto-prompt biometric login if ready and user hasn't been prompted
-        if (ready && !hasAutoPrompted && !isLoading) {
+        // Auto-prompt only once per session; skip if already prompted (e.g. remount after signup/background)
+        if (ready && !hasAutoPrompted && !hasAutoPromptedBiometricThisSession && !isLoading) {
           // Small delay to ensure UI is ready
-          setTimeout(() => {
+          if (autoPromptTimeoutRef.current) {
+            clearTimeout(autoPromptTimeoutRef.current);
+          }
+          autoPromptTimeoutRef.current = setTimeout(() => {
             attemptAutoBiometricLogin();
           }, 800);
         }
@@ -104,32 +112,17 @@ export default function LoginScreen() {
     };
 
     checkBiometric();
+
+    return () => {
+      if (autoPromptTimeoutRef.current) {
+        clearTimeout(autoPromptTimeoutRef.current);
+        autoPromptTimeoutRef.current = null;
+      }
+    };
   }, [hasAutoPrompted, isLoading]);
 
-  /**
-   * Handle app state changes for auto-biometric on resume
-   */
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      // When app comes to foreground and user is not authenticated
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active' &&
-        !isLoading &&
-        isBiometricReady &&
-        !hasAutoPrompted
-      ) {
-        // Small delay to ensure UI is ready
-        setTimeout(() => {
-          attemptAutoBiometricLogin();
-        }, 500);
-      }
-      appState.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, [isLoading, isBiometricReady, hasAutoPrompted]);
+  // Do NOT auto-prompt on app state change or when returning to login (remount).
+  // Session flag hasAutoPromptedBiometricThisSession ensures we only prompt once per app launch.
 
   /**
    * Handle biometric login
@@ -171,15 +164,17 @@ export default function LoginScreen() {
         return;
       }
 
-      // Use stored credentials to login
-      setEmail(credentials.email);
-      setPassword(credentials.password);
-      
-      // Call login with stored credentials
-      await handleLogin();
-      
+      // Call auth login directly with retrieved credentials (don't use setState + handleLogin:
+      // state updates are async so handleLogin would see empty email/password and show "Email is required")
+      await authLogin(credentials.email, credentials.password);
+
       // Login successful - NavigationGuard will automatically redirect to /(tabs)
-      setHasAutoPrompted(false); // Reset for next session
+      // Keep this true so auto-biometric does not immediately retrigger during route transition.
+      setHasAutoPrompted(true);
+      if (autoPromptTimeoutRef.current) {
+        clearTimeout(autoPromptTimeoutRef.current);
+        autoPromptTimeoutRef.current = null;
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Biometric login failed';
       console.error('[LoginScreen] Biometric login error:', errorMessage);
@@ -250,13 +245,14 @@ export default function LoginScreen() {
                   placeholderTextColor={theme.placeholder}
                   value={email}
                   onChangeText={(text) => {
-                    setEmail(text);
+                    setEmail(trimToMax(text, LIMITS.EMAIL));
                     clearError();
                   }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
+                  maxLength={LIMITS.EMAIL}
                 />
               </View>
             </View>
@@ -327,7 +323,7 @@ export default function LoginScreen() {
 
             {/* Forgot Password Link */}
             <View style={styles.forgotPasswordContainer}>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/forgot-password')}>
                 <Text style={[styles.forgotPasswordText, { color: theme.textSecondary }]}>
                   Forgot Password?
                 </Text>

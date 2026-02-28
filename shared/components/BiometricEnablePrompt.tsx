@@ -68,9 +68,9 @@ export function BiometricEnablePrompt({
     setError(null);
 
     try {
-      // Authenticate with biometric to verify it works
+      // Authenticate with biometric to verify it works (expo-local-authentication has named exports, no default)
       const LocalAuthentication = await import('expo-local-authentication');
-      const result = await LocalAuthentication.default.authenticateAsync({
+      const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Enable ${biometricType} login?`,
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,

@@ -33,7 +33,7 @@ class SupportService {
   }
 
   /**
-   * Get support tickets
+   * Get support tickets (all — requires back-office role).
    * GET /api/tickets
    */
   async getTickets(status?: string): Promise<SupportTicket[]> {
@@ -52,27 +52,14 @@ class SupportService {
         return [];
       }
 
-      // Handle both { data: { items: [] } } and { data: [] } formats
       const data = response.data.data || response.data;
       const items = Array.isArray(data.items)
         ? data.items
         : Array.isArray(data)
-        ? data
-        : [];
+          ? data
+          : [];
 
-      return items.map((ticket) => ({
-        id: ticket.id,
-        ticketNumber: ticket.ticketNumber || `TKT-${ticket.id.slice(0, 8)}`,
-        subject: ticket.subject || '',
-        description: ticket.description || '',
-        category: ticket.category || 'General',
-        priority: ticket.priority || 'Normal',
-        status: ticket.status || 'Open',
-        createdAt: this.parseDate(ticket.createdAt) || new Date(),
-        updatedAt: this.parseDate(ticket.updatedAt),
-        resolvedAt: this.parseDate(ticket.resolvedAt),
-        resolution: ticket.resolution ?? null,
-      }));
+      return items.map((ticket) => this.mapTicket(ticket, 'driver'));
     } catch (error) {
       console.error('Failed to fetch tickets:', error);
       throw new Error(
@@ -82,32 +69,146 @@ class SupportService {
   }
 
   /**
-   * Create support ticket
-   * POST /api/tickets
+   * Get current user's tickets (driver or customer).
+   * GET /api/tickets/my
    */
-  async createTicket(data: CreateTicketRequest): Promise<SupportTicket> {
+  async getMyTickets(): Promise<SupportTicket[]> {
     try {
-      const response = await apiClient.post<SupportTicket>('/api/tickets', {
+      const response = await apiClient.get<{ data: { items: any[] } }>('/api/tickets/my', {
         requiresAuth: true,
-        body: data,
       });
 
+      if (!response.success || !response.data) {
+        return [];
+      }
+
+      const data = response.data.data || response.data;
+      const items = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      return items.map((ticket) => this.mapTicket(ticket, 'driver'));
+    } catch (error) {
+      console.error('Failed to fetch my tickets:', error);
+      throw new Error(
+        `Failed to fetch tickets: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Get a single ticket by ID, optionally with Zammad updates/articles.
+   * GET /api/tickets/{id}?includeZammad=true returns { ticket, zammad: { title, state, articles } }
+   */
+  async getTicket(ticketId: string, includeZammad = true): Promise<SupportTicket | null> {
+    try {
+      const params = includeZammad ? { includeZammad: true } : undefined;
+      const response = await apiClient.get<SupportTicket | TicketWithZammadResponse>(`/api/tickets/${ticketId}`, {
+        requiresAuth: true,
+        params: params as Record<string, string | number | boolean> | undefined,
+      });
+
+      if (!response.success || !response.data) {
+        return null;
+      }
+
+      // API returns { data: ticketDto } or { data: { ticket, zammad } } - unwrap
+      const raw = response.data as { data?: unknown } | TicketWithZammadResponse | SupportTicket;
+      const payload = raw && typeof raw === 'object' && 'data' in raw ? (raw as { data: unknown }).data : raw;
+      if (!payload) return null;
+
+      const withZammad = payload as TicketWithZammadResponse;
+      if (withZammad.ticket) {
+        const t = this.mapTicket(withZammad.ticket as any, 'driver');
+        const zammad = withZammad.zammad;
+        return {
+          ...t,
+          subject: t.subject || zammad?.title || t.subject,
+          zammadArticles: zammad?.articles ?? [],
+        };
+      }
+      return this.mapTicket(payload as any, 'driver');
+    } catch (error) {
+      console.error('Failed to fetch ticket:', error);
+      return null;
+    }
+  }
+
+  private mapTicket(ticket: any, defaultUserType: string): SupportTicket {
+    return {
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber || `TKT-${(ticket.id || '').slice(0, 8)}`,
+      subject: ticket.subject || '',
+      description: ticket.description || '',
+      category: ticket.category || 'General',
+      priority: ticket.priority || 'Normal',
+      status: ticket.status || 'Open',
+      createdAt: this.parseDate(ticket.createdAt) || new Date(),
+      updatedAt: this.parseDate(ticket.updatedAt),
+      resolvedAt: this.parseDate(ticket.resolvedAt),
+      resolution: ticket.resolution ?? null,
+      zammadTicketId: ticket.zammadTicketId ?? null,
+      userType: ticket.userType || defaultUserType,
+      zammadArticles: ticket.zammadArticles,
+    };
+  }
+
+  /**
+   * Create support ticket
+   * POST /api/tickets
+   * Pass idempotencyKey to avoid duplicate tickets on double-submit or retry (same key = same ticket returned).
+   */
+  async createTicket(data: CreateTicketRequest, idempotencyKey?: string): Promise<SupportTicket> {
+    try {
+      console.log('[Support] createTicket: sending request...', { subject: data.subject?.slice(0, 30) });
+      const headers: Record<string, string> = {};
+      if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+      const response = await apiClient.post<SupportTicket>('/api/tickets', {
+        requiresAuth: true,
+        headers: Object.keys(headers).length ? headers : undefined,
+        body: {
+          ...data,
+          userType: 'driver', // Always 'driver' from this app
+        },
+        timeout: 20000, // 20s - fail fast if backend hangs
+      });
+
+      console.log('[Support] createTicket: got response', { success: response.success, hasData: !!response.data });
       if (!response.success || !response.data) {
         throw new Error('Failed to create ticket');
       }
 
-      const ticket = response.data;
-      return {
-        ...ticket,
-        createdAt: this.parseDate(ticket.createdAt as any) || new Date(),
-        updatedAt: this.parseDate(ticket.updatedAt as any),
-        resolvedAt: this.parseDate(ticket.resolvedAt as any),
-      };
+      // API returns { data: ticketDto } - unwrap if wrapped
+      const raw = response.data as { data?: SupportTicket } | SupportTicket;
+      const ticket = raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw;
+      if (!ticket) throw new Error('Failed to create ticket');
+
+      console.log('[Support] createTicket: success');
+      return this.mapTicket(ticket as any, 'driver');
     } catch (error) {
-      console.error('Failed to create ticket:', error);
-      throw new Error(
-        `Failed to create ticket: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      const msg = error && typeof error === 'object' && 'message' in error
+        ? String((error as { message: string }).message)
+        : error instanceof Error ? error.message : 'Unknown error';
+      console.error('[Support] createTicket failed:', msg, error);
+      throw new Error(msg.includes('Failed to create ticket') ? msg : `Failed to create ticket: ${msg}`);
+    }
+  }
+
+  /**
+   * Add a comment to a ticket (syncs to Zammad).
+   * POST /api/tickets/{id}/comments
+   * Only allowed for open tickets; closed/resolved tickets cannot receive comments.
+   */
+  async addComment(ticketId: string, body: string): Promise<void> {
+    const response = await apiClient.post(`/api/tickets/${ticketId}/comments`, {
+      requiresAuth: true,
+      body: { body },
+    });
+
+    if (!response.success) {
+      throw new Error('Failed to add comment');
     }
   }
 
@@ -162,9 +263,9 @@ class SupportService {
         lastMessageAt: this.parseDate(conv.lastMessageAt as any),
         lastMessage: conv.lastMessage
           ? {
-              ...conv.lastMessage,
-              createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
-            }
+            ...conv.lastMessage,
+            createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
+          }
           : null,
         participants: (conv.participants || []).map((p) => ({
           ...p,
@@ -204,9 +305,9 @@ class SupportService {
         lastMessageAt: this.parseDate(conv.lastMessageAt as any),
         lastMessage: conv.lastMessage
           ? {
-              ...conv.lastMessage,
-              createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
-            }
+            ...conv.lastMessage,
+            createdAt: this.parseDate(conv.lastMessage.createdAt as any) || new Date(),
+          }
           : null,
         participants: (conv.participants || []).map((p) => ({
           ...p,

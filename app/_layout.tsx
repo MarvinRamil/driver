@@ -21,6 +21,7 @@ import { useColorScheme } from '@/shared/hooks/use-color-scheme';
 import { useNotifications } from '@/shared/hooks/useNotifications';
 import { useOTAUpdates } from '@/shared/hooks/useOTAUpdates';
 import { BiometricPromptManager } from '@/shared/components/BiometricPromptManager';
+import { LoginAdkitPopup } from '@/shared/components/LoginAdkitPopup';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -63,6 +64,7 @@ function NavigationGuard() {
       const inTabsGroup = currentRoute === "(tabs)";
       const isLoginPage = currentRoute === "login";
       const isSignupPage = currentRoute === "signup";
+      const isForgotPasswordPage = currentRoute === "forgot-password";
       const isLivenessPage = currentRoute === "liveness";
       const isDriverCompletePage = currentRoute === "driver-complete";
 
@@ -75,8 +77,8 @@ function NavigationGuard() {
       // CRITICAL: If no user, redirect to login immediately
       // This ensures home page never loads when there's no authenticated user
       if (!isAuthenticated) {
-        // If already on login or signup page, stay there
-        if (isLoginPage || isSignupPage) {
+        // If already on login, signup, or forgot-password page, stay there
+        if (isLoginPage || isSignupPage || isForgotPasswordPage) {
           return;
         }
         // Otherwise, redirect to login
@@ -150,7 +152,8 @@ function NavigationGuard() {
         const currentRoute = segments[0];
         const isLoginPage = currentRoute === "login";
         const isSignupPage = currentRoute === "signup";
-        if (!isLoginPage && !isSignupPage) {
+        const isForgotPasswordPage = currentRoute === "forgot-password";
+        if (!isLoginPage && !isSignupPage && !isForgotPasswordPage) {
           router.replace("/login");
         }
       } catch (navError) {
@@ -205,11 +208,13 @@ function RootLayoutNav() {
           <DriverStatusProvider>
             <AppInitializer />
             <BiometricPromptManager />
+            <LoginAdkitPopup />
             <NavigationGuard />
             <View style={styles.root}>
               <Stack>
                 <Stack.Screen name="login" options={{ headerShown: false }} />
                 <Stack.Screen name="signup" options={{ headerShown: false }} />
+                <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
                 <Stack.Screen name="liveness" options={{ headerShown: false }} />
                 <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -217,6 +222,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="in-ride" options={{ headerShown: false }} />
                 <Stack.Screen name="rating" options={{ headerShown: false }} />
                 <Stack.Screen name="support" options={{ headerShown: false }} />
+                <Stack.Screen name="support/ticket/[id]" options={{ headerShown: false }} />
                 <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
                 <Stack.Screen
                   name="modal"

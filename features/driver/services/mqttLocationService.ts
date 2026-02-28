@@ -45,7 +45,7 @@ class MqttLocationService {
   private credentials: MqttCredentials | null = null;
   private isConnecting: boolean = false;
   private reconnectAttempts: number = 0;
-  private readonly maxReconnectAttempts: number = 5;
+  private readonly maxReconnectAttempts: number = 999999; // Effectively infinite for OTA survival
   private reconnectTimer: NodeJS.Timeout | null = null;
   private lastError: string | null = null;
   private debugInfo: MqttDebugInfo = {
@@ -67,23 +67,64 @@ class MqttLocationService {
     try {
       console.log('[MQTT] Loading credentials from environment variables');
 
-      // Use env variables but DEFAULT to the working configuration (WSS/443)
+      // Use env variables but DEFAULT to WS/80 (plain WebSocket)
       // This ensures that if env vars are missing (OTA issue), it still connects
       const host = process.env.EXPO_PUBLIC_MQTT_HOST || 'mqtt.ilocosscript.live';
-      const port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '443', 10);
-      const useSsl = (process.env.EXPO_PUBLIC_MQTT_USE_SSL === 'true' || process.env.EXPO_PUBLIC_MQTT_USE_SSL === '1')
-        || true; // Default to TRUE (SSL)
+      let port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '80', 10);
+      const explicitAppEnv = (process.env.EXPO_PUBLIC_APP_ENV || '').trim().toLowerCase();
+      const inferredAppEnv = __DEV__ ? 'dev' : 'staging';
+      const appEnv = explicitAppEnv || inferredAppEnv;
+      // Default to WS (false) unless explicitly set to 'true' or '1'
+      const sslEnv = process.env.EXPO_PUBLIC_MQTT_USE_SSL;
+      const useSsl = (sslEnv === 'true' || sslEnv === '1') ? true : false;
+
+      // WSS must use port 443; port 80 is for plain WS (e.g. behind Cloudflare tunnel)
+      if (useSsl && port === 80) {
+        console.warn('[MQTT] useSsl is true but port was 80; using 443 for WSS (port 80 is for plain WS only)');
+        port = 443;
+      }
+
       const username = process.env.EXPO_PUBLIC_MQTT_USERNAME || 'ilocosscript';
       const password = process.env.EXPO_PUBLIC_MQTT_PASSWORD || 'passwordZxc123AbC';
-      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || 'beelogistics/drivers';
+      const normalizedAppEnv =
+        appEnv === 'production' || appEnv === 'prod'
+          ? 'prod'
+          : appEnv === 'uat'
+            ? 'staging'
+            : appEnv;
+      const defaultTopicPrefix =
+        normalizedAppEnv === 'prod'
+          ? 'beelogistics/drivers'
+          : `${normalizedAppEnv}/beelogistics/drivers`;
+      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || defaultTopicPrefix;
       const path = process.env.EXPO_PUBLIC_MQTT_PATH || '/mqtt';
 
+      // Build WebSocket URL for logging (before final protocol determination)
+      const protocolForLog = useSsl ? 'wss' : 'ws';
+      const safePathForLog = path.startsWith('/') ? path : `/${path}`;
+      const wsUrlForLog = `${protocolForLog}://${host}:${port}${safePathForLog}`;
+
+      console.log('[MQTT] 🔍 Environment Variable Diagnostics:', {
+        'EXPO_PUBLIC_MQTT_HOST': process.env.EXPO_PUBLIC_MQTT_HOST || '(not set)',
+        'EXPO_PUBLIC_MQTT_PORT': process.env.EXPO_PUBLIC_MQTT_PORT || '(not set)',
+        'EXPO_PUBLIC_MQTT_USE_SSL': process.env.EXPO_PUBLIC_MQTT_USE_SSL || '(not set)',
+        'EXPO_PUBLIC_MQTT_USERNAME': process.env.EXPO_PUBLIC_MQTT_USERNAME || '(not set)',
+        'EXPO_PUBLIC_MQTT_TOPIC_PREFIX': process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || '(not set)',
+        'sslEnv (raw)': sslEnv === undefined ? 'undefined' : `"${sslEnv}"`,
+        'sslEnv type': typeof sslEnv,
+        'sslEnv length': sslEnv?.length ?? 'N/A',
+      });
+
       console.log('[MQTT] Env check:', {
+        appEnv,
+        normalizedAppEnv,
         hasHost: !!host,
         port,
         useSsl,
         path,
         hasUsername: !!username,
+        topicPrefix,
+        'resolved URL': wsUrlForLog,
       });
 
       // Validate required fields
@@ -126,6 +167,13 @@ class MqttLocationService {
         topic,
         clientId
       };
+
+      console.log('[MQTT] Resolved environment/topic routing:', {
+        appEnv,
+        normalizedAppEnv,
+        topicPrefix,
+        sampleTopic: `${topicPrefix}/<driverId>/location`,
+      });
 
       console.log('[MQTT] Credentials loaded:', {
         wsUrl: credentials.wsUrl,
@@ -207,8 +255,8 @@ class MqttLocationService {
         password: credentials.password,
         clean: true,
         reconnectPeriod: 0, // Disable auto-reconnect during initial connection
-        connectTimeout: 15000, // Increased timeout
-        keepalive: 45, // Increased keepalive
+        connectTimeout: 30000, // 30s for slow/mobile networks and WSS handshake
+        keepalive: 45,
         protocolVersion: 4, // MQTT 3.1.1
         // WebSocket-specific options for React Native
         // Important for self-signed certs or lax security environments
@@ -216,7 +264,6 @@ class MqttLocationService {
         wsOptions: {
           headers: {},
         },
-        // Additional options for better compatibility
         resubscribe: false,
       };
 
@@ -258,7 +305,8 @@ class MqttLocationService {
           reject(error);
         };
 
-        // Set timeout
+        // Set timeout (match connectTimeout so we don't fire before the client gives up)
+        const timeoutMs = 30000;
         timeout = setTimeout(() => {
           if (resolved) return;
           resolved = true;
@@ -266,7 +314,7 @@ class MqttLocationService {
           this.addDebugEvent(`TIMEOUT after ${elapsed}ms`);
           this.lastError = `Connection timeout after ${elapsed}ms`;
           reject(new Error('MQTT connection timeout'));
-        }, 15000);
+        }, timeoutMs);
 
         // Create client and attach handlers IMMEDIATELY
         this.addDebugEvent('Creating MQTT client...');
@@ -346,7 +394,7 @@ class MqttLocationService {
    */
   private async handleReconnect(): Promise<void> {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached');
+      console.error('MQTT Max reconnection attempts reached. Giving up permanently.');
       return;
     }
 
@@ -354,7 +402,9 @@ class MqttLocationService {
       clearTimeout(this.reconnectTimer);
     }
 
+    // Exponential backoff, max 30 seconds
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    console.log(`[MQTT] Scheduling reconnect attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts} in ${delay}ms...`);
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();
@@ -518,6 +568,33 @@ class MqttLocationService {
    */
   async refreshCredentials(): Promise<void> {
     await this.fetchCredentials();
+  }
+
+  /**
+   * Forcefully reconnect to MQTT (useful when reviving from background)
+   */
+  async forceReconnect(): Promise<void> {
+    console.log('[MQTT] Forcing connection resume/reconnect...');
+    if (this.client?.connected) {
+      console.log('[MQTT] Already connected, skipping force reconnect');
+      return;
+    }
+
+    // Clear any pending timers
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    // Reset attempts and try connecting immediately
+    this.reconnectAttempts = 0;
+    try {
+      await this.connect();
+    } catch (error) {
+      console.error('[MQTT] Force reconnect failed:', error);
+      // Let the normal reconnect loop take over if it fails
+      this.handleReconnect();
+    }
   }
 }
 

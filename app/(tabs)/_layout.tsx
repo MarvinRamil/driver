@@ -68,6 +68,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="giveaways"
+        options={{
+          href: null, // Hide from tab bar
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           href: null, // Hide from tab bar

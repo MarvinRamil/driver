@@ -62,6 +62,7 @@ export default function MissionsScreen() {
           </TouchableOpacity>
         </View>
 
+
         {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>

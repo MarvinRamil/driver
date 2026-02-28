@@ -35,7 +35,7 @@ export function useSupport(): UseSupportReturn {
 
   const fetchTickets = useCallback(async () => {
     try {
-      const data = await supportService.getTickets();
+      const data = await supportService.getMyTickets();
       setTickets(data);
     } catch (err) {
       console.error('Error fetching tickets:', err);

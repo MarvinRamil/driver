@@ -23,46 +23,59 @@ class ProfileService {
   }
 
   /**
-   * Update user profile
-   * PUT /api/users/{id}
-   * @param userId - User ID
-   * @param data - Profile update data
-   * @returns Promise resolving to updated user profile
+   * Update current user profile (driver updates own profile)
+   * PUT /api/auth/profile - uses current auth user, no userId in path
+   * @param _userId - Unused; kept for interface compatibility
+   * @param data - Profile update data (fullName, vehicle fields)
+   * @returns Promise resolving to updated user (fetched via refresh)
    */
-  async updateProfile(userId: string, data: UpdateProfileRequest): Promise<User> {
+  async updateProfile(_userId: string, data: UpdateProfileRequest): Promise<User> {
     try {
-      const response = await apiClient.put<User>(`/api/users/${userId}`, {
-        body: data,
+      // Backend expects PascalCase and only supports FullName + vehicle fields (no email change here)
+      const body: Record<string, string | undefined> = {};
+      if (data.fullName != null) body.FullName = data.fullName;
+      if (data.vehiclePlate != null) body.VehiclePlate = data.vehiclePlate;
+      if (data.vehicleModel != null) body.VehicleModel = data.vehicleModel;
+      if (data.vehicleColor != null) body.VehicleColor = data.vehicleColor;
+      if (data.vehicleType != null) body.VehicleType = data.vehicleType;
+
+      const response = await apiClient.put<{ message?: string }>(`/api/auth/profile`, {
+        body,
         requiresAuth: true,
       });
 
-      if (!response.success || !response.data) {
+      if (!response.success) {
         throw new Error(response.message || 'Failed to update profile');
       }
 
-      return response.data;
+      // Backend returns { success, message }; updated user is obtained via getCurrentUser/refresh
+      return await authService.getCurrentUser();
     } catch (error) {
-      throw new Error(
-        `Failed to update profile: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error != null && 'message' in error && typeof (error as { message: unknown }).message === 'string'
+            ? (error as { message: string }).message
+            : 'Unable to update profile. Please try again.';
+      throw new Error(message);
     }
   }
 
   /**
-   * Change user password
-   * PATCH /api/users/{id}/password
-   * @param userId - User ID
+   * Change user password (authenticated user)
+   * POST /api/auth/change-password
+   * @param _userId - Unused; API uses authenticated user from token
    * @param currentPassword - Current password
    * @param newPassword - New password
    * @returns Promise resolving when password is changed
    */
   async changePassword(
-    userId: string,
+    _userId: string,
     currentPassword: string,
     newPassword: string
   ): Promise<void> {
     try {
-      const response = await apiClient.patch(`/api/users/${userId}/password`, {
+      const response = await apiClient.post<{ success: boolean; message?: string }>('/api/auth/change-password', {
         body: {
           currentPassword,
           newPassword,

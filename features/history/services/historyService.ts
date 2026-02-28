@@ -1,10 +1,11 @@
-import { apiClient } from '@/shared/services/apiClient';
-import type { Dispatch } from '@/shared/types/booking';
-import type { TripHistory, HistoryStats } from '../types';
+import type { TripHistory, HistoryStats, HistoryFilter } from '../types';
 import { bookingService } from '@/features/bookings/services/bookingService';
+
+const COMPLETED_STATUSES = ['Delivered', 'Completed', 'Cancelled'];
 
 /**
  * Service for managing trip history
+ * Uses GET /api/bookings/driver/{driverId} and filters to completed/cancelled bookings.
  */
 class HistoryService {
   /**
@@ -28,56 +29,42 @@ class HistoryService {
 
   /**
    * Get trip history for a driver
-   * GET /api/dispatches/driver/{driverId}
-   * Filters to only completed dispatches (status = "Delivered")
+   * GET /api/bookings/driver/{driverId} — filters to Delivered, Completed, Cancelled
    */
   async getTripHistory(driverId: string): Promise<TripHistory[]> {
     try {
-      const response = await apiClient.get<Dispatch[]>(
-        `/api/dispatches/driver/${driverId}`,
-        { requiresAuth: true }
+      const bookings = await bookingService.getBookingsByDriverId(driverId);
+      const completed = bookings.filter((b) =>
+        COMPLETED_STATUSES.includes(b.status)
       );
 
-      if (!response.success || !response.data) {
-        return [];
-      }
+      const PLATFORM_FEE_RATE = 0.05; // 5% platform fee; driver gets 95%
 
-      const dispatches = Array.isArray(response.data) ? response.data : [];
-      
-      // Filter to only completed dispatches
-      const completedDispatches = dispatches.filter(
-        (d) => d.status === 'Delivered' || d.status === 'Completed'
-      );
+      const history: TripHistory[] = completed.map((booking) => {
+        const completedAt = booking.updatedAt ?? booking.createdAt;
+        const completedAtDate =
+          completedAt instanceof Date ? completedAt : new Date(completedAt as unknown as string);
+        const gross =
+          booking.finalFare != null
+            ? Number(booking.finalFare)
+            : booking.estimatedFare != null
+              ? Number(booking.estimatedFare)
+              : 0;
+        // Driver earnings after 5% platform fee (net take-home)
+        const earnings =
+          booking.status === 'Cancelled' ? 0 : Math.round(gross * (1 - PLATFORM_FEE_RATE) * 100) / 100;
 
-      // Map to TripHistory
-      const history: TripHistory[] = [];
-      for (const dispatch of completedDispatches) {
-        if (!dispatch.booking) {
-          // Try to fetch booking if not included
-          try {
-            const booking = await bookingService.getBookingById(dispatch.bookingId);
-            dispatch.booking = booking;
-          } catch (error) {
-            console.warn(`Failed to fetch booking ${dispatch.bookingId}:`, error);
-            continue;
-          }
-        }
-
-        const completedAt = dispatch.arrivalTime || dispatch.departureTime || new Date();
-        const earnings = this.calculateEarnings(dispatch);
-
-        history.push({
-          id: dispatch.id,
-          dispatchNumber: dispatch.dispatchNumber || `DSP-${dispatch.id.slice(0, 8)}`,
-          booking: dispatch.booking!,
-          completedAt: completedAt instanceof Date ? completedAt : new Date(completedAt),
+        return {
+          id: booking.id,
+          dispatchNumber: booking.bookingNumber,
+          booking,
+          completedAt: completedAtDate,
           earnings,
-          rating: undefined, // TODO: Get rating from booking/dispatch if available
-          status: dispatch.status,
-        });
-      }
+          rating: undefined,
+          status: booking.status,
+        };
+      });
 
-      // Sort by completion date (newest first)
       return history.sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime());
     } catch (error) {
       console.error('Failed to fetch trip history:', error);
@@ -85,16 +72,6 @@ class HistoryService {
         `Failed to fetch trip history: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
-  }
-
-  /**
-   * Calculate earnings for a dispatch
-   * TODO: This should come from payment/dispatch data
-   */
-  private calculateEarnings(dispatch: Dispatch): number {
-    // For now, use a placeholder calculation
-    // In production, this should come from payment data
-    return Math.random() * 50 + 10; // $10-$60 placeholder
   }
 
   /**

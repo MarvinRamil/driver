@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,6 +12,7 @@ import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { biometricAuth } from '@/shared/services/biometricAuth';
 import { biometricStorage } from '@/shared/services/biometricStorage';
+import { LIMITS, trimToMax } from '@/shared/constants/validation';
 
 /**
  * Profile screen
@@ -36,11 +37,31 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '+1 555-0123');
   const [licenseExpiry, setLicenseExpiry] = useState('12/2025');
-  const [vehicle, setVehicle] = useState('Toyota Prius (Yellow)');
-  const [licensePlate, setLicensePlate] = useState('BEE-425');
+  const [vehicleModel, setVehicleModel] = useState(user?.vehicleModel || '');
+  const [vehicleColor, setVehicleColor] = useState(user?.vehicleColor || '');
+  const [vehiclePlate, setVehiclePlate] = useState(user?.vehiclePlate || '');
+  const [vehicleType, setVehicleType] = useState(user?.vehicleType || '');
+  const [isEditingVehicle, setIsEditingVehicle] = useState(false);
+  const [showVehicleTypePicker, setShowVehicleTypePicker] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const VEHICLE_TYPES = [
+    'Motorcycle', 'Sedan', 'SUV', 'Van', 'Pickup',
+    'L300', 'FB2000', 'Aluminum2000', 'Truck3000', 'Truck7000', 'Truck12000',
+  ];
+
+  // Sync vehicle fields when user data changes
+  React.useEffect(() => {
+    if (user) {
+      setVehicleModel(user.vehicleModel || '');
+      setVehicleColor(user.vehicleColor || '');
+      setVehiclePlate(user.vehiclePlate || '');
+      setVehicleType(user.vehicleType || '');
+    }
+  }, [user?.vehicleModel, user?.vehicleColor, user?.vehiclePlate, user?.vehicleType]);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometric');
@@ -93,11 +114,32 @@ export default function ProfileScreen() {
   };
 
   const handleUpdateProfile = async () => {
+    if (fullName.trim().length > LIMITS.FULL_NAME) {
+      Alert.alert('Validation Error', `Full name must be at most ${LIMITS.FULL_NAME} characters`);
+      return;
+    }
+    if (vehiclePlate && vehiclePlate.length > LIMITS.VEHICLE_PLATE) {
+      Alert.alert('Validation Error', `License plate must be at most ${LIMITS.VEHICLE_PLATE} characters`);
+      return;
+    }
+    if (vehicleModel && vehicleModel.length > LIMITS.VEHICLE_MODEL) {
+      Alert.alert('Validation Error', `Vehicle model must be at most ${LIMITS.VEHICLE_MODEL} characters`);
+      return;
+    }
+    if (vehicleColor && vehicleColor.length > LIMITS.VEHICLE_COLOR) {
+      Alert.alert('Validation Error', `Vehicle color must be at most ${LIMITS.VEHICLE_COLOR} characters`);
+      return;
+    }
     try {
       await updateProfile({
         fullName,
         email,
+        vehicleType: vehicleType || undefined,
+        vehicleModel: vehicleModel || undefined,
+        vehicleColor: vehicleColor || undefined,
+        vehiclePlate: vehiclePlate || undefined,
       });
+      setIsEditingVehicle(false);
       Alert.alert('Success', 'Profile updated successfully');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update profile');
@@ -105,17 +147,35 @@ export default function ProfileScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all password fields');
+      return;
+    }
+    if (newPassword.length < LIMITS.PASSWORD_MIN) {
+      Alert.alert('Error', `New password must be at least ${LIMITS.PASSWORD_MIN} characters`);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'New password and confirm password do not match');
       return;
     }
 
     try {
       await changePassword(currentPassword, newPassword);
-      Alert.alert('Success', 'Password changed successfully');
+      try {
+        await biometricStorage.clearCredentials();
+      } catch {
+        // non-fatal
+      }
+      Alert.alert(
+        'Success',
+        'Password changed successfully. Biometric login has been cleared; log in with your new password next time, then you can turn on biometric again in Settings.'
+      );
       setCurrentPassword('');
       setNewPassword('');
+      setConfirmPassword('');
       setShowPasswordForm(false);
+      setBiometricEnabled(false);
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to change password');
     }
@@ -320,7 +380,9 @@ export default function ProfileScreen() {
                     {biometricType} Login
                   </ThemedText>
                   <ThemedText style={[styles.onlineStatusSubtitle, { color: theme.textSecondary }]}>
-                    {biometricEnabled ? `Use ${biometricType} to login quickly` : 'Enable quick login with biometric'}
+                    {biometricEnabled
+                      ? `Turn off to clear saved login. You can turn it on again after your next email/password login.`
+                      : 'Turn on after logging in with email/password to re-enable biometric login.'}
                   </ThemedText>
                 </View>
               </View>
@@ -337,6 +399,76 @@ export default function ProfileScreen() {
             </View>
           </View>
         )}
+
+        {/* Change Password Section */}
+        <View style={styles.section}>
+          <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
+            Change Password
+          </ThemedText>
+          {!showPasswordForm ? (
+            <TouchableOpacity
+              style={[styles.onlineStatusCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => setShowPasswordForm(true)}
+            >
+              <View style={styles.onlineStatusLeft}>
+                <View style={[styles.onlineIcon, { backgroundColor: theme.primary + '20' }]}>
+                  <Ionicons name="lock-closed-outline" size={20} color={theme.primary} />
+                </View>
+                <ThemedText style={[styles.onlineStatusTitle, { color: theme.text }]}>
+                  Update your password
+                </ThemedText>
+              </View>
+                <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.detailsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={[styles.passwordField, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>Current password</ThemedText>
+                <TextInput
+                  style={[styles.passwordInput, { color: theme.text, borderColor: theme.border }]}
+                  placeholder="Current password"
+                  placeholderTextColor={theme.textSecondary}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              </View>
+              <View style={[styles.passwordField, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>New password</ThemedText>
+                <TextInput
+                  style={[styles.passwordInput, { color: theme.text, borderColor: theme.border }]}
+                  placeholder="New password (min 8 characters)"
+                  placeholderTextColor={theme.textSecondary}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              </View>
+              <View style={styles.passwordField}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>Confirm password</ThemedText>
+                <TextInput
+                  style={[styles.passwordInput, { color: theme.text, borderColor: theme.border }]}
+                  placeholder="Confirm new password"
+                  placeholderTextColor={theme.textSecondary}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              </View>
+              <View style={styles.passwordButtonRow}>
+                <TouchableOpacity style={[styles.cancelPasswordButton, { borderColor: theme.border }]} onPress={() => { setShowPasswordForm(false); setCurrentPassword(''); setNewPassword(''); setConfirmPassword(''); }}>
+                  <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.changePasswordButton, { backgroundColor: theme.primary }]} onPress={handleChangePassword} disabled={isLoading}>
+                  {isLoading ? <ActivityIndicator size="small" color="#000" /> : <ThemedText style={styles.changePasswordButtonText}>Change password</ThemedText>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* Personal Details Section */}
         <View style={styles.section}>
@@ -399,37 +531,123 @@ export default function ProfileScreen() {
 
         {/* Vehicle Information Section */}
         <View style={styles.section}>
-          <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
-            Vehicle Information
-          </ThemedText>
+          <View style={styles.sectionHeader}>
+            <ThemedText type="subtitle" style={[styles.sectionTitleInline, { color: theme.text }]}>
+              Vehicle Information
+            </ThemedText>
+            <TouchableOpacity
+              onPress={() => setIsEditingVehicle(!isEditingVehicle)}
+              style={styles.editSectionButton}>
+              <Ionicons
+                name={isEditingVehicle ? 'close-outline' : 'create-outline'}
+                size={20}
+                color={theme.primary}
+              />
+            </TouchableOpacity>
+          </View>
           <View style={[styles.detailsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            {/* Vehicle */}
+            {/* Vehicle Type */}
+            <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
+              <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
+                <Ionicons name="car-outline" size={20} color={theme.text} />
+              </View>
+              <View style={styles.detailContent}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Vehicle Type
+                </ThemedText>
+                {isEditingVehicle ? (
+                  <TouchableOpacity
+                    style={[styles.pickerButton, { borderColor: theme.border, backgroundColor: theme.background }]}
+                    onPress={() => setShowVehicleTypePicker(true)}>
+                    <ThemedText style={[styles.pickerButtonText, { color: vehicleType ? theme.text : theme.textSecondary }]}>
+                      {vehicleType || 'Select vehicle type'}
+                    </ThemedText>
+                    <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehicleType || 'Not set'}
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+
+            {/* Vehicle Model */}
             <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
               <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
                 <Ionicons name="cube-outline" size={20} color={theme.text} />
               </View>
               <View style={styles.detailContent}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                  Vehicle
+                  Vehicle Model
                 </ThemedText>
-                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
-                  {vehicle}
+                {isEditingVehicle ? (
+                  <TextInput
+                    style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={vehicleModel}
+                    onChangeText={(t) => setVehicleModel(trimToMax(t, LIMITS.VEHICLE_MODEL))}
+                    placeholder="e.g. Toyota Prius"
+                    placeholderTextColor={theme.textSecondary}
+                    maxLength={LIMITS.VEHICLE_MODEL}
+                  />
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehicleModel || 'Not set'}
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+
+            {/* Vehicle Color */}
+            <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
+              <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
+                <Ionicons name="color-palette-outline" size={20} color={theme.text} />
+              </View>
+              <View style={styles.detailContent}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Vehicle Color
                 </ThemedText>
+                {isEditingVehicle ? (
+                  <TextInput
+                    style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={vehicleColor}
+                    onChangeText={(t) => setVehicleColor(trimToMax(t, LIMITS.VEHICLE_COLOR))}
+                    placeholder="e.g. Yellow"
+                    placeholderTextColor={theme.textSecondary}
+                    maxLength={LIMITS.VEHICLE_COLOR}
+                  />
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehicleColor || 'Not set'}
+                  </ThemedText>
+                )}
               </View>
             </View>
 
             {/* License Plate */}
             <View style={[styles.detailItem, { borderBottomColor: theme.border }]}>
               <View style={[styles.detailIcon, { backgroundColor: theme.border }]}>
-                <Ionicons name="location-outline" size={20} color={theme.text} />
+                <Ionicons name="pricetag-outline" size={20} color={theme.text} />
               </View>
               <View style={styles.detailContent}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
                   License Plate
                 </ThemedText>
-                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
-                  {licensePlate}
-                </ThemedText>
+                {isEditingVehicle ? (
+                  <TextInput
+                    style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                    value={vehiclePlate}
+                    onChangeText={(t) => setVehiclePlate(trimToMax(t, LIMITS.VEHICLE_PLATE))}
+                    placeholder="e.g. ABC-1234"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
+                    maxLength={LIMITS.VEHICLE_PLATE}
+                  />
+                ) : (
+                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                    {vehiclePlate || 'Not set'}
+                  </ThemedText>
+                )}
               </View>
             </View>
 
@@ -449,6 +667,52 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* Vehicle Type Picker Modal */}
+        <Modal
+          visible={showVehicleTypePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowVehicleTypePicker(false)}>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowVehicleTypePicker(false)}>
+            <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
+                  Select Vehicle Type
+                </ThemedText>
+                <TouchableOpacity onPress={() => setShowVehicleTypePicker(false)}>
+                  <Ionicons name="close" size={24} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={VEHICLE_TYPES}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalOption,
+                      { borderBottomColor: theme.border },
+                      vehicleType === item && { backgroundColor: theme.primary + '15' },
+                    ]}
+                    onPress={() => {
+                      setVehicleType(item);
+                      setShowVehicleTypePicker(false);
+                    }}>
+                    <ThemedText style={[styles.modalOptionText, { color: theme.text }]}>
+                      {item}
+                    </ThemedText>
+                    {vehicleType === item && (
+                      <Ionicons name="checkmark" size={20} color={theme.primary} />
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Edit Profile Button */}
         <TouchableOpacity
@@ -483,6 +747,16 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
+
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={[styles.logoutButton, { backgroundColor: theme.error + '15', marginBottom: 12, flexDirection: 'row', justifyContent: 'center', gap: 8 }]}
+          onPress={() => router.push('/account/delete-account')}>
+          <Ionicons name="trash-outline" size={20} color={theme.error} />
+          <ThemedText style={[styles.logoutButtonText, { color: theme.error }]}>
+            Delete Account
+          </ThemedText>
+        </TouchableOpacity>
 
         {/* Logout */}
         <TouchableOpacity
@@ -747,5 +1021,114 @@ const styles = StyleSheet.create({
   },
   supportSubtitle: {
     fontSize: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  sectionTitleInline: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  editSectionButton: {
+    padding: 4,
+  },
+  editInput: {
+    fontSize: 16,
+    fontWeight: '500',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '60%',
+    paddingBottom: 34,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  passwordField: {
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  passwordInput: {
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  passwordButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 16,
+    paddingTop: 8,
+  },
+  cancelPasswordButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  changePasswordButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  changePasswordButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
   },
 });

@@ -167,9 +167,10 @@ class LocationTrackingService {
   }
 
   /**
-   * Stop tracking location
+   * Stop tracking location.
+   * Awaits any pending buffer flush so no location API call runs after tokens are cleared (e.g. on logout).
    */
-  stopTracking(): void {
+  async stopTracking(): Promise<void> {
     if (!this.isTracking) {
       return;
     }
@@ -179,20 +180,24 @@ class LocationTrackingService {
       this.watchSubscription = null;
     }
 
-    // Capture and flush remaining buffer
+    // Flush remaining buffer and await so logout doesn't clear tokens before this request completes
     if (this.locationBuffer.length > 0) {
-      this.flushBuffer().catch(err => console.error('Error flushing final buffer:', err));
+      try {
+        await this.flushBuffer();
+      } catch (err) {
+        console.error('Error flushing final buffer:', err);
+      }
     }
 
     this.stopFlushTimer();
     this.isTracking = false;
     this.lastUpdateTime = 0;
-    
+
     // Disconnect MQTT when stopping tracking
     mqttLocationService.disconnect().catch((error) => {
       console.warn('Error disconnecting MQTT:', error);
     });
-    
+
     this.notifyStatusListeners();
     console.log('Location tracking stopped');
   }
@@ -217,6 +222,15 @@ class LocationTrackingService {
     // Take snapshot and clear buffer immediately to allow new updates
     const batch = [...this.locationBuffer];
     this.locationBuffer = [];
+
+    // Periodic MQTT Health Check:
+    // If we're tracking but MQTT is dead (e.g., stuck due to backgrounding), try to revive it over time.
+    if (!mqttLocationService.isConnected()) {
+      console.log('[LocationTrackingService] Health Check: MQTT is disconnected. Requesting force reconnect...');
+      mqttLocationService.forceReconnect().catch(err => {
+        console.warn('[LocationTrackingService] MQTT force reconnect failed during flush:', err);
+      });
+    }
 
     try {
       // Try MQTT first (preferred method - real-time, lighter)
@@ -308,7 +322,7 @@ class LocationTrackingService {
     } catch (error) {
       // Extract full error message from various error types
       let errorMessage = 'Unknown error';
-      
+
       if (error instanceof Error) {
         errorMessage = error.message;
       } else if (error && typeof error === 'object') {
@@ -326,7 +340,7 @@ class LocationTrackingService {
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
-      
+
       this.lastError = errorMessage;
       this.notifyStatusListeners();
       console.error('Error sending location batch:', {
@@ -423,6 +437,7 @@ class LocationTrackingService {
 
       return await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
+        // @ts-ignore - maximumAge not officially in the types but sometimes supported by native code
         maximumAge: 60000, // Accept location up to 1 minute old
         timeout: 15000, // 15 second timeout
       });
