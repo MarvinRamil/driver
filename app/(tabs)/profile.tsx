@@ -12,6 +12,7 @@ import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { biometricAuth } from '@/shared/services/biometricAuth';
 import { biometricStorage } from '@/shared/services/biometricStorage';
+import { LIMITS, trimToMax } from '@/shared/constants/validation';
 
 /**
  * Profile screen
@@ -113,6 +114,22 @@ export default function ProfileScreen() {
   };
 
   const handleUpdateProfile = async () => {
+    if (fullName.trim().length > LIMITS.FULL_NAME) {
+      Alert.alert('Validation Error', `Full name must be at most ${LIMITS.FULL_NAME} characters`);
+      return;
+    }
+    if (vehiclePlate && vehiclePlate.length > LIMITS.VEHICLE_PLATE) {
+      Alert.alert('Validation Error', `License plate must be at most ${LIMITS.VEHICLE_PLATE} characters`);
+      return;
+    }
+    if (vehicleModel && vehicleModel.length > LIMITS.VEHICLE_MODEL) {
+      Alert.alert('Validation Error', `Vehicle model must be at most ${LIMITS.VEHICLE_MODEL} characters`);
+      return;
+    }
+    if (vehicleColor && vehicleColor.length > LIMITS.VEHICLE_COLOR) {
+      Alert.alert('Validation Error', `Vehicle color must be at most ${LIMITS.VEHICLE_COLOR} characters`);
+      return;
+    }
     try {
       await updateProfile({
         fullName,
@@ -134,8 +151,8 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Please fill in all password fields');
       return;
     }
-    if (newPassword.length < 8) {
-      Alert.alert('Error', 'New password must be at least 8 characters');
+    if (newPassword.length < LIMITS.PASSWORD_MIN) {
+      Alert.alert('Error', `New password must be at least ${LIMITS.PASSWORD_MIN} characters`);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -568,9 +585,10 @@ export default function ProfileScreen() {
                   <TextInput
                     style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
                     value={vehicleModel}
-                    onChangeText={setVehicleModel}
+                    onChangeText={(t) => setVehicleModel(trimToMax(t, LIMITS.VEHICLE_MODEL))}
                     placeholder="e.g. Toyota Prius"
                     placeholderTextColor={theme.textSecondary}
+                    maxLength={LIMITS.VEHICLE_MODEL}
                   />
                 ) : (
                   <ThemedText style={[styles.detailValue, { color: theme.text }]}>
@@ -593,9 +611,10 @@ export default function ProfileScreen() {
                   <TextInput
                     style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
                     value={vehicleColor}
-                    onChangeText={setVehicleColor}
+                    onChangeText={(t) => setVehicleColor(trimToMax(t, LIMITS.VEHICLE_COLOR))}
                     placeholder="e.g. Yellow"
                     placeholderTextColor={theme.textSecondary}
+                    maxLength={LIMITS.VEHICLE_COLOR}
                   />
                 ) : (
                   <ThemedText style={[styles.detailValue, { color: theme.text }]}>
@@ -618,10 +637,11 @@ export default function ProfileScreen() {
                   <TextInput
                     style={[styles.editInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
                     value={vehiclePlate}
-                    onChangeText={setVehiclePlate}
+                    onChangeText={(t) => setVehiclePlate(trimToMax(t, LIMITS.VEHICLE_PLATE))}
                     placeholder="e.g. ABC-1234"
                     placeholderTextColor={theme.textSecondary}
                     autoCapitalize="characters"
+                    maxLength={LIMITS.VEHICLE_PLATE}
                   />
                 ) : (
                   <ThemedText style={[styles.detailValue, { color: theme.text }]}>

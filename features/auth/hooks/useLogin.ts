@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useAuth } from './useAuth';
+import { LIMITS, PATTERNS } from '@/shared/constants/validation';
 
 /**
  * Return type for useLogin hook
@@ -59,8 +60,7 @@ export function useLogin(): UseLoginReturn {
    * @returns True if email is valid, false otherwise
    */
   const validateEmail = useCallback((emailValue: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(emailValue);
+    return PATTERNS.EMAIL.test(emailValue);
   }, []);
 
   /**
@@ -79,6 +79,11 @@ export function useLogin(): UseLoginReturn {
 
     if (!validateEmail(email.trim())) {
       setError('Please enter a valid email address');
+      return;
+    }
+
+    if (email.trim().length > LIMITS.EMAIL) {
+      setError(`Email must be at most ${LIMITS.EMAIL} characters`);
       return;
     }
 

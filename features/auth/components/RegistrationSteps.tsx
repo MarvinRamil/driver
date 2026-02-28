@@ -28,6 +28,7 @@ import { SelfieCapture } from './SelfieCapture';
 import { apiClient } from '@/shared/services/apiClient';
 import { useAuthContext } from '../context/AuthContext';
 import { biometricStorage } from '@/shared/services/biometricStorage';
+import { LIMITS, PATTERNS, trimToMax } from '@/shared/constants/validation';
 
 type RegistrationStep =
   | 'enter-email'
@@ -90,19 +91,24 @@ export function RegistrationSteps() {
   // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
 
   const isValidEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    return PATTERNS.EMAIL.test(email);
   };
 
   const validateForm = (): string | null => {
     if (!registrationData.fullName || registrationData.fullName.trim().length < 2) {
       return 'Please enter your full name (at least 2 characters)';
     }
+    if (registrationData.fullName.trim().length > LIMITS.FULL_NAME) {
+      return `Full name must be at most ${LIMITS.FULL_NAME} characters`;
+    }
     if (!registrationData.email || !isValidEmail(registrationData.email)) {
       return 'Please enter a valid email address';
     }
-    if (!registrationData.password || registrationData.password.length < 8) {
-      return 'Password must be at least 8 characters';
+    if (registrationData.email.length > LIMITS.EMAIL) {
+      return `Email must be at most ${LIMITS.EMAIL} characters`;
+    }
+    if (!registrationData.password || registrationData.password.length < LIMITS.PASSWORD_MIN) {
+      return `Password must be at least ${LIMITS.PASSWORD_MIN} characters`;
     }
     const hasUpperCase = /[A-Z]/.test(registrationData.password);
     const hasLowerCase = /[a-z]/.test(registrationData.password);
@@ -117,8 +123,8 @@ export function RegistrationSteps() {
     }
     for (let i = 0; i < 3; i++) {
       if (!selectedQuestionIds[i]) return `Please select security question ${i + 1}`;
-      if (!questionAnswers[i] || questionAnswers[i].trim().length < 3) {
-        return `Please provide an answer for security question ${i + 1} (at least 3 characters)`;
+      if (!questionAnswers[i] || questionAnswers[i].trim().length < LIMITS.SECURITY_ANSWER_MIN) {
+        return `Please provide an answer for security question ${i + 1} (at least ${LIMITS.SECURITY_ANSWER_MIN} characters)`;
       }
     }
     return null;
@@ -451,13 +457,14 @@ export function RegistrationSteps() {
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.email}
                     onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, email: text });
+                      setRegistrationData({ ...registrationData, email: trimToMax(text, LIMITS.EMAIL) });
                       setError(null);
                     }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isLoading}
+                    maxLength={LIMITS.EMAIL}
                   />
                 </View>
               </View>
@@ -528,11 +535,11 @@ export function RegistrationSteps() {
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.otp}
                     onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, otp: text.replace(/\D/g, '').slice(0, 6) });
+                      setRegistrationData({ ...registrationData, otp: text.replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH) });
                       setError(null);
                     }}
                     keyboardType="number-pad"
-                    maxLength={6}
+                    maxLength={LIMITS.OTP_LENGTH}
                     editable={!isLoading}
                   />
                 </View>
@@ -606,13 +613,14 @@ export function RegistrationSteps() {
               value={questionAnswers[index]}
               onChangeText={(text) => {
                 const next = [...questionAnswers] as [string, string, string];
-                next[index] = text;
+                next[index] = trimToMax(text, LIMITS.SECURITY_ANSWER_MAX);
                 setQuestionAnswers(next);
                 setError(null);
               }}
               editable={!isLoading}
               autoCapitalize="none"
               autoCorrect={false}
+              maxLength={LIMITS.SECURITY_ANSWER_MAX}
             />
           </View>
         );
@@ -687,11 +695,12 @@ export function RegistrationSteps() {
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.fullName}
                     onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, fullName: text });
+                      setRegistrationData({ ...registrationData, fullName: trimToMax(text, LIMITS.FULL_NAME) });
                       setError(null);
                     }}
                     autoCapitalize="words"
                     editable={!isLoading}
+                    maxLength={LIMITS.FULL_NAME}
                   />
                 </View>
               </View>
@@ -930,12 +939,13 @@ export function RegistrationSteps() {
                   placeholderTextColor={theme.placeholder}
                   value={registrationData.fullName}
                   onChangeText={(text) => {
-                    setRegistrationData({ ...registrationData, fullName: text });
+                    setRegistrationData({ ...registrationData, fullName: trimToMax(text, LIMITS.FULL_NAME) });
                     setError(null);
                   }}
                   autoCapitalize="words"
                   autoCorrect={false}
                   editable={!isLoading}
+                  maxLength={LIMITS.FULL_NAME}
                 />
               </View>
             </View>
@@ -950,13 +960,14 @@ export function RegistrationSteps() {
                   placeholderTextColor={theme.placeholder}
                   value={registrationData.email}
                   onChangeText={(text) => {
-                    setRegistrationData({ ...registrationData, email: text });
+                    setRegistrationData({ ...registrationData, email: trimToMax(text, LIMITS.EMAIL) });
                     setError(null);
                   }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
+                  maxLength={LIMITS.EMAIL}
                 />
               </View>
               {registrationStatus && (

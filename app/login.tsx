@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LIMITS, trimToMax } from "@/shared/constants/validation";
 
 // Import images as constants for reliable bundling in release builds
 const adaptiveIcon = require('../assets/images/adaptive-icon.png');
@@ -244,13 +245,14 @@ export default function LoginScreen() {
                   placeholderTextColor={theme.placeholder}
                   value={email}
                   onChangeText={(text) => {
-                    setEmail(text);
+                    setEmail(trimToMax(text, LIMITS.EMAIL));
                     clearError();
                   }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!isLoading}
+                  maxLength={LIMITS.EMAIL}
                 />
               </View>
             </View>

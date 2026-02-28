@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authService } from '@/features/auth/services/authService';
+import { LIMITS, trimToMax } from '@/shared/constants/validation';
 
 type Step = 'email' | 'otp' | 'security-questions' | 'new-password' | 'success';
 
@@ -48,6 +49,10 @@ export default function ForgotPasswordScreen() {
       setError('Email is required');
       return;
     }
+    if (email.trim().length > LIMITS.EMAIL) {
+      setError(`Email must be at most ${LIMITS.EMAIL} characters`);
+      return;
+    }
     setError(null);
     const normalizedEmail = email.trim().toLowerCase();
     setEmail(normalizedEmail);
@@ -65,8 +70,8 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleVerifyOtp = () => {
-    const digits = (otp || '').trim().replace(/\D/g, '').slice(0, 6);
-    if (digits.length !== 6) {
+    const digits = (otp || '').trim().replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH);
+    if (digits.length !== LIMITS.OTP_LENGTH) {
       setError('Please enter a valid 6-digit code');
       return;
     }
@@ -113,8 +118,8 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleResetPassword = async () => {
-    if (!newPassword || newPassword.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!newPassword || newPassword.length < LIMITS.PASSWORD_MIN) {
+      setError(`Password must be at least ${LIMITS.PASSWORD_MIN} characters`);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -122,8 +127,8 @@ export default function ForgotPasswordScreen() {
       return;
     }
     const otpToUse = verifiedOtpRef.current || otp || '';
-    const otpCleaned = otpToUse.trim().replace(/\D/g, '').slice(0, 6);
-    if (!otpCleaned || otpCleaned.length !== 6) {
+    const otpCleaned = otpToUse.trim().replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH);
+    if (!otpCleaned || otpCleaned.length !== LIMITS.OTP_LENGTH) {
       setError('Please enter a valid 6-digit verification code');
       return;
     }
@@ -210,7 +215,7 @@ export default function ForgotPasswordScreen() {
                   <Text style={[styles.label, { color: theme.text }]}>Email</Text>
                   <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                     <Ionicons name="mail" size={20} color={theme.textSecondary} style={styles.inputIcon} />
-                    <TextInput style={[styles.input, { color: theme.text }]} placeholder="Enter your email" placeholderTextColor={theme.placeholder} value={email} onChangeText={(t) => { setEmail(t); setError(null); }} keyboardType="email-address" autoCapitalize="none" editable={!isLoading} />
+                    <TextInput style={[styles.input, { color: theme.text }]} placeholder="Enter your email" placeholderTextColor={theme.placeholder} value={email} onChangeText={(t) => { setEmail(trimToMax(t, LIMITS.EMAIL)); setError(null); }} keyboardType="email-address" autoCapitalize="none" editable={!isLoading} maxLength={LIMITS.EMAIL} />
                   </View>
                 </View>
                 {error ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} /><Text style={styles.errorText}>{error}</Text></View> : null}
@@ -231,11 +236,11 @@ export default function ForgotPasswordScreen() {
                 <View style={styles.inputGroup}>
                   <Text style={[styles.label, { color: theme.text }]}>Code</Text>
                   <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <TextInput style={[styles.input, { color: theme.text }]} placeholder="000000" placeholderTextColor={theme.placeholder} value={otp} onChangeText={(t) => { setOtp(t.replace(/\D/g, '').slice(0, 6)); setError(null); }} keyboardType="number-pad" maxLength={6} autoFocus />
+                    <TextInput style={[styles.input, { color: theme.text }]} placeholder="000000" placeholderTextColor={theme.placeholder} value={otp} onChangeText={(t) => { setOtp(t.replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH)); setError(null); }} keyboardType="number-pad" maxLength={LIMITS.OTP_LENGTH} autoFocus />
                   </View>
                 </View>
                 {error ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} /><Text style={styles.errorText}>{error}</Text></View> : null}
-                <TouchableOpacity style={[styles.submitButton, { backgroundColor: theme.primary }]} onPress={handleVerifyOtp} disabled={(otp || '').replace(/\D/g, '').length !== 6}>
+                <TouchableOpacity style={[styles.submitButton, { backgroundColor: theme.primary }]} onPress={handleVerifyOtp} disabled={(otp || '').replace(/\D/g, '').length !== LIMITS.OTP_LENGTH}>
                   <Text style={styles.submitButtonText}>Continue</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.resendButton} onPress={handleRequestOtp} disabled={isLoading}>
@@ -258,7 +263,7 @@ export default function ForgotPasswordScreen() {
                       <View key={q.number} style={styles.inputGroup}>
                         <Text style={[styles.label, { color: theme.text }]}>{q.question}</Text>
                         <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                          <TextInput style={[styles.input, { color: theme.text }]} placeholder="Your answer" placeholderTextColor={theme.placeholder} value={securityAnswers.find((a) => a.questionNumber === q.number)?.answer ?? ''} onChangeText={(t) => handleSecurityAnswerChange(q.number, t)} autoCapitalize="none" />
+                          <TextInput style={[styles.input, { color: theme.text }]} placeholder="Your answer" placeholderTextColor={theme.placeholder} value={securityAnswers.find((a) => a.questionNumber === q.number)?.answer ?? ''} onChangeText={(t) => handleSecurityAnswerChange(q.number, trimToMax(t, LIMITS.SECURITY_ANSWER_MAX))} autoCapitalize="none" maxLength={LIMITS.SECURITY_ANSWER_MAX} />
                         </View>
                       </View>
                     ))}
