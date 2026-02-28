@@ -1,0 +1,148 @@
+default_platform(:android)
+
+platform :android do
+  desc "Deploy to Production Track"
+  lane :deploy_production do |options|
+    json_key_path = ENV['GOOGLE_APPLICATION_CREDENTIALS'] || '/tmp/google-play-key.json'
+    # Prefer AAB over APK (AAB is preferred by Google Play)
+    aab_path = options[:aab_path] || options[:aab]
+    apk_path = options[:apk_path] || options[:apk]
+    
+    if aab_path && File.exist?(aab_path)
+      upload_to_play_store(
+        track: 'production',
+        aab: aab_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    elsif apk_path && File.exist?(apk_path)
+      upload_to_play_store(
+        track: 'production',
+        apk: apk_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    else
+      UI.user_error!("Neither AAB nor APK file found!")
+    end
+  end
+
+  desc "Deploy to Beta Track"
+  lane :deploy_beta do |options|
+    json_key_path = ENV['GOOGLE_APPLICATION_CREDENTIALS'] || '/tmp/google-play-key.json'
+    # Prefer AAB over APK (AAB is preferred by Google Play)
+    aab_path = options[:aab_path] || options[:aab]
+    apk_path = options[:apk_path] || options[:apk]
+    
+    if aab_path && File.exist?(aab_path)
+      upload_to_play_store(
+        track: 'beta',
+        aab: aab_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    elsif apk_path && File.exist?(apk_path)
+      upload_to_play_store(
+        track: 'beta',
+        apk: apk_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    else
+      UI.user_error!("Neither AAB nor APK file found!")
+    end
+  end
+
+  desc "Deploy to Internal Testing Track"
+  lane :deploy_internal do |options|
+    json_key_path = ENV['GOOGLE_APPLICATION_CREDENTIALS'] || '/tmp/google-play-key.json'
+    # Prefer AAB over APK (AAB is preferred by Google Play)
+    aab_path = options[:aab_path] || options[:aab]
+    apk_path = options[:apk_path] || options[:apk]
+    
+    if aab_path && File.exist?(aab_path)
+      upload_to_play_store(
+        track: 'internal',
+        aab: aab_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    elsif apk_path && File.exist?(apk_path)
+      upload_to_play_store(
+        track: 'internal',
+        apk: apk_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    else
+      UI.user_error!("Neither AAB nor APK file found!")
+    end
+  end
+
+  desc "Deploy to Internal Testing Track as Draft (Features Branch)"
+  lane :deploy_draft do |options|
+    json_key_path = ENV['GOOGLE_APPLICATION_CREDENTIALS'] || '/tmp/google-play-key.json'
+    # Prefer AAB over APK (AAB is preferred by Google Play)
+    aab_path = options[:aab_path] || options[:aab]
+    apk_path = options[:apk_path] || options[:apk]
+    
+    if aab_path && File.exist?(aab_path)
+      upload_to_play_store(
+        track: 'internal',
+        aab: aab_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        release_status: 'draft',
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    elsif apk_path && File.exist?(apk_path)
+      upload_to_play_store(
+        track: 'internal',
+        apk: apk_path,
+        package_name: 'com.mybeeapp.driver',
+        json_key: json_key_path,
+        release_status: 'draft',
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_screenshots: true,
+        skip_upload_changelogs: true
+      )
+    else
+      UI.user_error!("Neither AAB nor APK file found!")
+    end
+    
+    UI.success("🎉 Draft release uploaded successfully!")
+    UI.success("📋 To publish this release:")
+    UI.success("   1. Go to Google Play Console")
+    UI.success("   2. Navigate to Testing → Internal testing")
+    UI.success("   3. Find your draft release")
+    UI.success("   4. Click 'Review and rollout' → 'Start rollout'")
+  end
+end

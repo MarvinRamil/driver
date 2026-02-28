@@ -1,78 +1,1074 @@
 stages:
-  - lint
   - build
+  - deploy
 
-# Lint job - runs before build
-lint:
-  stage: lint
-  tags:
-    - android
-  image: mingc/android-build-box:latest
-  only:
-    - main
-    - master
-    - dev
-    - features
-  before_script:
-    - node --version
-    - npm ci
-    # Verify babel-plugin-module-resolver is installed, install if missing
-    - |
-      if ! npm list babel-plugin-module-resolver > /dev/null 2>&1; then
-        echo "babel-plugin-module-resolver not found, installing..."
-        npm install babel-plugin-module-resolver --save-dev
-      fi
-  script:
-    - echo "Running TypeScript type checking..."
-    - npx tsc --noEmit
-    - echo "Linting passed!"
-
-# Build job - only runs on allowed branches
 build_android:
   stage: build
   tags:
     - android
-  image: mingc/android-build-box:latest
   only:
     - main
     - master
     - dev
     - features
+  # Disable all caching to ensure fresh builds
+  cache: {}
   before_script:
+    # COMPREHENSIVE CLEANUP: Remove ALL cached directories and files for fresh build
+    - |
+      echo "=== COMPREHENSIVE CLEANUP: Removing all cached directories ==="
+      echo "This ensures a completely fresh build with no cached values"
+      echo ""
+      
+      # Remove all build artifacts and cached directories
+      echo "Removing node_modules..."
+      rm -rf node_modules 2>/dev/null || true
+      
+      echo "Removing Expo caches..."
+      rm -rf .expo .expo-shared .metro 2>/dev/null || true
+      
+      echo "Removing Android build directories..."
+      rm -rf android/.gradle android/.idea android/app/build android/build android/.expo 2>/dev/null || true
+      
+      echo "Removing npm caches..."
+      rm -rf ~/.npm ~/.cache/npm 2>/dev/null || true
+      npm cache clean --force 2>/dev/null || true
+      
+      echo "Removing Gradle build caches (keeping wrapper cache for faster downloads)..."
+      rm -rf ~/.gradle/caches 2>/dev/null || true
+      # Keep ~/.gradle/wrapper to reuse downloaded Gradle distributions
+      # This prevents timeout issues when downloading Gradle
+      
+      echo "Removing all .env files..."
+      find . -maxdepth 10 -name ".env*" -type f ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/.expo/*" ! -name ".env.exmple" 2>/dev/null | while read -r env_file; do
+        echo "  Removing: $env_file"
+        rm -f "$env_file"
+      done || true
+      
+      echo "✅ All cached directories and files removed"
+      echo ""
+    # Unset any EXPO_PUBLIC_* variables that might have been loaded from old .env files
+    - |
+      echo "=== Unsetting EXPO_PUBLIC_* environment variables ==="
+      for var in $(env | grep "^EXPO_PUBLIC_" | cut -d= -f1); do
+        echo "Unsetting: $var"
+        unset "$var" || true
+      done
+      echo "✅ All EXPO_PUBLIC_* variables cleared"
+    - export ANDROID_HOME=/opt/android-sdk
+    - export PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/33.0.2:/opt/gradle-8.0.2/bin
+    - echo "=== Checking versions ==="
     - node --version
     - java -version
-    - npm ci
-    # Verify babel-plugin-module-resolver is installed, install if missing
     - |
-      if ! npm list babel-plugin-module-resolver > /dev/null 2>&1; then
-        echo "babel-plugin-module-resolver not found, installing..."
-        npm install babel-plugin-module-resolver --save-dev
+      # Check Node.js version - toReversed() requires Node 20+
+      NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+      echo "Current Node.js version: $(node --version)"
+      if [ "$NODE_VERSION" -lt 20 ]; then
+        echo "WARNING: Node.js version is less than 20 (current: $(node --version))"
+        echo "toReversed() method requires Node.js 20+"
+        echo "Attempting to use nvm to switch to Node 20..."
+        # Try to use nvm if available
+        if [ -s "$HOME/.nvm/nvm.sh" ]; then
+          . "$HOME/.nvm/nvm.sh"
+          nvm install 20
+          nvm use 20
+          echo "Switched to Node.js: $(node --version)"
+        elif [ -s "/usr/local/nvm/nvm.sh" ]; then
+          . "/usr/local/nvm/nvm.sh"
+          nvm install 20
+          nvm use 20
+          echo "Switched to Node.js: $(node --version)"
+        else
+          echo "ERROR: Node.js 20+ required but nvm not found. Please upgrade Node.js on runner."
+          exit 1
+        fi
       fi
   script:
-    - npx expo prebuild --platform android
+    # CRITICAL: Remove any .env files from repository checkout FIRST
+    # This ensures we don't use stale values from committed .env files
+    - |
+      echo "=== Pre-cleanup: Removing any .env files from repository ==="
+      find . -maxdepth 5 -name ".env" -type f ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null | while read -r env_file; do
+        echo "⚠️  Found .env file in repository: $env_file"
+        echo "   Removing to prevent using stale values..."
+        rm -f "$env_file"
+        echo "✅ Removed: $env_file"
+      done || echo "No .env files found in repository"
+      echo ""
+    # CRITICAL: Clear all Expo caches BEFORE creating new .env
+    # This ensures Expo doesn't use cached .env values
+    - |
+      echo "=== Clearing Expo and Metro caches ==="
+      rm -rf .expo node_modules/.cache .metro .expo-shared 2>/dev/null || true
+      echo "✅ All caches cleared"
+    # CRITICAL: Export GitLab CI variables as EXPO_PUBLIC_* for app.config.js
+    # app.config.js reads directly from process.env, bypassing .env file issues
+    - |
+      echo "=== Setting up environment variables for app.config.js ==="
+      BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
+      if [ "$BRANCH_NAME" = "features" ]; then
+        ENV_PREFIX="DEV"
+      elif [ "$BRANCH_NAME" = "dev" ]; then
+        ENV_PREFIX="STAGING"
+      elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        ENV_PREFIX="PROD"
+      else
+        ENV_PREFIX="DEV"
+      fi
+      echo "Branch: $BRANCH_NAME"
+      echo "Environment prefix: $ENV_PREFIX"
+      echo ""
+      # Export environment-specific variables as EXPO_PUBLIC_* for app.config.js
+      # This ensures app.config.js reads the correct values directly
+      if [ -n "${ENV_PREFIX}_EXPO_PUBLIC_API_URL" ]; then
+        export EXPO_PUBLIC_API_URL="${ENV_PREFIX}_EXPO_PUBLIC_API_URL"
+        eval "export EXPO_PUBLIC_API_URL=\$${ENV_PREFIX}_EXPO_PUBLIC_API_URL"
+        echo "✅ Exported EXPO_PUBLIC_API_URL from ${ENV_PREFIX}_EXPO_PUBLIC_API_URL"
+      elif [ -n "$EXPO_PUBLIC_API_URL" ]; then
+        echo "✅ Using generic EXPO_PUBLIC_API_URL"
+      else
+        echo "⚠️  No EXPO_PUBLIC_API_URL found, will use default"
+      fi
+      # Export other variables similarly
+      for var in API_DEBUG GOOGLE_MAPS_API_KEY MAPBOX_ACCESS_TOKEN MQTT_HOST MQTT_PORT MQTT_USE_SSL MQTT_USERNAME MQTT_PASSWORD MQTT_TOPIC_PREFIX MQTT_PATH; do
+        env_var="${ENV_PREFIX}_EXPO_PUBLIC_${var}"
+        if [ -n "${!env_var}" ]; then
+          eval "export EXPO_PUBLIC_${var}=\$${env_var}"
+          echo "✅ Exported EXPO_PUBLIC_${var} from ${env_var}"
+        elif [ -n "EXPO_PUBLIC_${var}" ]; then
+          eval "export EXPO_PUBLIC_${var}=\$EXPO_PUBLIC_${var}"
+        fi
+      done
+      echo ""
+      echo "Current EXPO_PUBLIC_API_URL: ${EXPO_PUBLIC_API_URL:-not set}"
+      if echo "${EXPO_PUBLIC_API_URL:-}" | grep -q "ngrok"; then
+        echo "❌ ERROR: EXPO_PUBLIC_API_URL contains ngrok!"
+        exit 1
+      fi
+      echo ""
+    # Setup environment-specific variables (creates fresh .env from GitLab variables)
+    - |
+      echo "=== DEBUG: Checking GitLab CI variables BEFORE setup-env.sh ==="
+      BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
+      echo "Branch: $BRANCH_NAME"
+      if [ "$BRANCH_NAME" = "features" ]; then
+        ENV_PREFIX="DEV"
+      elif [ "$BRANCH_NAME" = "dev" ]; then
+        ENV_PREFIX="STAGING"
+      elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        ENV_PREFIX="PROD"
+      else
+        ENV_PREFIX="DEV"
+      fi
+      echo "Environment prefix: $ENV_PREFIX"
+      echo ""
+      echo "Checking for ${ENV_PREFIX}_EXPO_PUBLIC_API_URL:"
+      ENV_VAR="${ENV_PREFIX}_EXPO_PUBLIC_API_URL"
+      if env | grep "^${ENV_VAR}="; then
+        VALUE=$(env | grep "^${ENV_VAR}=" | cut -d= -f2-)
+        echo "  ✅ Found: ${ENV_VAR}"
+        echo "  Value: ${VALUE:0:80}..."
+        if echo "$VALUE" | grep -q "ngrok"; then
+          echo "  ⚠️  WARNING: Value contains 'ngrok' - this is the OLD value!"
+          echo "  Please update this GitLab CI variable"
+        fi
+      else
+        echo "  ❌ Variable NOT found!"
+      fi
+      echo ""
+      echo "Checking for generic EXPO_PUBLIC_API_URL:"
+      if env | grep "^EXPO_PUBLIC_API_URL="; then
+        VALUE=$(env | grep "^EXPO_PUBLIC_API_URL=" | cut -d= -f2-)
+        echo "  ✅ Found: EXPO_PUBLIC_API_URL"
+        echo "  Value: ${VALUE:0:80}..."
+        if echo "$VALUE" | grep -q "ngrok"; then
+          echo "  ⚠️  WARNING: Value contains 'ngrok' - this is the OLD value!"
+          echo "  Please update this GitLab CI variable"
+        fi
+      else
+        echo "  ❌ Variable NOT found!"
+      fi
+      echo ""
+      echo "All EXPO_PUBLIC_API_URL variables in environment:"
+      env | grep "EXPO_PUBLIC_API_URL" || echo "  ❌ No EXPO_PUBLIC_API_URL variables found!"
+      echo ""
+      echo "Checking for EXPO_PUBLIC_MQTT_TOPIC_PREFIX:"
+      if env | grep -q "^EXPO_PUBLIC_MQTT_TOPIC_PREFIX="; then
+        echo "  ✅ Found: EXPO_PUBLIC_MQTT_TOPIC_PREFIX"
+      elif env | grep -q "^${ENV_PREFIX}_EXPO_PUBLIC_MQTT_TOPIC_PREFIX="; then
+        echo "  ✅ Found: ${ENV_PREFIX}_EXPO_PUBLIC_MQTT_TOPIC_PREFIX"
+      else
+        echo "  ⚠️  EXPO_PUBLIC_MQTT_TOPIC_PREFIX not set (optional)"
+      fi
+      echo "Checking for EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN:"
+      if env | grep -q "^EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN="; then
+        echo "  ✅ Found: EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
+      elif env | grep -q "^${ENV_PREFIX}_EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN="; then
+        echo "  ✅ Found: ${ENV_PREFIX}_EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
+      else
+        echo "  ⚠️  EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN not set (optional)"
+      fi
+      echo ""
+    - bash scripts/setup-env.sh
+    - |
+      echo "=== DEBUG: Verifying .env file AFTER setup-env.sh ==="
+      if [ -f ".env" ]; then
+        echo "✅ .env file exists"
+        echo "EXPO_PUBLIC_API_URL value in .env:"
+        grep "^EXPO_PUBLIC_API_URL=" .env || echo "  ❌ Not found in .env!"
+        echo "EXPO_PUBLIC_MQTT_TOPIC_PREFIX value in .env:"
+        grep "^EXPO_PUBLIC_MQTT_TOPIC_PREFIX=" .env || echo "  ⚠️  Not found (optional)"
+        echo "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN value in .env:"
+        grep "^EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=" .env | sed 's/=.*/=***masked***/' || echo "  ⚠️  Not found (optional)"
+        echo ""
+        echo "Full .env file content (masked):"
+        cat .env | sed 's/\(PASSWORD=\).*/\1***masked***/' | sed 's/\(API_KEY=\).*/\1***masked***/' | sed 's/\(EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=\).*/\1***masked***/'
+        echo ""
+        # Check if it contains the old ngrok value
+        if grep -q "ngrok" .env; then
+          echo "⚠️  WARNING: .env file contains 'ngrok' - this is an OLD value!"
+          echo "   This suggests GitLab CI variables are not set correctly or contain old values"
+          echo "   Please check GitLab → Settings → CI/CD → Variables"
+          exit 1
+        fi
+      else
+        echo "❌ ERROR: .env file not found after setup-env.sh!"
+        exit 1
+      fi
+    # Install dependencies with retry logic for network issues
+    - |
+      echo "=== Installing dependencies ==="
+      MAX_RETRIES=3
+      RETRY_COUNT=0
+      while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES..."
+        if npm ci --no-audit --prefer-offline=false; then
+          echo "✅ npm ci succeeded"
+          break
+        else
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "⚠️  npm ci failed, retrying in 5 seconds..."
+            sleep 5
+            # Clear npm cache before retry
+            npm cache clean --force || true
+          else
+            echo "❌ npm ci failed after $MAX_RETRIES attempts"
+            exit 1
+          fi
+        fi
+      done
+    - |
+      echo "=== Auto-incrementing version (commit-message driven) ==="
+      BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
+      BUILD_NUM=${CI_PIPELINE_IID:-1}
+      COMMIT_MSG="${CI_COMMIT_MESSAGE:-} ${CI_COMMIT_TITLE:-}"
+      
+      # Install json tool for updating app.json
+      npm install json
+      
+      CURRENT_VERSION=$(npx json -f app.json expo.version)
+      MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+      MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+      PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+      
+      # Parse commit message for version bump keywords (case-insensitive)
+      # Order: major > minor (version upgrade) > patch. First match wins.
+      if echo "$COMMIT_MSG" | grep -qiE 'major|major.?release|\[major\]|\(major\)'; then
+        # Major release: 1.0.1 → 2.0.0
+        MAJOR=$((MAJOR + 1))
+        MINOR=0
+        PATCH=0
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "Detected MAJOR RELEASE keyword → $NEW_VERSION"
+      elif echo "$COMMIT_MSG" | grep -qiE 'version.?upgrade|version upgrade|\[minor\]|\(minor\)'; then
+        # Version upgrade / Minor: 1.0.1 → 1.1.0
+        MINOR=$((MINOR + 1))
+        PATCH=0
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "Detected VERSION UPGRADE keyword → $NEW_VERSION"
+      elif echo "$COMMIT_MSG" | grep -qiE 'patch|\[patch\]|\(patch\)'; then
+        # Patch: 1.0.1 → 1.0.2
+        PATCH=$((PATCH + 1))
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "Detected PATCH keyword → $NEW_VERSION"
+      else
+        # Default: patch increment (conservative)
+        PATCH=$((PATCH + 1))
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "No keyword found, default PATCH increment → $NEW_VERSION"
+      fi
+      
+      # Version code must always increase (Play Store requirement)
+      VERSION_CODE=$((BUILD_NUM + 10))
+      if [ "$BRANCH_NAME" = "dev" ]; then
+        VERSION_CODE=$((BUILD_NUM + 100))
+      elif [ "$BRANCH_NAME" = "features" ]; then
+        VERSION_CODE=$((BUILD_NUM + 200))
+      elif [ "$BRANCH_NAME" != "main" ] && [ "$BRANCH_NAME" != "master" ]; then
+        VERSION_CODE=$((BUILD_NUM + 1000))
+      fi
+      
+      echo "Current version: $CURRENT_VERSION"
+      echo "New version: $NEW_VERSION"
+      echo "Version code: $VERSION_CODE"
+      
+      npx json -I -f app.json -e "this.expo.version='$NEW_VERSION'"
+      npx json -I -f app.json -e "this.expo.android.versionCode=$VERSION_CODE"
+      
+      echo "Updated app.json:"
+      echo "  Version: $(npx json -f app.json expo.version)"
+      echo "  Version Code: $(npx json -f app.json expo.android.versionCode)"
+    - |
+      echo "=== Pre-prebuild cleanup ==="
+      echo "Removing android/ directory to force regeneration with fresh environment variables..."
+      # Remove android directory but preserve fastlane config
+      if [ -d "android" ]; then
+        echo "⚠️  Found existing android/ directory - removing completely for fresh build"
+        # Backup fastlane if it exists
+        if [ -d "android/fastlane" ]; then
+          echo "  Backing up fastlane configuration..."
+          cp -r android/fastlane /tmp/fastlane-backup 2>/dev/null || true
+          echo "  ✅ Fastlane backed up"
+        fi
+        # Remove entire android directory (including any cached build files)
+        rm -rf android
+        echo "✅ Removed android/ directory completely"
+        # Restore fastlane if it was backed up
+        if [ -d "/tmp/fastlane-backup" ]; then
+          echo "  Restoring fastlane configuration..."
+          mkdir -p android
+          cp -r /tmp/fastlane-backup android/fastlane 2>/dev/null || true
+          echo "  ✅ Fastlane restored"
+        fi
+      else
+        echo "✅ No existing android/ directory found"
+      fi
+      # Also clear any remaining Gradle caches
+      echo "Clearing any remaining Gradle caches..."
+      rm -rf ~/.gradle/caches 2>/dev/null || true
+      echo "✅ Gradle caches cleared"
+      # Verify fresh .env exists (created by setup-env.sh)
+      # NOTE: We DON'T remove .env here because setup-env.sh just created it with fresh values
+      if [ ! -f ".env" ]; then
+        echo "❌ ERROR: .env file not found! setup-env.sh should have created it."
+        exit 1
+      fi
+      echo "✅ Verified fresh .env file exists (created by setup-env.sh)"
+      echo ""
+      echo "=== Verifying .env file contains correct values (not old cached values) ==="
+      # Check if .env contains old/default values that suggest it wasn't updated
+      ENV_API_URL=$(grep "^EXPO_PUBLIC_API_URL=" .env | cut -d= -f2- | head -1 | xargs)
+      if [ -z "$ENV_API_URL" ] || [ "$ENV_API_URL" = "https://localhost:5001" ]; then
+        echo "❌ ERROR: .env file contains default/empty API URL!"
+        echo "   This suggests setup-env.sh did not read GitLab variables correctly."
+        echo "   Value found: '$ENV_API_URL'"
+        echo "   Expected: A URL from GitLab CI/CD variables"
+        echo ""
+        echo "   Checking GitLab variables in environment:"
+        BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
+        if [ "$BRANCH_NAME" = "features" ]; then
+          EXPECTED_VAR="DEV_EXPO_PUBLIC_API_URL"
+        elif [ "$BRANCH_NAME" = "dev" ]; then
+          EXPECTED_VAR="STAGING_EXPO_PUBLIC_API_URL"
+        elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+          EXPECTED_VAR="PROD_EXPO_PUBLIC_API_URL"
+        else
+          EXPECTED_VAR="DEV_EXPO_PUBLIC_API_URL"
+        fi
+        echo "   Looking for: $EXPECTED_VAR"
+        env | grep "^${EXPECTED_VAR}=" || echo "   ❌ Variable NOT found in environment!"
+        echo ""
+        echo "   Full .env file content:"
+        cat .env
+        echo ""
+        exit 1
+      else
+        echo "✅ .env file contains non-default API URL: $ENV_API_URL"
+      fi
+      echo ""
+      echo "=== DEBUG: Full .env file contents (masked) ==="
+      cat .env | sed 's/\(EXPO_PUBLIC_MQTT_PASSWORD=\).*/\1***masked***/' | \
+                sed 's/\(EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=\).*/\1***masked***/' | sed 's/\(EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=\).*/\1***masked***/'
+      echo ""
+      echo "=== DEBUG: Verifying EXPO_PUBLIC_API_URL value ==="
+      ENV_API_URL=$(grep "^EXPO_PUBLIC_API_URL=" .env | cut -d= -f2- | head -1)
+      echo "Value in .env file: '$ENV_API_URL'"
+      BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
+      if [ "$BRANCH_NAME" = "features" ]; then
+        EXPECTED_PREFIX="DEV_"
+      elif [ "$BRANCH_NAME" = "dev" ]; then
+        EXPECTED_PREFIX="STAGING_"
+      elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        EXPECTED_PREFIX="PROD_"
+      else
+        EXPECTED_PREFIX="DEV_"
+      fi
+      if [ -z "$ENV_API_URL" ] || [ "$ENV_API_URL" = "https://localhost:5001" ]; then
+        echo "⚠️  WARNING: API URL is empty or using default value!"
+        echo "   Branch: $BRANCH_NAME"
+        echo "   Expected GitLab variable: ${EXPECTED_PREFIX}EXPO_PUBLIC_API_URL"
+        echo "   Checking if variable exists in environment..."
+        env | grep "^${EXPECTED_PREFIX}EXPO_PUBLIC_API_URL" || echo "   ❌ Variable NOT found in environment!"
+        echo "   This suggests GitLab variables were not read correctly."
+        echo "   Check GitLab → Settings → CI/CD → Variables"
+      else
+        echo "✅ API URL looks correct (not default): $ENV_API_URL"
+      fi
+      echo ""
+    - |
+      echo "=== Running expo prebuild with environment variables ==="
+      echo "Current EXPO_PUBLIC_API_URL from environment: ${EXPO_PUBLIC_API_URL:-not set}"
+      echo ""
+      echo "=== Final .env file verification before prebuild ==="
+      echo "Current working directory: $(pwd)"
+      echo ""
+      echo "Checking for ALL .env files in project:"
+      find . -maxdepth 5 -name ".env*" -type f ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/.expo/*" ! -name ".env.exmple" 2>/dev/null | while read -r env_file; do
+        echo "Found: $env_file"
+        echo "Content (first 3 lines):"
+        head -3 "$env_file" | sed 's/\(PASSWORD=\).*/\1***masked***/' | sed 's/\(API_KEY=\).*/\1***masked***/'
+        echo ""
+      done || echo "No .env files found"
+      echo ""
+      if [ -f ".env" ]; then
+        echo "✅ .env file exists in project root"
+        echo "EXPO_PUBLIC_API_URL value:"
+        grep "^EXPO_PUBLIC_API_URL=" .env | head -1
+        echo ""
+        echo "Full .env file content (masked):"
+        cat .env | sed 's/\(PASSWORD=\).*/\1***masked***/' | sed 's/\(API_KEY=\).*/\1***masked***/' | sed 's/\(EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=\).*/\1***masked***/'
+        echo ""
+      else
+        echo "❌ ERROR: .env file NOT found in project root!"
+        echo "setup-env.sh should have created it. Aborting build."
+        exit 1
+      fi
+      echo ""
+      echo "Clearing ALL Expo and Metro caches to ensure fresh build..."
+      rm -rf .expo node_modules/.cache .metro .expo-shared android/.expo android/.gradle 2>/dev/null || true
+      echo "✅ All caches cleared"
+      echo ""
+      echo "Running: npx expo prebuild --platform android --clean"
+      npx expo prebuild --platform android --clean
+      echo ""
+      echo "=== DEBUG: After prebuild - Checking for .env files ==="
+      echo "Checking project root for .env:"
+      if [ -f ".env" ]; then
+        echo "✅ .env exists in project root"
+        echo "   EXPO_PUBLIC_API_URL value:"
+        grep "^EXPO_PUBLIC_API_URL=" .env | head -1
+      else
+        echo "❌ .env NOT found in project root!"
+      fi
+      echo ""
+      echo "Checking android/ directory for .env files:"
+      find android -name ".env" -type f 2>/dev/null | while read -r env_file; do
+        echo "⚠️  Found .env file in android/: $env_file"
+        echo "   Contents (first 3 lines):"
+        head -3 "$env_file" | sed 's/\(PASSWORD=\).*/\1***masked***/' | sed 's/\(API_KEY=\).*/\1***masked***/'
+      done || echo "  No .env files found in android/"
+      echo ""
+      echo "Checking all .env files in project (maxdepth 5):"
+      find . -maxdepth 5 -name ".env" -type f ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null | while read -r env_file; do
+        echo "  Found: $env_file"
+        echo "    EXPO_PUBLIC_API_URL: $(grep '^EXPO_PUBLIC_API_URL=' "$env_file" | cut -d= -f2- | head -1)"
+      done || echo "  No additional .env files found"
+      echo ""
+      echo "=== DEBUG: Environment variables in shell ==="
+      echo "EXPO_PUBLIC_API_URL: ${EXPO_PUBLIC_API_URL:-not set}"
+      echo "EXPO_PUBLIC_MQTT_HOST: ${EXPO_PUBLIC_MQTT_HOST:-not set}"
+      echo "EXPO_PUBLIC_MQTT_TOPIC_PREFIX: ${EXPO_PUBLIC_MQTT_TOPIC_PREFIX:-not set}"
+      echo "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN:+***set***}"
+      echo ""
     - cd android
     - chmod +x gradlew
-    - ./gradlew assembleRelease --no-daemon
+    # Pre-download Gradle distribution with retries to avoid timeout during build
     - |
+      echo "=== Pre-downloading Gradle distribution ==="
+      echo "This prevents timeout errors during the build process"
+      MAX_RETRIES=3
+      RETRY_COUNT=0
+      while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES: Downloading Gradle..."
+        if ./gradlew --version > /dev/null 2>&1; then
+          echo "✅ Gradle downloaded successfully"
+          ./gradlew --version
+          break
+        else
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "⚠️  Download failed, retrying in 5 seconds..."
+            sleep 5
+          else
+            echo "❌ ERROR: Failed to download Gradle after $MAX_RETRIES attempts"
+            echo "This might be a network issue. Check runner connectivity."
+            exit 1
+          fi
+        fi
+      done
+    # Patch gradle.properties to increase memory settings (prevent OutOfMemoryError)
+    - |
+      echo "=== Patching gradle.properties for increased memory ==="
+      GRADLE_PROPERTIES="gradle.properties"
+      if [ -f "$GRADLE_PROPERTIES" ]; then
+        echo "Found gradle.properties, updating memory settings..."
+        # Update or add JVM args with increased memory
+        if grep -q "^org.gradle.jvmargs=" "$GRADLE_PROPERTIES"; then
+          # Replace existing jvmargs
+          sed -i 's|^org.gradle.jvmargs=.*|org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8|' "$GRADLE_PROPERTIES"
+          echo "✅ Updated existing org.gradle.jvmargs"
+        else
+          # Add jvmargs if not present
+          echo "" >> "$GRADLE_PROPERTIES"
+          echo "# Increased memory for CI builds to prevent OutOfMemoryError" >> "$GRADLE_PROPERTIES"
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" >> "$GRADLE_PROPERTIES"
+          echo "✅ Added org.gradle.jvmargs"
+        fi
+        # Disable daemon performance logging warning
+        if ! grep -q "^org.gradle.daemon.performance.disable-logging=" "$GRADLE_PROPERTIES"; then
+          echo "org.gradle.daemon.performance.disable-logging=true" >> "$GRADLE_PROPERTIES"
+        fi
+        echo "✅ gradle.properties patched successfully"
+        echo "Current org.gradle.jvmargs setting:"
+        grep "^org.gradle.jvmargs=" "$GRADLE_PROPERTIES" || echo "Not found"
+      else
+        echo "⚠️  gradle.properties not found, creating it..."
+        echo "# Gradle memory settings for CI builds" > "$GRADLE_PROPERTIES"
+        echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=2048m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" >> "$GRADLE_PROPERTIES"
+        echo "org.gradle.daemon.performance.disable-logging=true" >> "$GRADLE_PROPERTIES"
+        echo "org.gradle.parallel=true" >> "$GRADLE_PROPERTIES"
+        echo "org.gradle.configureondemand=true" >> "$GRADLE_PROPERTIES"
+        echo "✅ Created gradle.properties with memory settings"
+      fi
+    - |
+      echo "=== DEBUG: In android/ directory - Checking for .env files ==="
+      echo "Current directory: $(pwd)"
+      echo ""
+      echo "Checking for .env in android/ root:"
+      if [ -f ".env" ]; then
+        echo "⚠️  Found .env in android/ directory!"
+        echo "   Contents:"
+        cat .env | sed 's/\(PASSWORD=\).*/\1***masked***/' | sed 's/\(API_KEY=\).*/\1***masked***/' | sed 's/\(EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=\).*/\1***masked***/'
+        echo ""
+        echo "   This could be causing the issue! Removing it..."
+        rm -f .env
+        echo "✅ Removed .env from android/ directory"
+      else
+        echo "✅ No .env file in android/ directory"
+      fi
+      echo ""
+      echo "Checking for .env in android/app:"
+      if [ -f "app/.env" ]; then
+        echo "⚠️  Found .env in android/app/ directory!"
+        cat app/.env | sed 's/\(PASSWORD=\).*/\1***masked***/' | sed 's/\(API_KEY=\).*/\1***masked***/'
+        rm -f app/.env
+        echo "✅ Removed .env from android/app/ directory"
+      else
+        echo "✅ No .env file in android/app/ directory"
+      fi
+      echo ""
+      echo "Checking parent directory (.env should be there):"
+      if [ -f "../.env" ]; then
+        echo "✅ .env exists in parent directory (project root)"
+        echo "   EXPO_PUBLIC_API_URL: $(grep '^EXPO_PUBLIC_API_URL=' ../.env | cut -d= -f2- | head -1)"
+      else
+        echo "❌ .env NOT found in parent directory!"
+      fi
+      echo ""
+    # Set up release keystore for signing
+    - |
+      echo "=== Setting up release keystore ==="
+      echo "Debugging variable access..."
+      echo "Checking all ANDROID_* variables:"
+      env | grep "^ANDROID_" || echo "No ANDROID_* variables found"
+      echo ""
+      echo "ANDROID_KEYSTORE_BASE64 value check:"
+      if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+        echo "  Variable is empty or not set"
+        echo ""
+        echo "Troubleshooting:"
+        echo "1. Check 'Expand variable reference' is CHECKED in GitLab"
+        echo "2. Check variable Type is 'Variable' (not 'File')"
+        echo "3. Verify variable name is exactly: ANDROID_KEYSTORE_BASE64"
+        echo "4. Check if variable is set at Group level (may need to be at Project level)"
+        echo ""
+        echo "Continuing without keystore (will use debug signing)..."
+      else
+        echo "  Variable is set (length: ${#ANDROID_KEYSTORE_BASE64} chars)"
+      fi
+      echo ""
+      
+      if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+        echo "✅ ANDROID_KEYSTORE_BASE64 is set (length: ${#ANDROID_KEYSTORE_BASE64} characters)"
+        echo "First 50 chars: ${ANDROID_KEYSTORE_BASE64:0:50}..."
+        echo "Extracting keystore from base64..."
+        
+        # Try base64 decode (Linux uses base64 -d, macOS uses base64 -D)
+        # Remove any whitespace/newlines that might be in the variable
+        CLEAN_BASE64=$(echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r ')
+        echo "$CLEAN_BASE64" | base64 -d > app/release.keystore 2>&1
+        DECODE_EXIT=$?
+        
+        if [ $DECODE_EXIT -eq 0 ]; then
+          echo "✅ Base64 decode successful"
+        else
+          echo "❌ ERROR: Base64 decode failed (exit code: $DECODE_EXIT)"
+          echo "Trying alternative base64 command..."
+          # Try without -d flag (some systems use different syntax)
+          echo "$CLEAN_BASE64" | base64 --decode > app/release.keystore 2>&1
+          if [ $? -eq 0 ]; then
+            echo "✅ Base64 decode successful (using --decode flag)"
+          else
+            echo "❌ ERROR: Both base64 decode methods failed!"
+            echo "Please check the base64 value in GitLab CI variables"
+            exit 1
+          fi
+        fi
+        
+        if [ -f "app/release.keystore" ]; then
+          # Move keystore to app directory where build.gradle expects it
+          cp app/release.keystore app/release.keystore.bak 2>/dev/null || true
+          export ANDROID_KEYSTORE_FILE="app/release.keystore"
+          KEYSTORE_SIZE=$(ls -lh app/release.keystore | awk '{print $5}')
+          echo "✅ Keystore extracted successfully (size: $KEYSTORE_SIZE)"
+          echo "Keystore file path: $(pwd)/app/release.keystore"
+          # Also copy to app directory root for build.gradle (which is in app/)
+          cp app/release.keystore app/release.keystore.tmp && mv app/release.keystore.tmp app/release.keystore
+          echo "Keystore ready for build.gradle"
+        else
+          echo "❌ ERROR: Keystore file not created after extraction!"
+          echo "Build will continue but will use debug signing"
+        fi
+      fi
+    # Patch build.gradle to use release signing (since android folder is generated)
+    - |
+      echo "=== Checking keystore availability ==="
+      echo "ANDROID_KEYSTORE_BASE64 is set: $([ -n "$ANDROID_KEYSTORE_BASE64" ] && echo 'yes' || echo 'no')"
+      echo "Current directory: $(pwd)"
+      echo "Checking for keystore file..."
+      ls -la app/release.keystore 2>/dev/null || echo "Keystore file not found"
+      echo ""
+      
+      if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -f "app/release.keystore" ]; then
+        echo "=== Patching build.gradle for release signing ==="
+        KEY_ALIAS="${ANDROID_KEY_ALIAS:-release-key}"
+        
+        
+        # Use sed to patch build.gradle (simpler, no Python needed)
+        # Add release signingConfig if it doesn't exist
+        if ! grep -q "signingConfigs.release" app/build.gradle; then
+          echo "Adding release signingConfig..."
+          # Insert release config after debug config
+          # Note: keystore path is relative to build.gradle location (app/release.keystore)
+          sed -i '/signingConfigs {/,/^    }/ {
+            /^    }/i\
+        release {\
+            storeFile file("release.keystore")\
+            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")\
+            keyAlias "'"$KEY_ALIAS"'"\
+            keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")\
+        }
+          }' app/build.gradle
+        else
+          echo "Release signingConfig already exists"
+        fi
+        
+        # Update release buildType to use release signingConfig instead of debug
+        sed -i 's/signingConfig signingConfigs\.debug/signingConfig signingConfigs.release/g' app/build.gradle
+        echo "build.gradle patched successfully"
+        
+        # Verify the patch worked
+        echo "=== Verifying patch ==="
+        if grep -q "signingConfig signingConfigs.release" app/build.gradle; then
+          echo "✅ Release signingConfig found in build.gradle"
+        else
+          echo "❌ ERROR: Release signingConfig not found after patching!"
+          echo "Build.gradle content around signingConfigs:"
+          grep -A 10 "signingConfigs {" app/build.gradle || true
+          exit 1
+        fi
+        
+        if grep -q "signingConfig signingConfigs.debug" app/build.gradle | grep -v "//"; then
+          echo "⚠️  WARNING: Debug signingConfig still found in release buildType"
+        fi
+      else
+        echo "❌ ERROR: Cannot patch build.gradle - keystore not available"
+        echo "ANDROID_KEYSTORE_BASE64 is set: $([ -n "$ANDROID_KEYSTORE_BASE64" ] && echo 'yes' || echo 'no')"
+        echo "Keystore file exists: $([ -f "app/release.keystore" ] && echo 'yes' || echo 'no')"
+        exit 1
+      fi
+    # Build both APK (for artifacts) and AAB (for Play Store)
+    # Build with no cache to ensure fresh build
+    - ./gradlew assembleRelease bundleRelease --no-daemon --no-build-cache --rerun-tasks --refresh-dependencies
+    - |
+      echo "=== DEBUG: After build - Final environment check ==="
+      echo "Checking .env file in project root (should still exist):"
+      if [ -f "../.env" ]; then
+        echo "✅ .env file still exists in project root"
+        echo "   EXPO_PUBLIC_API_URL: $(grep '^EXPO_PUBLIC_API_URL=' ../.env | cut -d= -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | head -1)"
+        echo "   EXPO_PUBLIC_MQTT_HOST: $(grep '^EXPO_PUBLIC_MQTT_HOST=' ../.env | cut -d= -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | head -1)"
+        echo "   EXPO_PUBLIC_MQTT_TOPIC_PREFIX: $(grep '^EXPO_PUBLIC_MQTT_TOPIC_PREFIX=' ../.env | cut -d= -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | head -1)"
+        echo "   EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: $(grep -q '^EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=' ../.env && echo '***set***' || echo 'not set')"
+      else
+        echo "❌ .env file NOT found in project root after build!"
+      fi
+      echo ""
+      echo "Checking for any .env files in android/ directory:"
+      find . -maxdepth 3 -name ".env" -type f 2>/dev/null | while read -r env_file; do
+        echo "  ⚠️  Found: $env_file"
+        echo "     EXPO_PUBLIC_API_URL: $(grep '^EXPO_PUBLIC_API_URL=' "$env_file" | cut -d= -f2- | head -1)"
+      done || echo "  ✅ No .env files in android/ directory"
+      echo ""
+      echo "Checking shell environment variables:"
+      echo "  EXPO_PUBLIC_API_URL: ${EXPO_PUBLIC_API_URL:-not set}"
+      echo "  EXPO_PUBLIC_MQTT_HOST: ${EXPO_PUBLIC_MQTT_HOST:-not set}"
+      echo "  EXPO_PUBLIC_MQTT_TOPIC_PREFIX: ${EXPO_PUBLIC_MQTT_TOPIC_PREFIX:-not set}"
+      echo "  EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN:+***set***}"
+      echo ""
+    - |
+      echo "=== Finalizing APK ==="
       BRANCH_NAME=${CI_COMMIT_REF_SLUG:-unknown}
       BUILD_NUM=${CI_PIPELINE_IID:-1}
       
-      # Rename APK based on branch
+      # Get version from app.json using Node.js (more reliable)
+      NEW_VERSION=$(node -e "
+        try {
+          const fs = require('fs');
+          const app = JSON.parse(fs.readFileSync('../app.json', 'utf8'));
+          console.log(app.expo.version);
+        } catch(e) {
+          console.error('Error reading app.json:', e.message);
+          console.log('1.0.0');
+        }
+      ")
+      echo "Version: $NEW_VERSION"
+      
+      # Verify APK was created
+      if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
+        echo "ERROR: APK file not found after build!"
+        ls -la app/build/outputs/apk/release/ || true
+        exit 1
+      fi
+      
+      # Verify AAB was created
+      if [ ! -f "app/build/outputs/bundle/release/app-release.aab" ]; then
+        echo "ERROR: AAB file not found after build!"
+        ls -la app/build/outputs/bundle/release/ || true
+        exit 1
+      fi
+      
+      # Rename APK based on branch (for artifacts/download)
       if [ "$BRANCH_NAME" = "features" ]; then
         mv app/build/outputs/apk/release/app-release.apk \
-           app/build/outputs/apk/release/app-release-test_v${BUILD_NUM}.apk
+           app/build/outputs/apk/release/app-release-test_v${NEW_VERSION}.apk
+        echo "Created: app-release-test_v${NEW_VERSION}.apk"
       elif [ "$BRANCH_NAME" = "dev" ]; then
         mv app/build/outputs/apk/release/app-release.apk \
-           app/build/outputs/apk/release/app-release-staging_v${BUILD_NUM}.apk
+           app/build/outputs/apk/release/app-release-staging_v${NEW_VERSION}.apk
+        echo "Created: app-release-staging_v${NEW_VERSION}.apk"
       elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
-        # Keep default name for main/master
-        echo "Keeping default app-release.apk name for $BRANCH_NAME branch"
+        # Rename with version for production
+        mv app/build/outputs/apk/release/app-release.apk \
+           app/build/outputs/apk/release/app-release-v${NEW_VERSION}.apk
+        echo "Created: app-release-v${NEW_VERSION}.apk"
       else
         # Fallback for any other allowed branch
         mv app/build/outputs/apk/release/app-release.apk \
-           app/build/outputs/apk/release/app-release-${BRANCH_NAME}_v${BUILD_NUM}.apk
+           app/build/outputs/apk/release/app-release-${BRANCH_NAME}_v${NEW_VERSION}.apk
+        echo "Created: app-release-${BRANCH_NAME}_v${NEW_VERSION}.apk"
       fi
+      
+      # Rename AAB based on branch (for Play Store deployment)
+      if [ "$BRANCH_NAME" = "features" ]; then
+        mv app/build/outputs/bundle/release/app-release.aab \
+           app/build/outputs/bundle/release/app-release-test_v${BUILD_NUM}.aab
+        echo "Created: app-release-test_v${BUILD_NUM}.aab"
+      elif [ "$BRANCH_NAME" = "dev" ]; then
+        mv app/build/outputs/bundle/release/app-release.aab \
+           app/build/outputs/bundle/release/app-release-staging_v${BUILD_NUM}.aab
+        echo "Created: app-release-staging_v${BUILD_NUM}.aab"
+      elif [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "master" ]; then
+        # Keep default name for main/master
+        echo "Keeping default app-release.aab name for $BRANCH_NAME branch"
+      else
+        # Fallback for any other allowed branch
+        mv app/build/outputs/bundle/release/app-release.aab \
+           app/build/outputs/bundle/release/app-release-${BRANCH_NAME}_v${BUILD_NUM}.aab
+        echo "Created: app-release-${BRANCH_NAME}_v${BUILD_NUM}.aab"
+      fi
+      
+      # Display build info
+      echo "Build completed successfully!"
+      echo "=== APK Files (for download) ==="
+      ls -lh app/build/outputs/apk/release/*.apk
+      echo "=== AAB Files (for Play Store) ==="
+      ls -lh app/build/outputs/bundle/release/*.aab
   artifacts:
     paths:
       - android/app/build/outputs/apk/release/app-release*.apk
+      - android/app/build/outputs/bundle/release/app-release*.aab
     expire_in: 7 days
+    when: on_success
+
+# Deployment to Google Play Store - Draft Release (features branch)
+deploy_draft_features:
+  stage: deploy
+  tags:
+    - android
+  only:
+    - features
+  dependencies:
+    - build_android
+  before_script:
+    # Check for existing Ruby/Fastlane installation
+    - |
+      echo "Checking for Ruby and Fastlane..."
+      # Try common Ruby locations
+      export PATH="$HOME/.rbenv/bin:$HOME/.rbenv/shims:$PATH"
+      export PATH="/usr/local/rbenv/bin:/usr/local/rbenv/shims:$PATH"
+      export PATH="/opt/ruby/bin:$PATH"
+      export PATH="/usr/local/bin:$PATH"
+      export PATH="/usr/bin:$PATH"
+      
+      # Check if Ruby exists
+      if command -v ruby &> /dev/null; then
+        echo "Ruby found: $(ruby --version)"
+      else
+        echo "ERROR: Ruby is not installed on the runner."
+        echo "Please install Ruby on your GitLab runner:"
+        echo "  Option 1: Install Ruby system-wide (requires sudo):"
+        echo "    sudo apt-get update && sudo apt-get install -y ruby-full"
+        echo "  Option 2: Use a Docker image with Ruby pre-installed"
+        echo "  Option 3: Install Ruby via rbenv on the runner"
+        exit 1
+      fi
+      
+      # Check if Fastlane exists
+      if command -v fastlane &> /dev/null; then
+        echo "Fastlane found: $(fastlane --version)"
+      else
+        echo "Installing Fastlane..."
+        # Try user install first (no sudo needed)
+        gem install fastlane -NV --user-install 2>&1 || gem install fastlane -NV 2>&1
+        # Add gem bin to PATH
+        export PATH="$HOME/.gem/ruby/*/bin:$PATH"
+        export PATH="$HOME/.local/share/gem/ruby/*/bin:$PATH"
+        # Verify installation
+        if command -v fastlane &> /dev/null; then
+          echo "Fastlane installed: $(fastlane --version)"
+        else
+          echo "ERROR: Fastlane installation failed"
+          echo "Please install Fastlane on your GitLab runner:"
+          echo "  gem install fastlane"
+          exit 1
+        fi
+      fi
+    - cd android
+    # Write service account JSON to file for fastlane
+    - echo "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > /tmp/google-play-key.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-play-key.json
+  script:
+    - |
+      # Debug: Show current directory and available files
+      echo "=== Current directory ==="
+      pwd
+      echo "=== Looking for build files ==="
+      find . -name "*.aab" -o -name "*.apk" | head -20 || true
+      echo "=== Checking app/build/outputs ==="
+      ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "AAB directory not found"
+      ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK directory not found"
+      
+      # Use AAB for Play Store (preferred format)
+      AAB_PATH=$(find app/build/outputs/bundle/release -name "app-release-test_v*.aab" 2>/dev/null | head -1)
+      if [ -z "$AAB_PATH" ]; then
+        echo "AAB not found, trying APK as fallback..."
+        APK_PATH=$(find app/build/outputs/apk/release -name "app-release-test_v*.apk" 2>/dev/null | head -1)
+        if [ -z "$APK_PATH" ]; then
+          echo "Error: Neither AAB nor APK found!"
+          echo "Current directory: $(pwd)"
+          echo "Searching from root..."
+          find ../ -name "*.aab" -o -name "*.apk" | head -10 || true
+          exit 1
+        fi
+        # Convert to absolute path
+        APK_PATH=$(realpath "$APK_PATH" 2>/dev/null || echo "$APK_PATH")
+        echo "Deploying APK $APK_PATH to Internal Testing track as DRAFT..."
+        fastlane deploy_draft apk_path:"$APK_PATH" || fastlane deploy_draft apk:"$APK_PATH"
+      else
+        # Convert to absolute path
+        AAB_PATH=$(realpath "$AAB_PATH" 2>/dev/null || echo "$AAB_PATH")
+        echo "Deploying AAB $AAB_PATH to Internal Testing track as DRAFT..."
+        fastlane deploy_draft aab_path:"$AAB_PATH" || fastlane deploy_draft aab:"$AAB_PATH"
+      fi
+  when: manual
+  environment:
+    name: draft
+    url: https://play.google.com/console/app-list
+
+# Deployment to Google Play Store - Internal Testing (dev branch)
+# For now, dev goes to Internal Testing track instead of Beta
+deploy_internal_dev:
+  stage: deploy
+  tags:
+    - android
+  only:
+    - dev
+  dependencies:
+    - build_android
+  before_script:
+    # Install Ruby and Fastlane without sudo (user space installation)
+    - |
+      if ! command -v ruby &> /dev/null; then
+        echo "Installing Ruby via rbenv or checking for existing installation..."
+        export PATH="$HOME/.rbenv/bin:$HOME/.rbenv/shims:$PATH" || true
+        export PATH="/usr/local/rbenv/bin:/usr/local/rbenv/shims:$PATH" || true
+        export PATH="/opt/ruby/bin:$PATH" || true
+        if ! command -v ruby &> /dev/null; then
+          echo "Ruby not found. Installing via asdf or checking system Ruby..."
+          if command -v curl &> /dev/null; then
+            echo "Attempting to install Ruby via rbenv installer..."
+            curl -fsSL https://github.com/rbenv/rbenv-installer/raw/HEAD/bin/rbenv-installer | bash || true
+            export PATH="$HOME/.rbenv/bin:$HOME/.rbenv/shims:$PATH" || true
+            if command -v rbenv &> /dev/null; then
+              rbenv install 3.2.0 || rbenv install 3.1.0 || true
+              rbenv global 3.2.0 || rbenv global 3.1.0 || true
+            fi
+          fi
+        fi
+      fi
+      ruby --version || (echo "ERROR: Ruby installation failed" && exit 1)
+    # Install Fastlane
+    - |
+      if ! command -v fastlane &> /dev/null; then
+        echo "Installing Fastlane..."
+        gem install fastlane -NV --user-install || gem install fastlane -NV
+        export PATH="$HOME/.gem/ruby/*/bin:$PATH" || true
+        export PATH="$HOME/.local/share/gem/ruby/*/bin:$PATH" || true
+      fi
+      fastlane --version || (echo "ERROR: Fastlane installation failed" && exit 1)
+    - cd android
+    # Write service account JSON to file for fastlane
+    - echo "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > /tmp/google-play-key.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-play-key.json
+  script:
+    - |
+      # Debug: Show current directory and available files
+      echo "=== Current directory ==="
+      pwd
+      echo "=== Looking for build files ==="
+      find . -name "*.aab" -o -name "*.apk" | head -20 || true
+      echo "=== Checking app/build/outputs ==="
+      ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "AAB directory not found"
+      ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK directory not found"
+      
+      # Use AAB for Play Store (preferred format)
+      AAB_PATH=$(find app/build/outputs/bundle/release -name "app-release-staging_v*.aab" 2>/dev/null | head -1)
+      if [ -z "$AAB_PATH" ]; then
+        echo "AAB not found, trying APK as fallback..."
+        APK_PATH=$(find app/build/outputs/apk/release -name "app-release-staging_v*.apk" 2>/dev/null | head -1)
+        if [ -z "$APK_PATH" ]; then
+          echo "Error: Neither AAB nor APK found!"
+          echo "Current directory: $(pwd)"
+          echo "Searching from root..."
+          find ../ -name "*.aab" -o -name "*.apk" | head -10 || true
+          exit 1
+        fi
+        # Convert to absolute path
+        APK_PATH=$(realpath "$APK_PATH" 2>/dev/null || echo "$APK_PATH")
+        echo "Deploying APK $APK_PATH to Internal Testing track..."
+        fastlane deploy_internal apk_path:"$APK_PATH" || fastlane deploy_internal apk:"$APK_PATH"
+      else
+        # Convert to absolute path
+        AAB_PATH=$(realpath "$AAB_PATH" 2>/dev/null || echo "$AAB_PATH")
+        echo "Deploying AAB $AAB_PATH to Internal Testing track..."
+        fastlane deploy_internal aab_path:"$AAB_PATH" || fastlane deploy_internal aab:"$AAB_PATH"
+      fi
+  when: manual
+  environment:
+    name: internal
+    url: https://play.google.com/console/app/com.mybeeapp.driver/internal-testing
+
+# Deployment to Google Play Store - Production (main/master branches)
+deploy_production:
+  stage: deploy
+  tags:
+    - android
+  only:
+    - main
+    - master
+  dependencies:
+    - build_android
+  before_script:
+    # Install Ruby and Fastlane without sudo (user space installation)
+    - |
+      if ! command -v ruby &> /dev/null; then
+        echo "Installing Ruby via rbenv or checking for existing installation..."
+        export PATH="$HOME/.rbenv/bin:$HOME/.rbenv/shims:$PATH" || true
+        export PATH="/usr/local/rbenv/bin:/usr/local/rbenv/shims:$PATH" || true
+        export PATH="/opt/ruby/bin:$PATH" || true
+        if ! command -v ruby &> /dev/null; then
+          echo "Ruby not found. Installing via asdf or checking system Ruby..."
+          if command -v curl &> /dev/null; then
+            echo "Attempting to install Ruby via rbenv installer..."
+            curl -fsSL https://github.com/rbenv/rbenv-installer/raw/HEAD/bin/rbenv-installer | bash || true
+            export PATH="$HOME/.rbenv/bin:$HOME/.rbenv/shims:$PATH" || true
+            if command -v rbenv &> /dev/null; then
+              rbenv install 3.2.0 || rbenv install 3.1.0 || true
+              rbenv global 3.2.0 || rbenv global 3.1.0 || true
+            fi
+          fi
+        fi
+      fi
+      ruby --version || (echo "ERROR: Ruby installation failed" && exit 1)
+    # Install Fastlane
+    - |
+      if ! command -v fastlane &> /dev/null; then
+        echo "Installing Fastlane..."
+        gem install fastlane -NV --user-install || gem install fastlane -NV
+        export PATH="$HOME/.gem/ruby/*/bin:$PATH" || true
+        export PATH="$HOME/.local/share/gem/ruby/*/bin:$PATH" || true
+      fi
+      fastlane --version || (echo "ERROR: Fastlane installation failed" && exit 1)
+    - cd android
+    # Write service account JSON to file for fastlane
+    - echo "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > /tmp/google-play-key.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/google-play-key.json
+  script:
+    - |
+      # Debug: Show current directory and available files
+      echo "=== Current directory ==="
+      pwd
+      echo "=== Looking for build files ==="
+      find . -name "*.aab" -o -name "*.apk" | head -20 || true
+      echo "=== Checking app/build/outputs ==="
+      ls -la app/build/outputs/bundle/release/ 2>/dev/null || echo "AAB directory not found"
+      ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "APK directory not found"
+      
+      # Use AAB for Play Store (preferred format)
+      AAB_PATH=$(find app/build/outputs/bundle/release -name "app-release.aab" 2>/dev/null | head -1)
+      if [ -z "$AAB_PATH" ]; then
+        echo "AAB not found, trying APK as fallback..."
+        APK_PATH=$(find app/build/outputs/apk/release -name "app-release.apk" 2>/dev/null | head -1)
+        if [ -z "$APK_PATH" ]; then
+          echo "Error: Neither AAB nor APK found!"
+          echo "Current directory: $(pwd)"
+          echo "Searching from root..."
+          find ../ -name "*.aab" -o -name "*.apk" | head -10 || true
+          exit 1
+        fi
+        # Convert to absolute path
+        APK_PATH=$(realpath "$APK_PATH" 2>/dev/null || echo "$APK_PATH")
+        echo "Deploying APK $APK_PATH to Production track..."
+        fastlane deploy_production apk_path:"$APK_PATH" || fastlane deploy_production apk:"$APK_PATH"
+      else
+        # Convert to absolute path
+        AAB_PATH=$(realpath "$AAB_PATH" 2>/dev/null || echo "$AAB_PATH")
+        echo "Deploying AAB $AAB_PATH to Production track..."
+        fastlane deploy_production aab_path:"$AAB_PATH" || fastlane deploy_production aab:"$AAB_PATH"
+      fi
+  when: manual
+  environment:
+    name: production
+    url: https://play.google.com/store/apps/details?id=com.mybeeapp.driver

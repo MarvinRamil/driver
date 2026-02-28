@@ -1,0 +1,27 @@
+---
+description: Version bump keywords for commit messages (CI-driven)
+alwaysApply: true
+---
+
+# Version Commit Convention
+
+When writing commit messages that will trigger a build, include one of these keywords to control the version bump. CI reads the commit message and bumps `app.json` accordingly.
+
+## Keywords (case-insensitive)
+
+| Keyword | Result |
+|---------|--------|
+| `major`, `major release`, `[major]`, `(major)` | 1.0.1 → **2.0.0** |
+| `version upgrade`, `[minor]`, `(minor)` | 1.0.1 → **1.1.0** |
+| `patch`, `[patch]`, `(patch)` | 1.0.1 → **1.0.2** |
+| *(default)* | 1.0.1 → **1.0.2** |
+
+## Examples
+
+```
+fix: resolve crash [patch]
+feat: add dark mode - Version upgrade
+BREAKING: New API - Major release
+```
+
+First matching keyword wins (major > minor > patch).

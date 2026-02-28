@@ -40,11 +40,20 @@ yarn-error.*
 *.tsbuildinfo
 
 # generated native folders
+# Use /android/* (not /android) so negation for android/fastlane works -
+# git cannot re-include files under an excluded parent directory
 /ios
-/android
+/android/*
 
 # Firebase iOS configuration (contains sensitive project info)
 # Note: google-services.json is safe to commit (public config)
 GoogleService-Info.plist
 keystore_base64.txt
 release.keystore
+release.keystore
+
+# Exception: fastlane configuration files needed for CI/CD
+!/android/fastlane/
+!/android/fastlane/**
+
+
