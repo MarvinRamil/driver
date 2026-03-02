@@ -17,6 +17,7 @@
     "@expo/vector-icons": "^15.0.3",
     "@microsoft/signalr": "^10.0.0",
     "@react-navigation/native": "^7.1.8",
+    "@rnmapbox/maps": "^10.2.10",
     "expo": "~54.0.33",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.12",

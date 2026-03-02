@@ -49,6 +49,16 @@ build_android:
         npm install babel-plugin-module-resolver --save-dev
       fi
   script:
+    # Bump version before build (patch: 1.0.0 -> 1.0.1)
+    - npm version patch --no-git-tag-version
+    - node -e "
+      const fs = require('fs');
+      const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+      const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+      app.expo.version = pkg.version;
+      fs.writeFileSync('app.json', JSON.stringify(app, null, 2));
+      console.log('Bumped version to', pkg.version);
+    "
     - npx expo prebuild --platform android
     - cd android
     - chmod +x gradlew

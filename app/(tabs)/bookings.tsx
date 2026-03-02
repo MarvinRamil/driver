@@ -5,11 +5,19 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useBookings, type BookingFilter } from '@/features/bookings';
 import { useAuth } from '@/features/auth';
-import { useOffers, getPickupAddress, getDropoffAddress, isMultiStopOffer, getTimeRemaining, filterValidOffers } from '@/features/offers';
+import {
+  useOffers,
+  getPickupAddress,
+  getDropoffAddress,
+  isMultiStopOffer,
+  getTimeRemaining,
+  filterValidOffers,
+  OfferDetailsModal,
+} from '@/features/offers';
+import type { DriverOffer } from '@/features/offers';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
-import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
 import { Ionicons } from '@expo/vector-icons';
 
 /**
@@ -28,6 +36,8 @@ export default function BookingsScreen() {
   const { offers, isLoading: offersLoading, refresh: refreshOffers, acceptOffer, rejectOffer } = useOffers({ limit: 10, pollingInterval: 5000 });
 
   const [activeTab, setActiveTab] = useState<TabType>('INCOMING');
+  const [selectedOffer, setSelectedOffer] = useState<DriverOffer | null>(null);
+  const [showOfferDetails, setShowOfferDetails] = useState(false);
 
   // Filter valid (non-expired) offers
   const validOffers = filterValidOffers(offers);
@@ -273,41 +283,19 @@ export default function BookingsScreen() {
                     </View>
                   )}
 
-                  <View style={[styles.offerActions, { borderTopColor: theme.border }]}>
-                    <SwipeToAccept
-                      label="Swipe to accept"
-                      disabled={acceptingOfferId !== null && acceptingOfferId !== offer.id}
-                      trackColor={theme.border}
-                      thumbColor={theme.primary}
-                      textColor={theme.text}
-                      style={styles.swipeToAcceptFull}
-                      onAccept={async () => {
-                        setAcceptingOfferId(offer.id);
-                        try {
-                          await acceptOffer(offer.id);
-                          setAcceptingOfferId(null);
-                          Alert.alert('Success', 'Offer accepted! Check your bookings.');
-                        } catch (error) {
-                          setAcceptingOfferId(null);
-                          Alert.alert('Error', error instanceof Error ? error.message : 'Failed to accept offer. Please try again.');
-                        }
-                      }}
-                    />
-                    <TouchableOpacity
-                      style={[styles.rejectButton, { borderColor: theme.border }]}
-                      onPress={async () => {
-                        try {
-                          await rejectOffer(offer.id);
-                        } catch (error) {
-                          Alert.alert('Error', 'Failed to reject offer. Please try again.');
-                        }
-                      }}>
-                      <Ionicons name="close-outline" size={18} color={theme.textSecondary} />
-                      <ThemedText style={[styles.rejectButtonText, { color: theme.textSecondary }]}>
-                        Not for me
-                      </ThemedText>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.viewDetailsButton, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}
+                    onPress={() => {
+                      setSelectedOffer(offer);
+                      setShowOfferDetails(true);
+                    }}
+                  >
+                    <Ionicons name="map-outline" size={18} color={theme.primary} />
+                    <ThemedText style={[styles.viewDetailsButtonText, { color: theme.primary }]}>
+                      View Details
+                    </ThemedText>
+                    <Ionicons name="chevron-forward" size={18} color={theme.primary} />
+                  </TouchableOpacity>
                 </View>
               );
             })
@@ -456,6 +444,30 @@ export default function BookingsScreen() {
           })
         )}
       </ScrollView>
+
+      <OfferDetailsModal
+        visible={showOfferDetails}
+        offer={selectedOffer}
+        onClose={() => {
+          setShowOfferDetails(false);
+          setSelectedOffer(null);
+        }}
+        onAccept={async (offerId, bookingId) => {
+          setAcceptingOfferId(offerId);
+          try {
+            await acceptOffer(offerId);
+            if (bookingId) {
+              router.push(`/booking/${bookingId}`);
+            } else {
+              Alert.alert('Success', 'Offer accepted! Check your bookings.');
+            }
+          } finally {
+            setAcceptingOfferId(null);
+          }
+        }}
+        onReject={rejectOffer}
+        acceptingOfferId={acceptingOfferId}
+      />
     </ThemedView>
   );
 }
@@ -714,28 +726,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
   },
-  offerActions: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    gap: 10,
-  },
-  swipeToAcceptFull: {
-    width: '100%',
-    minHeight: 48,
-  },
-  rejectButton: {
-    alignSelf: 'center',
+  viewDetailsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    gap: 8,
+    paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1.5,
+    marginTop: 12,
+    marginBottom: 4,
   },
-  rejectButtonText: {
+  viewDetailsButtonText: {
     fontSize: 14,
     fontWeight: '600',
   },

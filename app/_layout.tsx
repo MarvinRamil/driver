@@ -23,6 +23,13 @@ import { useOTAUpdates } from '@/shared/hooks/useOTAUpdates';
 import { BiometricPromptManager } from '@/shared/components/BiometricPromptManager';
 import { LoginAdkitPopup } from '@/shared/components/LoginAdkitPopup';
 
+// Initialize Mapbox (required before any map renders)
+import Mapbox from '@rnmapbox/maps';
+const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
+if (mapboxToken) {
+  Mapbox.setAccessToken(mapboxToken);
+}
+
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
