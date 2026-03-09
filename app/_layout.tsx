@@ -37,7 +37,7 @@ export {
 
 export const unstable_settings = {
   // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: 'login',
+  initialRouteName: 'welcome',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -69,6 +69,7 @@ function NavigationGuard() {
     try {
       const currentRoute = segments[0];
       const inTabsGroup = currentRoute === "(tabs)";
+      const isWelcomePage = currentRoute === "welcome";
       const isLoginPage = currentRoute === "login";
       const isSignupPage = currentRoute === "signup";
       const isForgotPasswordPage = currentRoute === "forgot-password";
@@ -81,15 +82,12 @@ function NavigationGuard() {
       const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
       const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
 
-      // CRITICAL: If no user, redirect to login immediately
-      // This ensures home page never loads when there's no authenticated user
+      // CRITICAL: If no user, redirect to welcome (pre-login entry point)
       if (!isAuthenticated) {
-        // If already on login, signup, or forgot-password page, stay there
-        if (isLoginPage || isSignupPage || isForgotPasswordPage) {
+        if (isWelcomePage || isLoginPage || isSignupPage || isForgotPasswordPage) {
           return;
         }
-        // Otherwise, redirect to login
-        router.replace("/login");
+        router.replace("/welcome");
         return;
       }
 
@@ -104,7 +102,7 @@ function NavigationGuard() {
       }
 
       // ROLE RESTRICTION: If user is authenticated but doesn't have an allowed role,
-      // log them out and redirect to login with error message
+      // log them out and redirect to welcome
       if (isAuthenticated && !hasAllowedRole) {
         console.warn('[NavigationGuard] User has unauthorized role:', user?.role);
         
@@ -113,15 +111,14 @@ function NavigationGuard() {
           console.error('[NavigationGuard] Error during logout:', err);
         });
         
-        // Redirect to login
-        if (!isLoginPage && !isSignupPage) {
-          router.replace("/login");
+        if (!isWelcomePage && !isLoginPage && !isSignupPage) {
+          router.replace("/welcome");
         }
         return;
       }
 
-      // If user is authenticated with allowed role and on login or signup page, redirect (tabs or onboarding)
-      if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
+      // If user is authenticated with allowed role and on welcome, login, or signup, redirect (tabs or onboarding)
+      if (isAuthenticated && hasAllowedRole && (isWelcomePage || isLoginPage || isSignupPage)) {
         if (needsLiveness) {
           router.replace("/liveness");
           return;
@@ -154,14 +151,15 @@ function NavigationGuard() {
       }
     } catch (error) {
       console.error('Error in NavigationGuard:', error);
-      // Fallback: try to navigate to login on error
+      // Fallback: try to navigate to welcome on error
       try {
         const currentRoute = segments[0];
+        const isWelcomePage = currentRoute === "welcome";
         const isLoginPage = currentRoute === "login";
         const isSignupPage = currentRoute === "signup";
         const isForgotPasswordPage = currentRoute === "forgot-password";
-        if (!isLoginPage && !isSignupPage && !isForgotPasswordPage) {
-          router.replace("/login");
+        if (!isWelcomePage && !isLoginPage && !isSignupPage && !isForgotPasswordPage) {
+          router.replace("/welcome");
         }
       } catch (navError) {
         console.error('Error navigating to login in NavigationGuard:', navError);
@@ -219,6 +217,7 @@ function RootLayoutNav() {
             <NavigationGuard />
             <View style={styles.root}>
               <Stack>
+                <Stack.Screen name="welcome" options={{ headerShown: false }} />
                 <Stack.Screen name="login" options={{ headerShown: false }} />
                 <Stack.Screen name="signup" options={{ headerShown: false }} />
                 <Stack.Screen name="forgot-password" options={{ headerShown: false }} />

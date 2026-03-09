@@ -199,6 +199,15 @@ export default function LoginScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <View style={[styles.content, { paddingTop: insets.top }]}>
+        <View style={[styles.backRow, { paddingHorizontal: 16, paddingBottom: 8 }]}>
+          <TouchableOpacity
+            onPress={() => router.replace("/welcome")}
+            style={styles.backButton}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -382,6 +391,16 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   scrollContent: {
     flexGrow: 1,
