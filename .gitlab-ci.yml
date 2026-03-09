@@ -57,7 +57,7 @@ build_android:
       echo "✅ All EXPO_PUBLIC_* variables cleared"
     - export ANDROID_HOME=/opt/android-sdk
     - "export PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/33.0.2:/opt/gradle-8.0.2/bin"
-    - echo "=== Checking versions ==="
+    - 'echo "=== Checking versions ==="'
     - node --version
     - java -version
     - |
