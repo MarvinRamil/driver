@@ -176,24 +176,32 @@ class OfferService {
    */
   async acceptOffer(offerId: string): Promise<AcceptOfferResponse> {
     try {
-      const response = await apiClient.post<{ dispatchId?: string }>(
+      const response = await apiClient.post<{ success?: boolean; dispatchId?: string; data?: { dispatchId?: string }; message?: string }>(
         `/api/driver-offers/${offerId}/accept`,
         {
+          body: {},
           requiresAuth: true,
         }
       );
 
+      // Check both HTTP success and optional nested success in body
       if (!response.success) {
         throw new Error(response.message || 'Failed to accept offer');
       }
+      const body = response.data as Record<string, unknown> | null;
+      if (body && body.success === false) {
+        throw new Error((body.message as string) || 'Failed to accept offer');
+      }
+
+      const dispatchId = body?.dispatchId ?? (body?.data as Record<string, unknown> | undefined)?.dispatchId;
 
       return {
         success: true,
-        dispatchId: response.data?.dispatchId,
-        message: response.message || 'Offer accepted successfully',
+        dispatchId: typeof dispatchId === 'string' ? dispatchId : undefined,
+        message: (body?.message as string) || response.message || 'Offer accepted successfully',
       };
     } catch (error) {
-      console.error('Failed to accept offer:', error);
+      console.error('[OfferService] Failed to accept offer:', { offerId, error });
       throw new Error(
         `Failed to accept offer: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -207,6 +215,7 @@ class OfferService {
   async rejectOffer(offerId: string): Promise<void> {
     try {
       const response = await apiClient.post(`/api/driver-offers/${offerId}/reject`, {
+        body: {},
         requiresAuth: true,
       });
 

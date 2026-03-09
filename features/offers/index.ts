@@ -7,6 +7,9 @@ export { offerService } from './services/offerService';
 // Export types
 export type { DriverOffer, DeliveryStop, OfferStatus, AcceptOfferResponse } from './types';
 
+// Export components
+export { OfferDetailsModal } from './components/OfferDetailsModal';
+
 // Export utility functions
 export {
   getPickupStop,
