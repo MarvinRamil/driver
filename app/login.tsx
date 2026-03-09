@@ -236,12 +236,12 @@ export default function LoginScreen() {
             {/* Email/Username Field */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.text }]}>
-                Username or Email
+                Email or Phone
               </Text>
               <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <TextInput
                   style={[styles.input, { color: theme.text }]}
-                  placeholder="Enter your Username or Email"
+                  placeholder="Enter your email or phone number"
                   placeholderTextColor={theme.placeholder}
                   value={email}
                   onChangeText={(text) => {

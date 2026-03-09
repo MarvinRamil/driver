@@ -36,6 +36,12 @@ export const LIMITS = {
 /** Regex for common validations */
 export const PATTERNS = {
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  /**
+   * Phone numbers:
+   * - Local: 09XXXXXXXXX
+   * - International: 639XXXXXXXXX
+   */
+  PHONE: /^(09\d{9}|639\d{9})$/,
   /** License plate: alphanumeric, hyphens, spaces (e.g. ABC-1234, XYZ 5678) */
   PLATE: /^[A-Za-z0-9\s\-]+$/,
 } as const;

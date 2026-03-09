@@ -31,7 +31,7 @@ import { biometricStorage } from '@/shared/services/biometricStorage';
 import { LIMITS, PATTERNS, trimToMax } from '@/shared/constants/validation';
 
 type RegistrationStep =
-  | 'enter-email'
+  | 'enter-phone'
   | 'enter-otp'
   | 'enter-details'
   | 'basic-info'
@@ -44,6 +44,7 @@ type RegistrationStep =
 
 interface RegistrationData {
   email: string;
+  phoneNumber: string;
   password: string;
   fullName: string;
   otp: string;
@@ -60,11 +61,12 @@ export function RegistrationSteps() {
   const theme = useTheme();
   const router = useRouter();
 
-  const [currentStep, setCurrentStep] = useState<RegistrationStep>('enter-email');
+  const [currentStep, setCurrentStep] = useState<RegistrationStep>('enter-phone');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registrationData, setRegistrationData] = useState<RegistrationData>({
     email: '',
+    phoneNumber: '',
     password: '',
     fullName: '',
     otp: '',
@@ -90,9 +92,9 @@ export function RegistrationSteps() {
   // Registration status is checked once when user clicks Continue (see handleSubmitBasicInfo).
   // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
 
-  const isValidEmail = (email: string): boolean => {
-    return PATTERNS.EMAIL.test(email);
-  };
+  const isValidEmail = (email: string): boolean => PATTERNS.EMAIL.test(email);
+
+  const isValidPhone = (phone: string): boolean => PATTERNS.PHONE.test(phone);
 
   const validateForm = (): string | null => {
     if (!registrationData.fullName || registrationData.fullName.trim().length < 2) {
@@ -100,12 +102,6 @@ export function RegistrationSteps() {
     }
     if (registrationData.fullName.trim().length > LIMITS.FULL_NAME) {
       return `Full name must be at most ${LIMITS.FULL_NAME} characters`;
-    }
-    if (!registrationData.email || !isValidEmail(registrationData.email)) {
-      return 'Please enter a valid email address';
-    }
-    if (registrationData.email.length > LIMITS.EMAIL) {
-      return `Email must be at most ${LIMITS.EMAIL} characters`;
     }
     if (!registrationData.password || registrationData.password.length < LIMITS.PASSWORD_MIN) {
       return `Password must be at least ${LIMITS.PASSWORD_MIN} characters`;
@@ -142,16 +138,17 @@ export function RegistrationSteps() {
       : undefined,
   });
 
-  /** Step 1: Send OTP to email (OTP-first flow) */
+  /** Step 1: Send SMS OTP to phone (OTP-first flow) */
   const handleSendOtp = async () => {
-    if (!registrationData.email || !isValidEmail(registrationData.email)) {
-      setError('Please enter a valid email address');
+    const phone = registrationData.phoneNumber.trim();
+    if (!phone || !isValidPhone(phone)) {
+      setError('Please enter a valid phone number (e.g. 09171234567 or 639171234567)');
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
-      await authService.sendOtp({ email: registrationData.email.trim() });
+      await authService.sendSmsOtp({ phoneNumber: phone });
       setCurrentStep('enter-otp');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send verification code. Please try again.');
@@ -160,14 +157,15 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Resend OTP */
+  /** Resend SMS OTP */
   const handleResendOtp = async () => {
-    if (!registrationData.email) return;
+    const phone = registrationData.phoneNumber.trim();
+    if (!phone) return;
     setIsLoading(true);
     setError(null);
     try {
-      await authService.resendOtp(registrationData.email.trim());
-      Alert.alert('Code sent', 'A new verification code has been sent to your email.');
+      await authService.resendSmsOtp(phone);
+      Alert.alert('Code sent', 'A new verification code has been sent via SMS.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend code. Please try again.');
     } finally {
@@ -175,24 +173,24 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Step 2: Verify OTP only. Show clear success or invalid feedback, then proceed to details. */
+  /** Step 2: Verify SMS OTP only. Show clear success or invalid feedback, then proceed to details. */
   const handleContinueFromOtp = async () => {
     setError(null);
     if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
-      setError('Please enter the 6-digit code from your email');
-      Alert.alert('Invalid code', 'Please enter the full 6-digit code from your email.');
+      setError('Please enter the 6-digit code sent to your phone');
+      Alert.alert('Invalid code', 'Please enter the full 6-digit code sent to your phone.');
       return;
     }
     setIsLoading(true);
     try {
-      const verifyResponse = await authService.verifyOtp({
-        email: registrationData.email.trim().toLowerCase(),
+      const verifyResponse = await authService.verifySmsOtp({
+        phoneNumber: registrationData.phoneNumber.trim(),
         otp: registrationData.otp.trim(),
       });
       setRegistrationToken(verifyResponse.registrationToken ?? null);
       Alert.alert(
         'Code verified',
-        'Your email is verified. Enter your name and password to create your account.',
+        'Your phone number is verified. Enter your name and password to create your account.',
         [{ text: 'Continue', onPress: () => setCurrentStep('enter-details') }]
       );
     } catch (err) {
@@ -204,7 +202,7 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Step 3: Create account using existing Register endpoint (email already verified via OTP), then login. */
+  /** Step 3: Create account using register-by-phone endpoint (phone already verified via SMS OTP), then login. */
   const handleCreateAccountAfterOtp = async () => {
     const validationError = validateForm();
     if (validationError) {
@@ -214,9 +212,8 @@ export function RegistrationSteps() {
     setIsLoading(true);
     setError(null);
     try {
-      const normalizedEmail = registrationData.email.trim().toLowerCase();
-      await authService.register({
-        email: normalizedEmail,
+      await authService.registerByPhone({
+        phoneNumber: registrationData.phoneNumber.trim(),
         password: registrationData.password,
         fullName: registrationData.fullName.trim(),
         role: 'Driver',
@@ -428,7 +425,7 @@ export function RegistrationSteps() {
   };
 
   // OTP flow: Step 1 - Enter email and send OTP
-  if (currentStep === 'enter-email') {
+  if (currentStep === 'enter-phone') {
     return (
       <KeyboardAvoidingView
         style={[styles.container, { backgroundColor: theme.background }]}
@@ -444,27 +441,30 @@ export function RegistrationSteps() {
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
               <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Enter your email to receive a verification code
+                Enter your phone number to receive a verification code
               </Text>
             </View>
             <View style={styles.form}>
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Email address</Text>
+                <Text style={[styles.label, { color: theme.text }]}>Phone number</Text>
                 <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
                     style={[styles.input, styles.inputLarge, { color: theme.text }]}
-                    placeholder="e.g. you@example.com"
+                    placeholder="e.g. 09171234567 or 639171234567"
                     placeholderTextColor={theme.placeholder}
-                    value={registrationData.email}
+                    value={registrationData.phoneNumber}
                     onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, email: trimToMax(text, LIMITS.EMAIL) });
+                      setRegistrationData({
+                        ...registrationData,
+                        phoneNumber: trimToMax(text.replace(/\s+/g, ''), LIMITS.PHONE),
+                      });
                       setError(null);
                     }}
-                    keyboardType="email-address"
+                    keyboardType="phone-pad"
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isLoading}
-                    maxLength={LIMITS.EMAIL}
+                    maxLength={LIMITS.PHONE}
                   />
                 </View>
               </View>
@@ -517,17 +517,17 @@ export function RegistrationSteps() {
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled">
             <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-email')}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-phone')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
               <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                We sent a 6-digit code to {registrationData.email}
+                We sent a 6-digit code to {registrationData.phoneNumber}
               </Text>
             </View>
             <View style={[styles.form, styles.formCentered]}>
               <View style={styles.otpInputWrap}>
-                <Text style={[styles.label, { color: theme.text }]}>Enter the code from your email</Text>
+                <Text style={[styles.label, { color: theme.text }]}>Enter the code from your SMS</Text>
                 <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TextInput
                     style={[styles.otpInput, { color: theme.text }]}

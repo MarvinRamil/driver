@@ -6,10 +6,14 @@ import type {
   LoginResponse,
   RegisterRequest,
   RegisterResponse,
+  RegisterByPhoneRequest,
   User,
   SendOtpRequest,
+  SendSmsOtpRequest,
   VerifyOtpRequest,
   VerifyOtpResponse,
+  VerifySmsOtpRequest,
+  VerifySmsOtpResponse,
   VerifyOtpAndRegisterRequest,
   VerifyOtpAndRegisterResponse,
   ForgotPasswordRequest,
@@ -420,6 +424,87 @@ class AuthService {
   }
 
   /**
+   * Register a new driver using phone number (phone-first registration)
+   * Calls POST /api/auth/register-by-phone endpoint
+   * Uses phoneNumber as the primary identifier instead of email
+   */
+  async registerByPhone(registrationData: RegisterByPhoneRequest): Promise<RegisterResponse> {
+    try {
+      // Enforce Driver role only - reject any other role
+      if (registrationData.role !== 'Driver') {
+        throw new Error('Only Driver role is allowed for driver registration');
+      }
+
+      const phoneNumber = registrationData.phoneNumber.trim();
+      if (!phoneNumber) {
+        throw new Error('Phone number is required');
+      }
+
+      const body: RegisterByPhoneRequest = {
+        ...registrationData,
+        phoneNumber,
+      };
+
+      const response = await apiClient.post<{ success?: boolean; message?: string; data?: unknown }>(
+        'api/auth/register-by-phone',
+        {
+          body,
+          requiresAuth: false,
+        }
+      );
+
+      console.log('[AuthService] Register-by-phone API response:', {
+        success: response.success,
+        statusCode: response.statusCode,
+        message: response.message,
+        data: response.data,
+      });
+
+      if (response.success === false) {
+        const errorMessage = response.message || 'Registration failed';
+
+        if (response.statusCode === 400) {
+          console.error('[AuthService] Registration-by-phone failed with 400:', errorMessage);
+          throw new Error(errorMessage || 'Validation error. Please check your input.');
+        }
+
+        console.error('[AuthService] Registration-by-phone failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      return {
+        message: response.message || 'User registered successfully using phone number.',
+      };
+    } catch (error) {
+      console.error('[AuthService] Registration-by-phone error details:', {
+        error,
+        errorType: typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+
+        if (errorMessage.includes('timeout') || errorMessage.includes('abort')) {
+          throw new Error('Request timeout. Please check your connection and try again.');
+        }
+        if (
+          errorMessage.includes('failed to fetch') ||
+          errorMessage.includes('networkerror') ||
+          errorMessage.includes('network request failed')
+        ) {
+          throw new Error('Network error. Please check your connection and ensure the API server is running.');
+        }
+
+        throw error;
+      }
+
+      console.error('[AuthService] Unknown error type during registration-by-phone:', error);
+      throw new Error('Registration failed. Please try again.');
+    }
+  }
+
+  /**
    * Get available security questions for registration (account recovery)
    * GET /api/auth/security-questions
    */
@@ -449,6 +534,31 @@ class AuthService {
   }
 
   /**
+   * Send SMS OTP to phone number for verification (phone-first registration)
+   * POST /api/auth/send-sms-otp
+   */
+  async sendSmsOtp(request: SendSmsOtpRequest): Promise<{ success: boolean; message: string }> {
+    const phoneNumber = request.phoneNumber.trim();
+    if (!phoneNumber) {
+      throw new Error('Phone number is required');
+    }
+
+    const response = await apiClient.post<{ success?: boolean; message?: string }>('api/auth/send-sms-otp', {
+      body: { phoneNumber },
+      requiresAuth: false,
+    });
+
+    if (response.success === false) {
+      throw new Error(response.message || 'Failed to send verification code.');
+    }
+
+    return {
+      success: true,
+      message: response.message || 'If this phone number is valid, a verification code has been sent.',
+    };
+  }
+
+  /**
    * Verify OTP only (single responsibility). Does not create account.
    * Call register(email, fullName, password, role) next, then login.
    * POST /api/auth/verify-otp
@@ -469,6 +579,30 @@ class AuthService {
   }
 
   /**
+   * Verify SMS OTP only (single responsibility). Does not create account.
+   * Call registerByPhone(phoneNumber, fullName, password, role) next, then login.
+   * POST /api/auth/verify-sms-otp
+   */
+  async verifySmsOtp(request: VerifySmsOtpRequest): Promise<VerifySmsOtpResponse> {
+    const phoneNumber = request.phoneNumber.trim();
+    const otp = request.otp.trim();
+
+    const response = await apiClient.post<VerifySmsOtpResponse>('api/auth/verify-sms-otp', {
+      body: {
+        phoneNumber,
+        otp,
+      },
+      requiresAuth: false,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message || 'Invalid or expired code. Please try again.');
+    }
+
+    return response.data as VerifySmsOtpResponse;
+  }
+
+  /**
    * Resend OTP to email
    * POST /api/auth/resend-otp
    */
@@ -481,6 +615,31 @@ class AuthService {
       throw new Error(response.message || 'Failed to resend verification code.');
     }
     return { success: true, message: response.message || 'New verification code sent.' };
+  }
+
+  /**
+   * Resend SMS OTP to phone number
+   * POST /api/auth/resend-sms-otp
+   */
+  async resendSmsOtp(phoneNumber: string): Promise<{ success: boolean; message: string }> {
+    const normalizedPhone = phoneNumber.trim();
+    if (!normalizedPhone) {
+      throw new Error('Phone number is required');
+    }
+
+    const response = await apiClient.post<{ success?: boolean; message?: string }>('api/auth/resend-sms-otp', {
+      body: { phoneNumber: normalizedPhone },
+      requiresAuth: false,
+    });
+
+    if (response.success === false) {
+      throw new Error(response.message || 'Failed to resend verification code.');
+    }
+
+    return {
+      success: true,
+      message: response.message || 'A new verification code has been sent via SMS.',
+    };
   }
 
   /**
