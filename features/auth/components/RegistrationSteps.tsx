@@ -34,6 +34,7 @@ type RegistrationStep =
   | 'enter-phone'
   | 'enter-otp'
   | 'enter-details'
+  | 'enter-security-questions'
   | 'basic-info'
   | 'check-status'
   | 'email-verification'
@@ -84,10 +85,22 @@ export function RegistrationSteps() {
   const [questionPickerIndex, setQuestionPickerIndex] = useState<number | null>(null);
   /** Token from verify-otp; sent with register so backend trusts OTP when cache is not shared (e.g. multiple API instances) */
   const [registrationToken, setRegistrationToken] = useState<string | null>(null);
+  /** 10-minute countdown on OTP screen before resend is allowed (seconds left) */
+  const OTP_RESEND_COOLDOWN_SECONDS = 10 * 60;
+  const [otpResendSecondsLeft, setOtpResendSecondsLeft] = useState(0);
 
   useEffect(() => {
     authService.getSecurityQuestions().then(setSecurityQuestionsList).catch(() => {});
   }, []);
+
+  // 10-minute countdown timer on OTP verification step
+  useEffect(() => {
+    if (currentStep !== 'enter-otp' || otpResendSecondsLeft <= 0) return;
+    const id = setInterval(() => {
+      setOtpResendSecondsLeft((prev) => (prev <= 0 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [currentStep, otpResendSecondsLeft]);
 
   // Registration status is checked once when user clicks Continue (see handleSubmitBasicInfo).
   // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
@@ -96,7 +109,28 @@ export function RegistrationSteps() {
 
   const isValidPhone = (phone: string): boolean => PATTERNS.PHONE.test(phone);
 
-  const validateForm = (): string | null => {
+  /**
+   * Normalize local PH mobile number input into international format for API calls.
+   * - Accepts inputs like: 9XXXXXXXXX, 09XXXXXXXXX, 639XXXXXXXXX
+   * - Returns: 639XXXXXXXXX
+   */
+  const normalizePhoneForApi = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('639') && digits.length === 12) {
+      return digits;
+    }
+    if (digits.startsWith('09') && digits.length === 11) {
+      return `63${digits.slice(1)}`;
+    }
+    if (digits.startsWith('9')) {
+      return `63${digits}`;
+    }
+    return `63${digits}`;
+  };
+
+  /** Validates full name and password only (Step 1 of account creation) */
+  const validateBasicDetailsForm = (): string | null => {
     if (!registrationData.fullName || registrationData.fullName.trim().length < 2) {
       return 'Please enter your full name (at least 2 characters)';
     }
@@ -117,6 +151,13 @@ export function RegistrationSteps() {
     if (registrationData.password !== confirmPassword) {
       return 'Passwords do not match';
     }
+    return null;
+  };
+
+  /** Validates full form including security questions (Step 2) */
+  const validateForm = (): string | null => {
+    const basicError = validateBasicDetailsForm();
+    if (basicError) return basicError;
     for (let i = 0; i < 3; i++) {
       if (!selectedQuestionIds[i]) return `Please select security question ${i + 1}`;
       if (!questionAnswers[i] || questionAnswers[i].trim().length < LIMITS.SECURITY_ANSWER_MIN) {
@@ -140,15 +181,16 @@ export function RegistrationSteps() {
 
   /** Step 1: Send SMS OTP to phone (OTP-first flow) */
   const handleSendOtp = async () => {
-    const phone = registrationData.phoneNumber.trim();
+    const phone = normalizePhoneForApi(registrationData.phoneNumber);
     if (!phone || !isValidPhone(phone)) {
-      setError('Please enter a valid phone number (e.g. 09171234567 or 639171234567)');
+      setError('Please enter a valid Philippine mobile number starting with 9 (e.g. 9171234567).');
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
       await authService.sendSmsOtp({ phoneNumber: phone });
+      setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
       setCurrentStep('enter-otp');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send verification code. Please try again.');
@@ -159,12 +201,13 @@ export function RegistrationSteps() {
 
   /** Resend SMS OTP */
   const handleResendOtp = async () => {
-    const phone = registrationData.phoneNumber.trim();
+    const phone = normalizePhoneForApi(registrationData.phoneNumber);
     if (!phone) return;
     setIsLoading(true);
     setError(null);
     try {
       await authService.resendSmsOtp(phone);
+      setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
       Alert.alert('Code sent', 'A new verification code has been sent via SMS.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend code. Please try again.');
@@ -184,7 +227,7 @@ export function RegistrationSteps() {
     setIsLoading(true);
     try {
       const verifyResponse = await authService.verifySmsOtp({
-        phoneNumber: registrationData.phoneNumber.trim(),
+        phoneNumber: normalizePhoneForApi(registrationData.phoneNumber),
         otp: registrationData.otp.trim(),
       });
       setRegistrationToken(verifyResponse.registrationToken ?? null);
@@ -213,7 +256,7 @@ export function RegistrationSteps() {
     setError(null);
     try {
       await authService.registerByPhone({
-        phoneNumber: registrationData.phoneNumber.trim(),
+        phoneNumber: normalizePhoneForApi(registrationData.phoneNumber),
         password: registrationData.password,
         fullName: registrationData.fullName.trim(),
         role: 'Driver',
@@ -447,16 +490,34 @@ export function RegistrationSteps() {
             <View style={styles.form}>
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: theme.text }]}>Phone number</Text>
-                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View
+                  style={[
+                    styles.inputContainer,
+                    styles.inputContainerLarge,
+                    styles.phoneInputContainer,
+                    { backgroundColor: theme.surface, borderColor: theme.border },
+                  ]}>
+                  <View style={[styles.countryCodeBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                    <Text style={[styles.countryCodeText, { color: theme.text }]}>+63</Text>
+                  </View>
                   <TextInput
-                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
-                    placeholder="e.g. 09171234567 or 639171234567"
+                    style={[styles.input, styles.inputLarge, styles.phoneInput, { color: theme.text }]}
+                    placeholder="9XXXXXXXXX"
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.phoneNumber}
                     onChangeText={(text) => {
+                      // Keep only digits and enforce starting with 9 for PH mobiles
+                      let next = text.replace(/\D/g, '');
+                      if (next.startsWith('09')) {
+                        next = next.slice(1);
+                      }
+                      if (next && !next.startsWith('9')) {
+                        next = next.replace(/^[0-8]+/, '');
+                      }
+                      next = next.slice(0, 10); // 9 + 9 digits
                       setRegistrationData({
                         ...registrationData,
-                        phoneNumber: trimToMax(text.replace(/\s+/g, ''), LIMITS.PHONE),
+                        phoneNumber: trimToMax(next, LIMITS.PHONE),
                       });
                       setError(null);
                     }}
@@ -464,7 +525,7 @@ export function RegistrationSteps() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     editable={!isLoading}
-                    maxLength={LIMITS.PHONE}
+                    maxLength={10}
                   />
                 </View>
               </View>
@@ -522,7 +583,7 @@ export function RegistrationSteps() {
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
               <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                We sent a 6-digit code to {registrationData.phoneNumber}
+                We sent a 6-digit code to +63 {registrationData.phoneNumber}
               </Text>
             </View>
             <View style={[styles.form, styles.formCentered]}>
@@ -543,9 +604,18 @@ export function RegistrationSteps() {
                     editable={!isLoading}
                   />
                 </View>
-                <TouchableOpacity onPress={handleResendOtp} disabled={isLoading} style={styles.resendButton}>
-                  <Text style={[styles.resendText, { color: theme.primary }]}>Resend code</Text>
-                </TouchableOpacity>
+                {otpResendSecondsLeft > 0 ? (
+                  <View style={styles.timerRow}>
+                    <Ionicons name="time-outline" size={18} color={theme.textSecondary} />
+                    <Text style={[styles.timerText, { color: theme.textSecondary }]}>
+                      Resend code in {Math.floor(otpResendSecondsLeft / 60)}:{(otpResendSecondsLeft % 60).toString().padStart(2, '0')}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={handleResendOtp} disabled={isLoading} style={styles.resendButton}>
+                    <Text style={[styles.resendText, { color: theme.primary }]}>Resend code</Text>
+                  </TouchableOpacity>
+                )}
               </View>
               {error && (
                 <View style={styles.errorContainer}>
@@ -583,14 +653,18 @@ export function RegistrationSteps() {
   }
 
   // Reusable security questions block + picker modal
-  const securityQuestionsBlock = (
-    <View style={[styles.securityQuestionsSection, { borderTopColor: theme.border }]}>
-      <Text style={[styles.securityQuestionsTitle, { color: theme.text }]}>
-        Security questions <Text style={styles.required}>*</Text>
-      </Text>
-      <Text style={[styles.securityQuestionsSubtitle, { color: theme.textSecondary }]}>
-        All 3 are required for account recovery (e.g. forgot password)
-      </Text>
+  const renderSecurityQuestionsBlock = (showSectionHeader: boolean) => (
+    <View style={styles.securityQuestionsSection}>
+      {showSectionHeader && (
+        <>
+          <Text style={[styles.securityQuestionsTitle, { color: theme.text }]}>
+            Security questions <Text style={styles.required}>*</Text>
+          </Text>
+          <Text style={[styles.securityQuestionsSubtitle, { color: theme.textSecondary }]}>
+            All 3 are required for account recovery (e.g. forgot password)
+          </Text>
+        </>
+      )}
       {([0, 1, 2] as const).map((index) => {
         const selectedId = selectedQuestionIds[index];
         const selectedQuestion = selectedId ? securityQuestionsList.find((q) => q.id === selectedId) : null;
@@ -662,16 +736,13 @@ export function RegistrationSteps() {
     </Modal>
   );
 
-  // OTP flow: Step 3 – Full name + password (email and OTP already in state)
+  // OTP flow: Step 3a – Full name + password only
   if (currentStep === 'enter-details') {
     return (
-      <>
-        {questionPickerModal}
       <KeyboardAvoidingView
         style={[styles.container, { backgroundColor: theme.background }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        {questionPickerModal}
         <View style={[styles.content, { paddingTop: insets.top }]}>
           <ScrollView
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
@@ -682,7 +753,7 @@ export function RegistrationSteps() {
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create your account</Text>
               <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Use the email we sent the code to: {registrationData.email}
+                Step 1 of 2: Enter your name and password
               </Text>
             </View>
             <View style={styles.form}>
@@ -695,7 +766,7 @@ export function RegistrationSteps() {
                     placeholderTextColor={theme.placeholder}
                     value={registrationData.fullName}
                     onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, fullName: trimToMax(text, LIMITS.FULL_NAME) });
+                      setRegistrationData({ ...registrationData, fullName: text.slice(0, LIMITS.FULL_NAME) });
                       setError(null);
                     }}
                     autoCapitalize="words"
@@ -752,7 +823,6 @@ export function RegistrationSteps() {
                   </TouchableOpacity>
                 </View>
               </View>
-              {securityQuestionsBlock}
               {error && (
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
@@ -765,13 +835,17 @@ export function RegistrationSteps() {
                   isLoading && styles.submitButtonDisabled,
                   { backgroundColor: theme.primary },
                 ]}
-                onPress={handleCreateAccountAfterOtp}
+                onPress={() => {
+                  const validationError = validateBasicDetailsForm();
+                  if (validationError) {
+                    setError(validationError);
+                    return;
+                  }
+                  setError(null);
+                  setCurrentStep('enter-security-questions');
+                }}
                 disabled={isLoading}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.primaryText} />
-                ) : (
-                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Create account</Text>
-                )}
+                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
               </TouchableOpacity>
               <View style={styles.loginContainer}>
                 <Text style={[styles.loginText, { color: theme.textMuted }]}>
@@ -785,6 +859,65 @@ export function RegistrationSteps() {
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+    );
+  }
+
+  // OTP flow: Step 3b – Security questions only
+  if (currentStep === 'enter-security-questions') {
+    return (
+      <>
+        {questionPickerModal}
+        <KeyboardAvoidingView
+          style={[styles.container, { backgroundColor: theme.background }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+          <View style={[styles.content, { paddingTop: insets.top }]}>
+            <ScrollView
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+              keyboardShouldPersistTaps="handled">
+              <View style={styles.headerContainer}>
+                <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-details')}>
+                  <Ionicons name="arrow-back" size={24} color={theme.text} />
+                </TouchableOpacity>
+                <Text style={[styles.headline, { color: theme.text }]}>Security questions</Text>
+                <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                  Step 2 of 2: Set up security questions for account recovery
+                </Text>
+              </View>
+              <View style={styles.form}>
+                {renderSecurityQuestionsBlock(false)}
+                {error && (
+                  <View style={styles.errorContainer}>
+                    <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    isLoading && styles.submitButtonDisabled,
+                    { backgroundColor: theme.primary },
+                  ]}
+                  onPress={handleCreateAccountAfterOtp}
+                  disabled={isLoading}>
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color={theme.primaryText} />
+                  ) : (
+                    <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Create account</Text>
+                  )}
+                </TouchableOpacity>
+                <View style={styles.loginContainer}>
+                  <Text style={[styles.loginText, { color: theme.textMuted }]}>
+                    Already have an account?{' '}
+                    <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
+                      Log In
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </>
     );
   }
@@ -939,7 +1072,7 @@ export function RegistrationSteps() {
                   placeholderTextColor={theme.placeholder}
                   value={registrationData.fullName}
                   onChangeText={(text) => {
-                    setRegistrationData({ ...registrationData, fullName: trimToMax(text, LIMITS.FULL_NAME) });
+                    setRegistrationData({ ...registrationData, fullName: text.slice(0, LIMITS.FULL_NAME) });
                     setError(null);
                   }}
                   autoCapitalize="words"
@@ -1043,7 +1176,7 @@ export function RegistrationSteps() {
               </View>
             </View>
 
-            {securityQuestionsBlock}
+            {renderSecurityQuestionsBlock(true)}
 
             {/* Error Message */}
             {error && (
@@ -1202,6 +1335,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  timerText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   statusIndicator: {
     marginTop: 4,
     paddingHorizontal: 16,
@@ -1297,22 +1441,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   securityQuestionsSection: {
-    marginTop: 24,
-    paddingTop: 20,
-    borderTopWidth: 1,
+    marginTop: 4,
     width: '100%',
   },
   securityQuestionsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   required: {
     color: BeeColors.red[600],
   },
   securityQuestionsSubtitle: {
     fontSize: 12,
-    marginBottom: 16,
+    marginBottom: 4,
   },
   securityQuestionRow: {
     marginBottom: 16,

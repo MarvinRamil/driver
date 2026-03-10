@@ -55,12 +55,17 @@ export function useLogin(): UseLoginReturn {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Validate email format
-   * @param emailValue - Email string to validate
-   * @returns True if email is valid, false otherwise
+   * Validate email or phone (PH format: 9XXXXXXXXX, 09XXXXXXXXX, 639XXXXXXXXX)
    */
-  const validateEmail = useCallback((emailValue: string): boolean => {
-    return PATTERNS.EMAIL.test(emailValue);
+  const isEmailOrPhone = useCallback((value: string): boolean => {
+    const trimmed = value.trim();
+    if (PATTERNS.EMAIL.test(trimmed)) return true;
+    const digits = trimmed.replace(/\D/g, '');
+    return (
+      (digits.length === 10 && digits.startsWith('9')) ||
+      (digits.length === 11 && digits.startsWith('09')) ||
+      (digits.length === 12 && digits.startsWith('639'))
+    );
   }, []);
 
   /**
@@ -71,19 +76,19 @@ export function useLogin(): UseLoginReturn {
     // Clear previous errors
     setError(null);
 
-    // Validate email
-    if (!email.trim()) {
-      setError('Email is required');
+    const identifier = email.trim();
+    if (!identifier) {
+      setError('Email or phone is required');
       return;
     }
 
-    if (!validateEmail(email.trim())) {
-      setError('Please enter a valid email address');
+    if (!isEmailOrPhone(identifier)) {
+      setError('Please enter a valid email or phone number');
       return;
     }
 
-    if (email.trim().length > LIMITS.EMAIL) {
-      setError(`Email must be at most ${LIMITS.EMAIL} characters`);
+    if (identifier.length > LIMITS.EMAIL) {
+      setError(`Email or phone must be at most ${LIMITS.EMAIL} characters`);
       return;
     }
 
@@ -111,7 +116,7 @@ export function useLogin(): UseLoginReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [email, password, login, validateEmail]);
+  }, [email, password, login, isEmailOrPhone]);
 
   /**
    * Clear error message
