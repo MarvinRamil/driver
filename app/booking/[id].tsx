@@ -21,6 +21,7 @@ import { useAuth } from '@/features/auth';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { locationTrackingService } from '@/features/driver/services/locationTrackingService';
 import type { Booking, Dispatch, CancellationReason } from '@/shared/types/booking';
+import { Image } from 'expo-image';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +49,7 @@ export default function BookingDetailsScreen() {
   const [podRecipientName, setPodRecipientName] = useState('');
   const [podNotes, setPodNotes] = useState('');
   const [selectedPodStopId, setSelectedPodStopId] = useState<string | null>(null);
+  const [showItemImagePopup, setShowItemImagePopup] = useState(false);
 
   // Check if driver is under operator (needs dispatch)
   const isDriverUnderOperator = user?.tenantId !== null && !user?.isSoloDriver;
@@ -534,6 +536,39 @@ export default function BookingDetailsScreen() {
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Item image full-screen popup */}
+      <Modal
+        visible={showItemImagePopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowItemImagePopup(false)}>
+        <TouchableOpacity
+          style={styles.itemImagePopupBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowItemImagePopup(false)}>
+          <View style={styles.itemImagePopupContent}>
+            <TouchableOpacity
+              style={styles.itemImagePopupClose}
+              onPress={() => setShowItemImagePopup(false)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            {booking.itemImagePath ? (
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => {}}
+                style={styles.itemImagePopupImageWrap}>
+                <Image
+                  source={{ uri: booking.itemImagePath }}
+                  style={styles.itemImagePopupImage}
+                  contentFit="contain"
+                />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <TouchableOpacity
@@ -702,7 +737,33 @@ export default function BookingDetailsScreen() {
                 </ThemedText>
               </View>
             )}
+
+            {(booking.itemLengthCm != null || booking.itemWidthCm != null || booking.itemHeightCm != null) && (
+              <View style={styles.detailItem}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Dimensions
+                </ThemedText>
+                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                  {[booking.itemLengthCm, booking.itemWidthCm, booking.itemHeightCm]
+                    .map((v) => (v != null ? v : '–'))
+                    .join(' × ')}{' '}
+                  cm
+                </ThemedText>
+              </View>
+            )}
           </View>
+
+          {booking.itemImagePath ? (
+            <TouchableOpacity
+              style={[styles.itemImageButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => setShowItemImagePopup(true)}
+              activeOpacity={0.8}>
+              <Ionicons name="image-outline" size={22} color={theme.primary} />
+              <ThemedText style={[styles.itemImageButtonText, { color: theme.text }]}>
+                View item image
+              </ThemedText>
+            </TouchableOpacity>
+          ) : null}
 
           {booking.cargoDescription && (
             <View style={styles.descriptionContainer}>
@@ -1333,6 +1394,48 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  itemImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  itemImageButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  itemImagePopupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemImagePopupContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemImagePopupClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  itemImagePopupImageWrap: {
+    width: '100%',
+    height: '80%',
+  },
+  itemImagePopupImage: {
+    width: '100%',
+    height: '100%',
   },
   descriptionContainer: {
     marginTop: 8,

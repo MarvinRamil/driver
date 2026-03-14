@@ -237,6 +237,10 @@ class BookingService {
       cancellationReason: apiBooking.cancellationReason ?? null,
       cancelledBy: apiBooking.cancelledBy ?? null,
       cancelledAt: this.parseDate(apiBooking.cancelledAt),
+      itemImagePath: apiBooking.itemImagePath ?? null,
+      itemLengthCm: apiBooking.itemLengthCm != null && !isNaN(Number(apiBooking.itemLengthCm)) ? Number(apiBooking.itemLengthCm) : null,
+      itemWidthCm: apiBooking.itemWidthCm != null && !isNaN(Number(apiBooking.itemWidthCm)) ? Number(apiBooking.itemWidthCm) : null,
+      itemHeightCm: apiBooking.itemHeightCm != null && !isNaN(Number(apiBooking.itemHeightCm)) ? Number(apiBooking.itemHeightCm) : null,
       description: apiBooking.cargoDescription || apiBooking.description,
       weight: weightKg ?? apiBooking.weight,
       stops: Array.isArray(apiBooking.stops)

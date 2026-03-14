@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import * as Location from 'expo-location';
+import { Image } from 'expo-image';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
@@ -287,6 +288,7 @@ export function OfferDetailsModal({
   const [driverLocation, setDriverLocation] = useState<[number, number] | null>(null);
   const [driverToPickupRoute, setDriverToPickupRoute] = useState<LineStringGeoJSON | null>(null);
   const [driverToPickupDistanceKm, setDriverToPickupDistanceKm] = useState<number | null>(null);
+  const [showItemImagePopup, setShowItemImagePopup] = useState(false);
   const { height: screenHeight } = Dimensions.get('window');
 
   useEffect(() => {
@@ -362,6 +364,39 @@ export function OfferDetailsModal({
       onRequestClose={onClose}
     >
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+        {/* Item image full-screen popup */}
+        <Modal
+          visible={showItemImagePopup}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowItemImagePopup(false)}>
+          <TouchableOpacity
+            style={styles.itemImagePopupBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowItemImagePopup(false)}>
+            <View style={styles.itemImagePopupContent}>
+              <TouchableOpacity
+                style={styles.itemImagePopupClose}
+                onPress={() => setShowItemImagePopup(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Ionicons name="close" size={28} color="#fff" />
+              </TouchableOpacity>
+              {offer.itemImagePath ? (
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => {}}
+                  style={styles.itemImagePopupImageWrap}>
+                  <Image
+                    source={{ uri: offer.itemImagePath }}
+                    style={styles.itemImagePopupImage}
+                    contentFit="contain"
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <TouchableOpacity
             onPress={() => {
@@ -478,6 +513,18 @@ export function OfferDetailsModal({
                 </ThemedText>
               </View>
             )}
+
+            {offer.itemImagePath ? (
+              <TouchableOpacity
+                style={[styles.itemImageButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => setShowItemImagePopup(true)}
+                activeOpacity={0.8}>
+                <Ionicons name="image-outline" size={22} color={theme.primary} />
+                <ThemedText style={[styles.itemImageButtonText, { color: theme.text }]}>
+                  View item image
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
 
             {/* Swipe to Accept / Reject */}
             <View style={[styles.offerActions, { borderTopColor: theme.border }]}>
@@ -682,6 +729,48 @@ const styles = StyleSheet.create({
   cargoText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  itemImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  itemImageButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  itemImagePopupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemImagePopupContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemImagePopupClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  itemImagePopupImageWrap: {
+    width: '100%',
+    height: '80%',
+  },
+  itemImagePopupImage: {
+    width: '100%',
+    height: '100%',
   },
   offerActions: {
     marginTop: 24,
