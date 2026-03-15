@@ -168,6 +168,10 @@ const OfferDetailsMap = React.memo(function OfferDetailsMap({
         logoEnabled={!mapExpanded}
         attributionEnabled={!mapExpanded}
         scaleBarEnabled={false}
+        zoomEnabled={false}
+        scrollEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
       >
         <Camera
           {...(bounds
