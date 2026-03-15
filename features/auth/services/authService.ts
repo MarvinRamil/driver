@@ -162,6 +162,13 @@ class AuthService {
       if (error && typeof error === 'object' && 'status' in error) {
         const apiError = error as { status?: number; message?: string; details?: unknown };
         
+        // Network access / CORS / SSL (status 0 or no response)
+        if (apiError.status === 0 || apiError.message?.includes('Cannot reach the server')) {
+          throw new Error(
+            apiError.message || 'Cannot reach the server. Check the API URL (EXPO_PUBLIC_API_URL) and that the server allows this app (CORS/SSL).'
+          );
+        }
+        
         // Handle 401 Unauthorized
         if (apiError.status === 401) {
           const errorText = apiError.message || 'Login failed';

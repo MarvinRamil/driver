@@ -351,6 +351,21 @@ class ApiClient {
             status: 408,
           } as ApiError;
         }
+
+        // Network access / CORS / SSL errors (common when deployed with correct API URL)
+        const msg = error instanceof Error ? error.message : String(error);
+        const isNetworkError =
+          /network request failed|failed to fetch|network error|load failed|err_connection_refused|err_connection_reset|cors|ssl|certificate/i.test(msg) ||
+          (error instanceof TypeError && msg.toLowerCase().includes('fetch'));
+
+        if (isNetworkError) {
+          console.error(`[API] Network error calling ${fullUrl}:`, msg);
+          throw {
+            message: `Network access failed. Check: (1) API URL is correct and reachable, (2) if app is web/deployed, the API must allow your app origin (CORS). URL: ${fullUrl}`,
+            status: 0,
+            details: { originalMessage: msg, fullUrl },
+          } as ApiError;
+        }
         throw error;
       }
 

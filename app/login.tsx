@@ -221,7 +221,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Headline */}
+          {/* Headline
           <View style={styles.headlineContainer}>
             <Text style={[styles.headline, { color: theme.text }]}>
               Welcome Back, Driver!
@@ -230,7 +230,7 @@ export default function LoginScreen() {
               Log in to start your shift
             </Text>
           </View>
-
+ */}
           {/* Login Form */}
           <View style={styles.form}>
             {/* Email/Username Field */}
