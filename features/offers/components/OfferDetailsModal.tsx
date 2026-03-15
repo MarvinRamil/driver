@@ -544,7 +544,7 @@ export function OfferDetailsModal({
                 activeOpacity={0.8}>
                 <Ionicons name="image-outline" size={22} color={theme.primary} />
                 <ThemedText style={[styles.itemImageButtonText, { color: theme.text }]}>
-                  View item image
+                  View Package
                 </ThemedText>
               </TouchableOpacity>
             ) : null}
