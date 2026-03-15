@@ -99,6 +99,8 @@ export interface Booking {
   bookingNumber: string;
   /** Customer ID (Guid) */
   customerId: string;
+  /** Customer / booker display name (nullable if not provided by API) */
+  customerName?: string | null;
   /** Pickup location address */
   pickupLocation: string;
   /** Dropoff/delivery location address */
@@ -149,6 +151,14 @@ export interface Booking {
   cancelledBy: string | null;
   /** When booking was cancelled (nullable) */
   cancelledAt: Date | null;
+  /** Item image URL (resolved from s3:bucket:key by backend; null if none) */
+  itemImagePath?: string | null;
+  /** Item length in cm (optional, e.g. from Lalamove) */
+  itemLengthCm?: number | null;
+  /** Item width in cm (optional) */
+  itemWidthCm?: number | null;
+  /** Item height in cm (optional) */
+  itemHeightCm?: number | null;
 
   // Legacy fields for backward compatibility
   /** Optional description of cargo (legacy - use cargoDescription) */

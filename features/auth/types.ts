@@ -159,6 +159,36 @@ export interface RegisterRequest {
 }
 
 /**
+ * Register-by-phone request payload
+ * Matches API POST /api/auth/register-by-phone request body
+ * Uses phoneNumber as the primary identifier instead of email
+ */
+export interface RegisterByPhoneRequest {
+  /** User phone number (e.g. 09171234567 or 639171234567) */
+  phoneNumber: string;
+  /** User password */
+  password: string;
+  /** User full name */
+  fullName: string;
+  /** User role - must be "Driver" for drivers app */
+  role: "Driver";
+  /** Referral code (optional) */
+  referralCode?: string | null;
+  /** Security question 1 (required for account recovery) */
+  securityQuestion1?: SecurityQuestionRequest;
+  /** Security question 2 (required for account recovery) */
+  securityQuestion2?: SecurityQuestionRequest;
+  /** Security question 3 (required for account recovery) */
+  securityQuestion3?: SecurityQuestionRequest;
+  /** Token from verify-sms-otp response; proves phone number was verified */
+  registrationToken?: string | null;
+  /** Optional device identifier for security / analytics */
+  deviceId?: string;
+  /** Optional device fingerprint for security / analytics */
+  deviceFingerprint?: string;
+}
+
+/**
  * Register response from API
  * Matches API POST /api/auth/register response
  */
@@ -184,6 +214,24 @@ export interface VerifyOtpRequest {
 
 /** Response from verify-otp; includes registrationToken for register (works when cache is not shared across API instances) */
 export interface VerifyOtpResponse {
+  success: boolean;
+  message: string;
+  registrationToken?: string;
+}
+
+/** SMS OTP send request - POST /api/auth/send-sms-otp */
+export interface SendSmsOtpRequest {
+  phoneNumber: string;
+}
+
+/** SMS OTP verify request - POST /api/auth/verify-sms-otp */
+export interface VerifySmsOtpRequest {
+  phoneNumber: string;
+  otp: string;
+}
+
+/** Response from verify-sms-otp; includes registrationToken for register-by-phone */
+export interface VerifySmsOtpResponse {
   success: boolean;
   message: string;
   registrationToken?: string;

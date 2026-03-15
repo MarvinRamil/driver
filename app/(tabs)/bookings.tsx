@@ -234,6 +234,17 @@ export default function BookingsScreen() {
                     </ThemedText>
                   </View>
 
+                  <View style={styles.offerBookerRow}>
+                    <Ionicons name="person-outline" size={14} color={theme.textSecondary} />
+                    <ThemedText style={[styles.offerBookerText, { color: theme.textSecondary }]}>
+                      Booker: <ThemedText style={{ color: theme.text, fontWeight: '600' }}>
+                        {(offer.customerName != null && offer.customerName.trim() !== '' && offer.customerName !== 'Customer')
+                          ? offer.customerName
+                          : '—'}
+                      </ThemedText>
+                    </ThemedText>
+                  </View>
+
                   <View style={styles.offerTimeline}>
                     <View style={[styles.timelineLine, { backgroundColor: theme.border }]} />
                     <View style={styles.timelineItem}>
@@ -708,6 +719,15 @@ const styles = StyleSheet.create({
   countdownText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  offerBookerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  offerBookerText: {
+    fontSize: 13,
   },
   offerTimeline: {
     gap: 16,

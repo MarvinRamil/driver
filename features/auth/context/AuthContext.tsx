@@ -8,7 +8,7 @@ import React, {
 import { authService } from "../services/authService";
 // Import chatSignalRService directly to avoid circular dependency
 import { chatSignalRService } from "@/features/support/services/chatSignalRService";
-import { storeTempCredentialsForPrompt } from "@/shared/services/biometricPromptStorage";
+import { storeTempCredentialsForPrompt, clearTempCredentialsForPrompt } from "@/shared/services/biometricPromptStorage";
 import { biometricStorage } from "@/shared/services/biometricStorage";
 import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidation";
 import { locationTrackingService } from "@/features/driver/services/locationTrackingService";
@@ -237,11 +237,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // Clear tokens and user data
       await authService.logout();
-      
-      // Do NOT clear biometric credentials on logout - keep them so the user can
-      // log back in with biometric without re-entering password. They can disable
-      // from Profile > Security Settings if they want to remove stored credentials.
-      
+
+      // Clear cached biometric login so next login requires email/phone + password
+      try {
+        await biometricStorage.clearCredentials();
+        await clearTempCredentialsForPrompt();
+      } catch (biometricErr) {
+        console.warn("Failed to clear biometric credentials on logout:", biometricErr);
+      }
+
       setUser(null);
     } catch (err) {
       // Even if logout fails, clear local state

@@ -121,9 +121,15 @@ class BookingService {
    */
   private mapApiBookingToBooking(apiBooking: any): Booking {
     // Defensive check: handle nested data structures
-    // Sometimes the API response wraps data in a 'data' property
-    if (apiBooking && apiBooking.data && typeof apiBooking.data === 'object') {
-      apiBooking = apiBooking.data;
+    // Sometimes the API response wraps data in a 'data', 'booking', or 'result' property
+    if (apiBooking && typeof apiBooking === 'object') {
+      if (apiBooking.data && typeof apiBooking.data === 'object' && apiBooking.data.id) {
+        apiBooking = apiBooking.data;
+      } else if (apiBooking.booking && typeof apiBooking.booking === 'object' && apiBooking.booking.id) {
+        apiBooking = apiBooking.booking;
+      } else if (apiBooking.result && typeof apiBooking.result === 'object' && apiBooking.result.id) {
+        apiBooking = apiBooking.result;
+      }
     }
 
     // Validate required fields with detailed error logging
@@ -211,7 +217,14 @@ class BookingService {
     return {
       id: apiBooking.id,
       bookingNumber: apiBooking.bookingNumber || `BK-${apiBooking.id.slice(0, 8)}`,
-      customerId: apiBooking.customerId || '',
+      customerId: apiBooking.customerId || apiBooking.CustomerId || '',
+      customerName: (() => {
+        const raw = apiBooking.customerName ?? apiBooking.bookerName ?? apiBooking.CustomerName ?? apiBooking.BookerName ?? apiBooking.booker_name
+          ?? apiBooking.senderName ?? apiBooking.SenderName;
+        if (raw == null) return null;
+        const s = String(raw).trim();
+        return s === '' ? null : s;
+      })(),
       pickupLocation: apiBooking.pickupLocation || '',
       dropoffLocation: apiBooking.dropoffLocation || '',
       truckType: truckType as any,
@@ -237,6 +250,22 @@ class BookingService {
       cancellationReason: apiBooking.cancellationReason ?? null,
       cancelledBy: apiBooking.cancelledBy ?? null,
       cancelledAt: this.parseDate(apiBooking.cancelledAt),
+      itemImagePath: apiBooking.itemImagePath ?? apiBooking.ItemImagePath ?? null,
+      itemLengthCm: (() => {
+        const raw = apiBooking.itemLengthCm ?? apiBooking.ItemLengthCm ?? apiBooking.item_length_cm;
+        const n = raw != null ? Number(raw) : NaN;
+        return raw != null && !isNaN(n) ? n : null;
+      })(),
+      itemWidthCm: (() => {
+        const raw = apiBooking.itemWidthCm ?? apiBooking.ItemWidthCm ?? apiBooking.item_width_cm;
+        const n = raw != null ? Number(raw) : NaN;
+        return raw != null && !isNaN(n) ? n : null;
+      })(),
+      itemHeightCm: (() => {
+        const raw = apiBooking.itemHeightCm ?? apiBooking.ItemHeightCm ?? apiBooking.item_height_cm;
+        const n = raw != null ? Number(raw) : NaN;
+        return raw != null && !isNaN(n) ? n : null;
+      })(),
       description: apiBooking.cargoDescription || apiBooking.description,
       weight: weightKg ?? apiBooking.weight,
       stops: Array.isArray(apiBooking.stops)
