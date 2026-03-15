@@ -75,6 +75,12 @@ export interface DriverOffer {
   weightKg?: number | null;
   /** Path to item image (nullable) */
   itemImagePath?: string | null;
+  /** Item length in cm (nullable) */
+  itemLengthCm?: number | null;
+  /** Item width in cm (nullable) */
+  itemWidthCm?: number | null;
+  /** Item height in cm (nullable) */
+  itemHeightCm?: number | null;
   /** Estimated fare amount */
   estimatedFare: number;
   /** Final fare (null until completed) */

@@ -454,6 +454,16 @@ export function OfferDetailsModal({
                 {offer.bookingNumber}
               </ThemedText>
             </View>
+            {(offer.customerName != null && offer.customerName.trim() !== '') && (
+              <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Booker
+                </ThemedText>
+                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                  {offer.customerName}
+                </ThemedText>
+              </View>
+            )}
             <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
               <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
                 Fare
@@ -469,6 +479,19 @@ export function OfferDetailsModal({
                 </ThemedText>
                 <ThemedText style={[styles.detailValue, { color: theme.text }]}>
                   {offer.distanceKm.toFixed(1)} km
+                </ThemedText>
+              </View>
+            )}
+            {(offer.itemLengthCm != null || offer.itemWidthCm != null || offer.itemHeightCm != null) && (
+              <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Dimensions (L×W×H)
+                </ThemedText>
+                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                  {[offer.itemLengthCm, offer.itemWidthCm, offer.itemHeightCm]
+                    .map((v) => (v != null ? v : '–'))
+                    .join(' × ')}{' '}
+                  cm
                 </ThemedText>
               </View>
             )}

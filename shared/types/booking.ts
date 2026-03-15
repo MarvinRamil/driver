@@ -99,6 +99,8 @@ export interface Booking {
   bookingNumber: string;
   /** Customer ID (Guid) */
   customerId: string;
+  /** Customer / booker display name (nullable if not provided by API) */
+  customerName?: string | null;
   /** Pickup location address */
   pickupLocation: string;
   /** Dropoff/delivery location address */

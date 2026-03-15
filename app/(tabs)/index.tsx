@@ -82,7 +82,15 @@ export default function DashboardScreen() {
             <View style={styles.profileSection}>
               <View style={styles.profileImageContainer}>
                 <View style={[styles.profileImage, { backgroundColor: theme.surface, borderColor: theme.surface }]}>
-                  <Ionicons name="person" size={24} color={theme.primaryText} />
+                  {user?.profilePictureUrl ? (
+                    <ExpoImage
+                      source={{ uri: user.profilePictureUrl }}
+                      style={styles.profileImagePhoto}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <Ionicons name="person" size={24} color={theme.primaryText} />
+                  )}
                 </View>
                 {isOnline && (
                   <View style={[styles.onlineIndicator, { backgroundColor: theme.success, borderColor: theme.primary }]} />
@@ -375,6 +383,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileImagePhoto: {
+    width: '100%',
+    height: '100%',
   },
   onlineIndicator: {
     position: 'absolute',

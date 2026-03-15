@@ -622,6 +622,14 @@ export default function BookingDetailsScreen() {
                 })}
               </ThemedText>
             </View>
+            <View style={[styles.metaItem, { marginTop: 8 }]}>
+              <Ionicons name="person-outline" size={16} color={theme.textSecondary} />
+              <ThemedText style={[styles.metaText, { color: theme.textSecondary }]}>
+                Booker: <ThemedText style={{ color: theme.text, fontWeight: '600' }}>
+                  {booking.customerName != null && booking.customerName.trim() !== '' ? booking.customerName : '—'}
+                </ThemedText>
+              </ThemedText>
+            </View>
           </View>
         </View>
 
@@ -738,19 +746,18 @@ export default function BookingDetailsScreen() {
               </View>
             )}
 
-            {(booking.itemLengthCm != null || booking.itemWidthCm != null || booking.itemHeightCm != null) && (
-              <View style={styles.detailItem}>
-                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                  Dimensions
-                </ThemedText>
-                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
-                  {[booking.itemLengthCm, booking.itemWidthCm, booking.itemHeightCm]
-                    .map((v) => (v != null ? v : '–'))
-                    .join(' × ')}{' '}
-                  cm
-                </ThemedText>
-              </View>
-            )}
+            <View style={styles.detailItem}>
+              <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                Dimensions (L×W×H)
+              </ThemedText>
+              <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                {(booking.itemLengthCm != null || booking.itemWidthCm != null || booking.itemHeightCm != null)
+                  ? `${[booking.itemLengthCm, booking.itemWidthCm, booking.itemHeightCm]
+                      .map((v) => (v != null ? v : '–'))
+                      .join(' × ')} cm`
+                  : '—'}
+              </ThemedText>
+            </View>
           </View>
 
           {booking.itemImagePath ? (

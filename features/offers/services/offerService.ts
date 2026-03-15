@@ -106,6 +106,12 @@ class OfferService {
         const dropoffStops = stops.filter(s => s.type === 'Dropoff' || s.sequence > 0);
         const lastDropoff = dropoffStops[dropoffStops.length - 1];
 
+        // Customer/booker name: try camelCase, PascalCase, nested booking, and common API variants
+        const rawName = offer.customerName ?? offer.CustomerName ?? offer.bookerName ?? offer.BookerName
+          ?? offer.senderName ?? offer.SenderName
+          ?? (offer.booking && (offer.booking.customerName ?? offer.booking.CustomerName ?? offer.booking.bookerName ?? offer.booking.BookerName ?? offer.booking.senderName ?? offer.booking.SenderName));
+        const customerName = (rawName != null && String(rawName).trim() !== '') ? String(rawName).trim() : 'Customer';
+
         return {
         id: offer.id,
         bookingId: offer.bookingId,
@@ -121,8 +127,8 @@ class OfferService {
           driverRating: offer.driverRating ?? null,
           estimatedArrivalMinutes: offer.estimatedArrivalMinutes ?? null,
           bookingNumber: offer.bookingNumber || `BKG-${offer.bookingId?.slice(0, 8) || 'UNKNOWN'}`,
-          customerId: offer.customerId || '',
-          customerName: offer.customerName || 'Customer',
+          customerId: offer.customerId ?? offer.CustomerId ?? offer.booking?.customerId ?? offer.booking?.CustomerId ?? '',
+          customerName,
           vehicleType: offer.vehicleType || offer.truckType || 'Medium',
         cargoDescription: offer.cargoDescription || offer.cargo || '',
           scheduleDate: scheduleDate || new Date(),
@@ -130,6 +136,9 @@ class OfferService {
           notes: offer.notes || null,
           weightKg: offer.weightKg ?? null,
           itemImagePath: offer.itemImagePath || null,
+          itemLengthCm: offer.itemLengthCm != null && !isNaN(Number(offer.itemLengthCm)) ? Number(offer.itemLengthCm) : null,
+          itemWidthCm: offer.itemWidthCm != null && !isNaN(Number(offer.itemWidthCm)) ? Number(offer.itemWidthCm) : null,
+          itemHeightCm: offer.itemHeightCm != null && !isNaN(Number(offer.itemHeightCm)) ? Number(offer.itemHeightCm) : null,
           estimatedFare: offer.estimatedFare ?? offer.fare ?? 0,
           finalFare: offer.finalFare ?? null,
           distanceKmTotal: offer.distanceKmTotal ?? offer.distanceKm ?? null,
