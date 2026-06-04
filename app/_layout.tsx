@@ -37,7 +37,7 @@ export {
 
 export const unstable_settings = {
   // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: 'login',
+  initialRouteName: 'welcome',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -69,6 +69,7 @@ function NavigationGuard() {
     try {
       const currentRoute = segments[0];
       const inTabsGroup = currentRoute === "(tabs)";
+      const isWelcomePage = currentRoute === "welcome";
       const isLoginPage = currentRoute === "login";
       const isSignupPage = currentRoute === "signup";
       const isForgotPasswordPage = currentRoute === "forgot-password";
@@ -81,12 +82,12 @@ function NavigationGuard() {
       const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
       const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
 
-      // If no user, redirect to login (entry point for unauthenticated users)
+      // If no user, redirect to welcome (pre-login entry point)
       if (!isAuthenticated) {
-        if (isLoginPage || isSignupPage || isForgotPasswordPage) {
+        if (isWelcomePage || isLoginPage || isSignupPage || isForgotPasswordPage) {
           return;
         }
-        router.replace("/login");
+        router.replace("/welcome");
         return;
       }
 
@@ -110,14 +111,14 @@ function NavigationGuard() {
           console.error('[NavigationGuard] Error during logout:', err);
         });
         
-        if (!isLoginPage && !isSignupPage) {
-          router.replace("/login");
+        if (!isWelcomePage && !isLoginPage && !isSignupPage) {
+          router.replace("/welcome");
         }
         return;
       }
 
-      // If user is authenticated with allowed role and on login or signup, redirect (tabs or onboarding)
-      if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
+      // If user is authenticated with allowed role and on welcome, login, or signup, redirect (tabs or onboarding)
+      if (isAuthenticated && hasAllowedRole && (isWelcomePage || isLoginPage || isSignupPage)) {
         if (needsLiveness) {
           router.replace("/liveness");
           return;
@@ -156,8 +157,9 @@ function NavigationGuard() {
         const isLoginPage = currentRoute === "login";
         const isSignupPage = currentRoute === "signup";
         const isForgotPasswordPage = currentRoute === "forgot-password";
-        if (!isLoginPage && !isSignupPage && !isForgotPasswordPage) {
-          router.replace("/login");
+        const isWelcomePage = currentRoute === "welcome";
+        if (!isWelcomePage && !isLoginPage && !isSignupPage && !isForgotPasswordPage) {
+          router.replace("/welcome");
         }
       } catch (navError) {
         console.error('Error navigating to login in NavigationGuard:', navError);
@@ -215,6 +217,7 @@ function RootLayoutNav() {
             <NavigationGuard />
             <View style={styles.root}>
               <Stack>
+                <Stack.Screen name="welcome" options={{ headerShown: false }} />
                 <Stack.Screen name="login" options={{ headerShown: false }} />
                 <Stack.Screen name="signup" options={{ headerShown: false }} />
                 <Stack.Screen name="forgot-password" options={{ headerShown: false }} />

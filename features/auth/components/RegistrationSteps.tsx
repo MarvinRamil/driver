@@ -10,7 +10,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Image,
   Modal,
   FlatList,
 } from 'react-native';
@@ -23,25 +22,18 @@ import { authService } from '../services/authService';
 import { registrationService, type RegistrationStatus } from '../services/registrationService';
 import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { ResumeRegistrationScreen } from './ResumeRegistrationScreen';
-import { DriverLicenseScanner } from './DriverLicenseScanner';
-import { SelfieCapture } from './SelfieCapture';
-import { apiClient } from '@/shared/services/apiClient';
-import { useAuthContext } from '../context/AuthContext';
 import { biometricStorage } from '@/shared/services/biometricStorage';
 import { LIMITS, PATTERNS, trimToMax } from '@/shared/constants/validation';
 
 type RegistrationStep =
+  | 'email-entry'
+  | 'email-otp'
   | 'enter-phone'
   | 'enter-otp'
   | 'enter-details'
   | 'enter-security-questions'
-  | 'basic-info'
-  | 'check-status'
   | 'email-verification'
-  | 'resume-prompt'
-  | 'license-scan'
-  | 'selfie-capture'
-  | 'review';
+  | 'resume-prompt';
 
 interface RegistrationData {
   email: string;
@@ -49,20 +41,21 @@ interface RegistrationData {
   password: string;
   fullName: string;
   otp: string;
-  licenseImageUri?: string;
-  selfieImageUri?: string;
 }
 
 /**
- * Multi-step registration wizard component
- * Handles the complete driver registration flow with email verification
+ * Multi-step driver registration wizard.
+ * Primary: email OTP → account details → security questions → register (Driver) → login.
+ * Secondary: phone SMS OTP → same details flow → registerByPhone → login.
+ * Post-login onboarding (liveness, documents) is handled outside this screen.
  */
 export function RegistrationSteps() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
 
-  const [currentStep, setCurrentStep] = useState<RegistrationStep>('enter-phone');
+  const [currentStep, setCurrentStep] = useState<RegistrationStep>('email-entry');
+  const [emailVerifiedViaOtp, setEmailVerifiedViaOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registrationData, setRegistrationData] = useState<RegistrationData>({
@@ -76,7 +69,6 @@ export function RegistrationSteps() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
-  const { refreshUser } = useAuthContext();
 
   // Security questions (required for account recovery)
   const [securityQuestionsList, setSecurityQuestionsList] = useState<Array<{ id: number; question: string }>>([]);
@@ -93,21 +85,53 @@ export function RegistrationSteps() {
     authService.getSecurityQuestions().then(setSecurityQuestionsList).catch(() => {});
   }, []);
 
-  // 10-minute countdown timer on OTP verification step
+  // 10-minute countdown timer on OTP verification steps
   useEffect(() => {
-    if (currentStep !== 'enter-otp' || otpResendSecondsLeft <= 0) return;
+    if ((currentStep !== 'enter-otp' && currentStep !== 'email-otp') || otpResendSecondsLeft <= 0) return;
     const id = setInterval(() => {
       setOtpResendSecondsLeft((prev) => (prev <= 0 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(id);
   }, [currentStep, otpResendSecondsLeft]);
 
-  // Registration status is checked once when user clicks Continue (see handleSubmitBasicInfo).
-  // We do not check on every keystroke to avoid many API calls and exposing partial emails in logs/URLs.
-
   const isValidEmail = (email: string): boolean => PATTERNS.EMAIL.test(email);
 
   const isValidPhone = (phone: string): boolean => PATTERNS.PHONE.test(phone);
+
+  // Debounced registration-status check on email entry (not on every keystroke)
+  useEffect(() => {
+    if (currentStep !== 'email-entry') return;
+    const email = registrationData.email.trim();
+    if (!email || !isValidEmail(email)) {
+      setRegistrationStatus(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const status = await registrationService.checkRegistrationStatus(email);
+        setRegistrationStatus(status);
+      } catch {
+        setRegistrationStatus(null);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [registrationData.email, currentStep]);
+
+  const knownSteps: RegistrationStep[] = [
+    'email-entry',
+    'email-otp',
+    'enter-phone',
+    'enter-otp',
+    'enter-details',
+    'enter-security-questions',
+    'email-verification',
+    'resume-prompt',
+  ];
+  useEffect(() => {
+    if (!knownSteps.includes(currentStep)) {
+      setCurrentStep('email-entry');
+    }
+  }, [currentStep]);
 
   /**
    * Normalize local PH mobile number input into international format for API calls.
@@ -179,7 +203,95 @@ export function RegistrationSteps() {
       : undefined,
   });
 
-  /** Step 1: Send SMS OTP to phone (OTP-first flow) */
+  const redirectToLoginAfterSignup = () => {
+    Alert.alert(
+      'Account created',
+      'Please log in to complete driver verification and document upload.',
+      [{ text: 'OK', onPress: () => router.replace('/login') }]
+    );
+  };
+
+  /** Email flow: send OTP to email */
+  const handleSendEmailOtp = async () => {
+    const email = registrationData.email.trim().toLowerCase();
+    if (!email || !isValidEmail(email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setEmailVerifiedViaOtp(false);
+    try {
+      let status: RegistrationStatus | null = null;
+      try {
+        status = await registrationService.checkRegistrationStatus(email);
+        setRegistrationStatus(status);
+      } catch {
+        // proceed to send OTP
+      }
+      if (status?.registrationComplete) {
+        Alert.alert(
+          'Account exists',
+          'This email is already registered. Please log in instead.',
+          [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
+        );
+        return;
+      }
+      if (status?.emailVerified && !status.registrationComplete && status.canResume) {
+        setCurrentStep('resume-prompt');
+        return;
+      }
+      await authService.sendOtp({ email });
+      setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
+      setCurrentStep('email-otp');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send verification code. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** Email flow: resend OTP */
+  const handleResendEmailOtp = async () => {
+    const email = registrationData.email.trim().toLowerCase();
+    if (!email) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await authService.resendOtp(email);
+      setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
+      Alert.alert('Code sent', 'A new verification code has been sent to your email.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend code. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** Email flow: verify OTP then continue to account details */
+  const handleContinueFromEmailOtp = async () => {
+    setError(null);
+    const email = registrationData.email.trim().toLowerCase();
+    if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
+      setError('Please enter the 6-digit code sent to your email');
+      Alert.alert('Invalid code', 'Please enter the full 6-digit code sent to your email.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await authService.verifyOtp({ email, otp: registrationData.otp.trim() });
+      setEmailVerifiedViaOtp(true);
+      setCurrentStep('enter-details');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid or expired code. Please try again.';
+      setError(message);
+      Alert.alert('Invalid code', message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /** Step 1: Send SMS OTP to phone (secondary flow) */
   const handleSendOtp = async () => {
     const phone = normalizePhoneForApi(registrationData.phoneNumber);
     if (!phone || !isValidPhone(phone)) {
@@ -188,6 +300,7 @@ export function RegistrationSteps() {
     }
     setIsLoading(true);
     setError(null);
+    setEmailVerifiedViaOtp(false);
     try {
       await authService.sendSmsOtp({ phoneNumber: phone });
       setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
@@ -226,16 +339,13 @@ export function RegistrationSteps() {
     }
     setIsLoading(true);
     try {
+      setEmailVerifiedViaOtp(false);
       const verifyResponse = await authService.verifySmsOtp({
         phoneNumber: normalizePhoneForApi(registrationData.phoneNumber),
         otp: registrationData.otp.trim(),
       });
       setRegistrationToken(verifyResponse.registrationToken ?? null);
-      Alert.alert(
-        'Code verified',
-        'Your phone number is verified. Enter your name and password to create your account.',
-        [{ text: 'Continue', onPress: () => setCurrentStep('enter-details') }]
-      );
+      setCurrentStep('enter-details');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Invalid or expired code. Please try again.';
       setError(message);
@@ -245,127 +355,48 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Step 3: Create account using register-by-phone endpoint (phone already verified via SMS OTP), then login. */
+  /** Create account after details + security questions (email or phone path). */
   const handleCreateAccountAfterOtp = async () => {
     const validationError = validateForm();
     if (validationError) {
       setError(validationError);
       return;
     }
-    setIsLoading(true);
-    setError(null);
-    try {
-      await authService.registerByPhone({
-        phoneNumber: normalizePhoneForApi(registrationData.phoneNumber),
-        password: registrationData.password,
-        fullName: registrationData.fullName.trim(),
-        role: 'Driver',
-        ...buildSecurityQuestionsPayload(),
-        ...(registrationToken ? { registrationToken } : {}),
-      });
-      // Clear any previously stored biometric credentials (e.g. from old account on same device)
-      try {
-        await biometricStorage.clearCredentials();
-      } catch {
-        // Non-fatal; continue to show success
-      }
-      Alert.alert(
-        'Account created',
-        'Please log in to the app to complete registration.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/login'),
-          },
-        ]
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
-      setError(message);
-      Alert.alert('Error', message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmitBasicInfo = async () => {
-    const validationError = validateForm();
-    if (validationError) {
-      setError(validationError);
+    if (emailVerifiedViaOtp && !registrationData.email.trim()) {
+      setError('Email is required');
       return;
     }
-
     setIsLoading(true);
     setError(null);
-
     try {
-      let status: RegistrationStatus | null = null;
-      try {
-        status = await registrationService.checkRegistrationStatus(registrationData.email.trim());
-        setRegistrationStatus(status);
-      } catch (statusErr) {
-        console.warn('[RegistrationSteps] Status check failed, proceeding to register:', statusErr);
-      }
-
-      if (status?.registrationComplete) {
-        Alert.alert(
-          'Account Exists',
-          'This email is already registered. Please login instead.',
-          [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      if (status?.emailVerified && !status.registrationComplete && status.canResume) {
-        setCurrentStep('resume-prompt');
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const response = await authService.register({
-          email: registrationData.email.trim(),
+      if (emailVerifiedViaOtp) {
+        await authService.register({
+          email: registrationData.email.trim().toLowerCase(),
           password: registrationData.password,
           fullName: registrationData.fullName.trim(),
           role: 'Driver',
           ...buildSecurityQuestionsPayload(),
         });
-        if (response.requiresEmailVerification || response.message?.includes('verify')) {
-          setCurrentStep('email-verification');
-        } else {
-          setCurrentStep('license-scan');
-        }
-      } catch (registerErr) {
-        const errorMessage = registerErr instanceof Error ? registerErr.message : String(registerErr);
-        if (
-          errorMessage.toLowerCase().includes('already registered') ||
-          errorMessage.toLowerCase().includes('already exists')
-        ) {
-          try {
-            const existingStatus = await registrationService.checkRegistrationStatus(
-              registrationData.email.trim()
-            );
-            setRegistrationStatus(existingStatus);
-            if (existingStatus.emailVerified && !existingStatus.registrationComplete) {
-              setCurrentStep('resume-prompt');
-              setIsLoading(false);
-              return;
-            }
-            if (!existingStatus.emailVerified) {
-              setCurrentStep('email-verification');
-              setIsLoading(false);
-              return;
-            }
-          } catch {
-            setError(errorMessage);
-          }
-        } else {
-          setError(errorMessage);
-        }
+      } else {
+        await authService.registerByPhone({
+          phoneNumber: normalizePhoneForApi(registrationData.phoneNumber),
+          password: registrationData.password,
+          fullName: registrationData.fullName.trim(),
+          role: 'Driver',
+          ...buildSecurityQuestionsPayload(),
+          ...(registrationToken ? { registrationToken } : {}),
+        });
       }
+      try {
+        await biometricStorage.clearCredentials();
+      } catch {
+        // Non-fatal
+      }
+      redirectToLoginAfterSignup();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
+      const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      setError(message);
+      Alert.alert('Error', message);
     } finally {
       setIsLoading(false);
     }
@@ -387,87 +418,202 @@ export function RegistrationSteps() {
   };
 
   const handleResumeRegistration = () => {
-    setCurrentStep('license-scan');
+    Alert.alert(
+      'Continue registration',
+      'Please log in with your email and password to finish driver verification.',
+      [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
+    );
   };
 
-  const handleLicenseScanned = (imageUri: string) => {
-    setRegistrationData({
-      ...registrationData,
-      licenseImageUri: imageUri,
-    });
-    setCurrentStep('selfie-capture');
-  };
+  const renderChannelToggle = (target: 'email' | 'phone') => (
+    <TouchableOpacity
+      style={styles.channelToggle}
+      onPress={() => {
+        setError(null);
+        if (target === 'phone') {
+          setEmailVerifiedViaOtp(false);
+          setCurrentStep('enter-phone');
+        } else {
+          setRegistrationToken(null);
+          setCurrentStep('email-entry');
+        }
+      }}
+      disabled={isLoading}>
+      <Text style={[styles.channelToggleText, { color: theme.primary }]}>
+        {target === 'phone' ? 'Use phone number instead' : 'Use email instead'}
+      </Text>
+    </TouchableOpacity>
+  );
 
-  const handleSelfieCaptured = (imageUri: string) => {
-    setRegistrationData({
-      ...registrationData,
-      selfieImageUri: imageUri,
-    });
-    setCurrentStep('review');
-  };
+  const renderLoginFooter = () => (
+    <View style={styles.loginContainer}>
+      <Text style={[styles.loginText, { color: theme.textMuted }]}>
+        Already have an account?{' '}
+        <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
+          Log In
+        </Text>
+      </Text>
+    </View>
+  );
 
-  const handleCompleteRegistration = async () => {
-    setIsLoading(true);
-    setError(null);
+  // Email flow: enter email and send OTP
+  if (currentStep === 'email-entry') {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+            keyboardShouldPersistTaps="handled">
+            <View style={styles.headerContainer}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                Enter your email to receive a verification code
+              </Text>
+            </View>
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Email</Text>
+                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <Ionicons name="mail-outline" size={20} color={theme.textSecondary} style={styles.inputLeadingIcon} />
+                  <TextInput
+                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor={theme.placeholder}
+                    value={registrationData.email}
+                    onChangeText={(text) => {
+                      setRegistrationData({ ...registrationData, email: trimToMax(text, LIMITS.EMAIL) });
+                      setError(null);
+                    }}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!isLoading}
+                    maxLength={LIMITS.EMAIL}
+                  />
+                </View>
+                {registrationStatus && (
+                  <View style={styles.statusIndicator}>
+                    {registrationStatus.registrationComplete ? (
+                      <Text style={[styles.statusText, { color: theme.info }]}>
+                        Account exists. Please log in instead.
+                      </Text>
+                    ) : registrationStatus.emailVerified ? (
+                      <Text style={[styles.statusText, { color: theme.success }]}>
+                        Email verified. Log in to continue registration.
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
+              </View>
+              {error && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
+                onPress={handleSendEmailOtp}
+                disabled={isLoading}>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={theme.primaryText} />
+                ) : (
+                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Send verification code</Text>
+                )}
+              </TouchableOpacity>
+              {renderChannelToggle('phone')}
+              {renderLoginFooter()}
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
-    try {
-      // Create FormData for file upload
-      const formData = new FormData();
+  // Email flow: verify OTP
+  if (currentStep === 'email-otp') {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+            keyboardShouldPersistTaps="handled">
+            <View style={styles.headerContainer}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('email-entry')}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                We sent a 6-digit code to {registrationData.email.trim().toLowerCase()}
+              </Text>
+            </View>
+            <View style={[styles.form, styles.formCentered]}>
+              <View style={styles.otpInputWrap}>
+                <Text style={[styles.label, { color: theme.text }]}>Enter the code from your email</Text>
+                <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.otpInput, { color: theme.text }]}
+                    placeholder="000000"
+                    placeholderTextColor={theme.placeholder}
+                    value={registrationData.otp}
+                    onChangeText={(text) => {
+                      setRegistrationData({ ...registrationData, otp: text.replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH) });
+                      setError(null);
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={LIMITS.OTP_LENGTH}
+                    editable={!isLoading}
+                  />
+                </View>
+                {otpResendSecondsLeft > 0 ? (
+                  <View style={styles.timerRow}>
+                    <Ionicons name="time-outline" size={18} color={theme.textSecondary} />
+                    <Text style={[styles.timerText, { color: theme.textSecondary }]}>
+                      Resend code in {Math.floor(otpResendSecondsLeft / 60)}:{(otpResendSecondsLeft % 60).toString().padStart(2, '0')}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={handleResendEmailOtp} disabled={isLoading} style={styles.resendButton}>
+                    <Text style={[styles.resendText, { color: theme.primary }]}>Resend code</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {error && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
+                onPress={handleContinueFromEmailOtp}
+                disabled={isLoading}>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={theme.primaryText} />
+                ) : (
+                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
+                )}
+              </TouchableOpacity>
+              {renderLoginFooter()}
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
-      // Add email (required for backend to identify user)
-      formData.append('email', registrationData.email);
-
-      // Add license image
-      if (registrationData.licenseImageUri) {
-        const licenseFile = {
-          uri: registrationData.licenseImageUri,
-          type: 'image/jpeg',
-          name: 'license.jpg',
-        } as any;
-        formData.append('licenseImage', licenseFile);
-      }
-
-      // Add selfie image
-      if (registrationData.selfieImageUri) {
-        const selfieFile = {
-          uri: registrationData.selfieImageUri,
-          type: 'image/jpeg',
-          name: 'selfie.jpg',
-        } as any;
-        formData.append('selfieImage', selfieFile);
-      }
-
-
-      // Complete registration
-      const response = await apiClient.post('api/auth/register/driver/complete', {
-        body: formData,
-        requiresAuth: false,
-      });
-
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to complete registration');
-      }
-
-      Alert.alert(
-        'Registration Complete',
-        'Your driver account has been created successfully. Please login to continue.',
-        [
-          {
-            text: 'Go to Login',
-            onPress: () => router.replace('/login'),
-          },
-        ]
-      );
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to complete registration. Please try again.';
-      setError(errorMessage);
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // OTP flow: Step 1 - Enter email and send OTP
+  // Phone flow: enter phone and send SMS OTP
   if (currentStep === 'enter-phone') {
     return (
       <KeyboardAvoidingView
@@ -479,7 +625,9 @@ export function RegistrationSteps() {
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled">
             <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
@@ -551,14 +699,8 @@ export function RegistrationSteps() {
                   </Text>
                 )}
               </TouchableOpacity>
-              <View style={styles.loginContainer}>
-                <Text style={[styles.loginText, { color: theme.textMuted }]}>
-                  Already have an account?{' '}
-                  <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
-                    Log In
-                  </Text>
-                </Text>
-              </View>
+              {renderChannelToggle('email')}
+              {renderLoginFooter()}
             </View>
           </ScrollView>
         </View>
@@ -566,7 +708,7 @@ export function RegistrationSteps() {
     );
   }
 
-  // OTP flow: Step 2 – Code only (email already in state)
+  // Phone flow: verify SMS OTP
   if (currentStep === 'enter-otp') {
     return (
       <KeyboardAvoidingView
@@ -637,14 +779,7 @@ export function RegistrationSteps() {
                   <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
                 )}
               </TouchableOpacity>
-              <View style={styles.loginContainer}>
-                <Text style={[styles.loginText, { color: theme.textMuted }]}>
-                  Already have an account?{' '}
-                  <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
-                    Log In
-                  </Text>
-                </Text>
-              </View>
+              {renderLoginFooter()}
             </View>
           </ScrollView>
         </View>
@@ -748,7 +883,9 @@ export function RegistrationSteps() {
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled">
             <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-otp')}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => setCurrentStep(emailVerifiedViaOtp ? 'email-otp' : 'enter-otp')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create your account</Text>
@@ -847,14 +984,7 @@ export function RegistrationSteps() {
                 disabled={isLoading}>
                 <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
               </TouchableOpacity>
-              <View style={styles.loginContainer}>
-                <Text style={[styles.loginText, { color: theme.textMuted }]}>
-                  Already have an account?{' '}
-                  <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
-                    Log In
-                  </Text>
-                </Text>
-              </View>
+              {renderLoginFooter()}
             </View>
           </ScrollView>
         </View>
@@ -862,7 +992,7 @@ export function RegistrationSteps() {
     );
   }
 
-  // OTP flow: Step 3b – Security questions only
+  // Step 2: Security questions
   if (currentStep === 'enter-security-questions') {
     return (
       <>
@@ -906,14 +1036,7 @@ export function RegistrationSteps() {
                     <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Create account</Text>
                   )}
                 </TouchableOpacity>
-                <View style={styles.loginContainer}>
-                  <Text style={[styles.loginText, { color: theme.textMuted }]}>
-                    Already have an account?{' '}
-                    <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
-                      Log In
-                    </Text>
-                  </Text>
-                </View>
+                {renderLoginFooter()}
               </View>
             </ScrollView>
           </View>
@@ -922,13 +1045,12 @@ export function RegistrationSteps() {
     );
   }
 
-  // Render current step
   if (currentStep === 'email-verification') {
     return (
       <EmailVerificationScreen
         email={registrationData.email}
         onVerified={handleEmailVerified}
-        onBack={() => setCurrentStep('basic-info')}
+        onBack={() => setCurrentStep('email-entry')}
       />
     );
   }
@@ -938,285 +1060,12 @@ export function RegistrationSteps() {
       <ResumeRegistrationScreen
         email={registrationData.email}
         onContinue={handleResumeRegistration}
-        onBack={() => setCurrentStep('basic-info')}
+        onBack={() => setCurrentStep('email-entry')}
       />
     );
   }
 
-  if (currentStep === 'license-scan') {
-    return (
-      <DriverLicenseScanner
-        onLicenseScanned={handleLicenseScanned}
-        onBack={() => setCurrentStep('basic-info')}
-      />
-    );
-  }
-
-  if (currentStep === 'selfie-capture') {
-    return (
-      <SelfieCapture
-        onSelfieCaptured={handleSelfieCaptured}
-        onBack={() => setCurrentStep('license-scan')}
-      />
-    );
-  }
-
-  if (currentStep === 'review') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            showsVerticalScrollIndicator={false}>
-            {/* Header */}
-            <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('selfie-capture')}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Review & Submit</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Please review your information before submitting
-              </Text>
-            </View>
-
-            {/* Review Content */}
-            <View style={styles.reviewContainer}>
-              <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>Personal Information</Text>
-                <View style={styles.reviewItem}>
-                  <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Full Name</Text>
-                  <Text style={[styles.reviewValue, { color: theme.text }]}>{registrationData.fullName}</Text>
-                </View>
-                <View style={styles.reviewItem}>
-                  <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Email</Text>
-                  <Text style={[styles.reviewValue, { color: theme.text }]}>{registrationData.email}</Text>
-                </View>
-              </View>
-
-              {registrationData.licenseImageUri && (
-                <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>License Photo</Text>
-                  <Image source={{ uri: registrationData.licenseImageUri }} style={styles.reviewImage} />
-                </View>
-              )}
-
-              {registrationData.selfieImageUri && (
-                <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>Selfie</Text>
-                  <Image source={{ uri: registrationData.selfieImageUri }} style={styles.reviewImage} />
-                </View>
-              )}
-            </View>
-
-            {/* Error Message */}
-            {error && (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitButton, isLoading && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
-              onPress={handleCompleteRegistration}
-              disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator size="small" color={theme.primaryText} />
-              ) : (
-                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Submit Registration</Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Basic Info Step (default)
-  return (
-    <>
-      {questionPickerModal}
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled">
-            {/* Header */}
-            <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Sign up to start accepting bookings
-              </Text>
-            </View>
-
-            {/* Form */}
-            <View style={styles.form}>
-            {/* Full Name */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.text }]}>Full Name</Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Enter your full name"
-                  placeholderTextColor={theme.placeholder}
-                  value={registrationData.fullName}
-                  onChangeText={(text) => {
-                    setRegistrationData({ ...registrationData, fullName: text.slice(0, LIMITS.FULL_NAME) });
-                    setError(null);
-                  }}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  editable={!isLoading}
-                  maxLength={LIMITS.FULL_NAME}
-                />
-              </View>
-            </View>
-
-            {/* Email */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.text }]}>Email Address</Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Enter your email"
-                  placeholderTextColor={theme.placeholder}
-                  value={registrationData.email}
-                  onChangeText={(text) => {
-                    setRegistrationData({ ...registrationData, email: trimToMax(text, LIMITS.EMAIL) });
-                    setError(null);
-                  }}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isLoading}
-                  maxLength={LIMITS.EMAIL}
-                />
-              </View>
-              {registrationStatus && (
-                <View style={styles.statusIndicator}>
-                  {registrationStatus.registrationComplete ? (
-                    <Text style={[styles.statusText, { color: theme.info }]}>
-                      Account exists. Please login instead.
-                    </Text>
-                  ) : registrationStatus.emailVerified ? (
-                    <Text style={[styles.statusText, { color: theme.success }]}>
-                      Email verified. You can continue registration.
-                    </Text>
-                  ) : (
-                    <Text style={[styles.statusText, { color: theme.warning }]}>
-                      Email not verified. Verification email will be sent.
-                    </Text>
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/* Password */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.text }]}>Password</Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Enter your password"
-                  placeholderTextColor={theme.placeholder}
-                  value={registrationData.password}
-                  onChangeText={(text) => {
-                    setRegistrationData({ ...registrationData, password: text });
-                    setError(null);
-                  }}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isLoading}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.visibilityButton}>
-                  <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color={theme.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Confirm Password */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.text }]}>Confirm Password</Text>
-              <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <TextInput
-                  style={[styles.input, { color: theme.text }]}
-                  placeholder="Confirm your password"
-                  placeholderTextColor={theme.placeholder}
-                  value={confirmPassword}
-                  onChangeText={(text) => {
-                    setConfirmPassword(text);
-                    setError(null);
-                  }}
-                  secureTextEntry={!showConfirmPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isLoading}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={styles.visibilityButton}>
-                  <Ionicons
-                    name={showConfirmPassword ? 'eye-off' : 'eye'}
-                    size={24}
-                    color={theme.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {renderSecurityQuestionsBlock(true)}
-
-            {/* Error Message */}
-            {error && (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                isLoading && styles.submitButtonDisabled,
-                { backgroundColor: theme.primary },
-              ]}
-              onPress={handleSubmitBasicInfo}
-              disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator size="small" color={theme.primaryText} />
-              ) : (
-                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Login Link */}
-            <View style={styles.loginContainer}>
-              <Text style={[styles.loginText, { color: theme.textMuted }]}>
-                Already have an account?{' '}
-                <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
-                  Log In
-                </Text>
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
-    </>
-  );
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -1296,6 +1145,23 @@ const styles = StyleSheet.create({
   },
   inputLarge: {
     fontSize: 19,
+  },
+  phoneInputContainer: {
+    gap: 8,
+  },
+  countryCodeBadge: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginRight: 4,
+  },
+  countryCodeText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  phoneInput: {
+    flex: 1,
   },
   otpInputWrap: {
     width: '100%',
@@ -1408,37 +1274,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
-  reviewContainer: {
-    gap: 16,
-    marginTop: 24,
+  channelToggle: {
+    alignItems: 'center',
+    paddingTop: 16,
   },
-  reviewSection: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  reviewItem: {
-    marginBottom: 12,
-  },
-  reviewLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  reviewValue: {
-    fontSize: 16,
+  channelToggleText: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  reviewImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginTop: 8,
+  inputLeadingIcon: {
+    marginRight: 8,
   },
   securityQuestionsSection: {
     marginTop: 4,

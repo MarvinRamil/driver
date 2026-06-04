@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
  * Bookings screen
  * Matches prepared design with timeline view for operator drivers
  */
-type TabType = 'INCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+type TabType = 'INCOMING' | 'ONGOING';
 
 export default function BookingsScreen() {
   const insets = useSafeAreaInsets();
@@ -80,19 +80,6 @@ export default function BookingsScreen() {
           status === 'InProgress';
       });
     }
-    if (activeTab === 'COMPLETED') {
-      // Show completed bookings
-      return allBookings.filter((booking) => {
-        const status = booking.status;
-        return status === 'Completed' || status === 'Delivered';
-      });
-    }
-    if (activeTab === 'CANCELLED') {
-      // Show cancelled bookings
-      return allBookings.filter((booking) => {
-        return booking.status === 'Cancelled';
-      });
-    }
     return [];
   }, [activeTab, allBookings]);
 
@@ -134,7 +121,7 @@ export default function BookingsScreen() {
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       {/* Full-Width Header Tabs */}
       <View style={[styles.headerTabsContainer, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-        {(['INCOMING', 'ONGOING', 'COMPLETED', 'CANCELLED'] as TabType[]).map((tab) => (
+        {(['INCOMING', 'ONGOING'] as TabType[]).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[
@@ -324,11 +311,7 @@ export default function BookingsScreen() {
             <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
               {activeTab === 'ONGOING'
                 ? 'No ongoing bookings'
-                : activeTab === 'COMPLETED'
-                  ? 'No completed bookings'
-                  : activeTab === 'CANCELLED'
-                    ? 'No cancelled bookings'
-                    : 'No bookings'}
+                : 'No bookings'}
             </ThemedText>
             <ThemedText style={[{ color: theme.textMuted, fontSize: 14, marginTop: 8 }]}>
               Pull down to refresh
