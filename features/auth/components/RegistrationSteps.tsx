@@ -470,7 +470,7 @@ export function RegistrationSteps() {
             <View style={styles.headerContainer}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}>
+                onPress={() => (router.canGoBack() ? router.back() : router.replace('/login'))}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
@@ -627,7 +627,7 @@ export function RegistrationSteps() {
             <View style={styles.headerContainer}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => (router.canGoBack() ? router.back() : router.replace('/welcome'))}>
+                onPress={() => (router.canGoBack() ? router.back() : router.replace('/login'))}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>

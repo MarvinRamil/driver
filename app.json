@@ -102,7 +102,9 @@
           "cameraPermission": "Allow BEE DRIVER APP to access your camera to scan your driver's license and take your selfie."
         }
       ],
-      "@rnmapbox/maps"
+      "@rnmapbox/maps",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

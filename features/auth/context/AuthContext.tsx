@@ -12,6 +12,7 @@ import { storeTempCredentialsForPrompt, clearTempCredentialsForPrompt } from "@/
 import { biometricStorage } from "@/shared/services/biometricStorage";
 import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidation";
 import { locationTrackingService } from "@/features/driver/services/locationTrackingService";
+import { setLastLoginUser } from "@/shared/services/lastLoginStorage";
 import type { User } from "../types";
 
 /**
@@ -102,7 +103,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
         
         setUser(currentUser);
-        
+
+        if (currentUser) {
+          await setLastLoginUser({
+            email: currentUser.email,
+            fullName: currentUser.fullName,
+          });
+        }
+
         // Initialize SignalR connection if user is authenticated
         if (currentUser) {
           try {
@@ -170,7 +178,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Set user from login response (only if role is allowed)
       setUser(loginResponse.user);
-      
+      await setLastLoginUser({
+        email: loginResponse.user.email,
+        fullName: loginResponse.user.fullName,
+      });
+
       // Store temporary credentials for biometric prompt ONLY if biometric is not already enabled
       // (If user already has biometric enabled, they don't need the "Enable biometric?" prompt)
       try {
