@@ -199,15 +199,6 @@ export default function LoginScreen() {
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <View style={[styles.content, { paddingTop: insets.top }]}>
-        <View style={[styles.backRow, { paddingHorizontal: 16, paddingBottom: 8 }]}>
-          <TouchableOpacity
-            onPress={() => router.replace("/welcome")}
-            style={styles.backButton}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="arrow-back" size={24} color={theme.text} />
-          </TouchableOpacity>
-        </View>
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
@@ -359,33 +350,16 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Create account */}
-            <View style={styles.registerButtonContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.registerButton,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
-                ]}
-                onPress={() => router.push("/signup")}
-                disabled={isLoading}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.registerButtonText, { color: theme.text }]}>
-                  Create Account
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.signUpContainer}>
-              <Text style={[styles.signUpText, { color: theme.textSecondary }]}>
-                Don&apos;t have an account?{" "}
-                <Text
-                  style={styles.signUpLink}
-                  onPress={() => !isLoading && router.push("/signup")}
-                >
+            {/* Sign up link */}
+            <View style={styles.signupContainer}>
+              <Text style={[styles.signupPrompt, { color: theme.textSecondary }]}>
+                Don't have an account?{" "}
+              </Text>
+              <TouchableOpacity onPress={() => router.push("/signup")}>
+                <Text style={[styles.signupLink, { color: theme.primary }]}>
                   Sign up
                 </Text>
-              </Text>
+              </TouchableOpacity>
             </View>
 
           </View>
@@ -408,16 +382,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  backRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
   },
   scrollContent: {
     flexGrow: 1,
@@ -535,38 +499,26 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
-  registerButtonContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    width: "100%",
-    alignItems: "center",
-  },
-  registerButton: {
-    width: "100%",
-    maxWidth: 480,
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1.5,
+  signupContainer: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-  },
-  registerButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  signUpContainer: {
-    alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 24,
+    paddingBottom: 8,
+    gap: 6,
   },
-  signUpText: {
-    fontSize: 14,
+  signupPrompt: {
+    fontSize: 18,
+    fontWeight: "500",
+    lineHeight: 26,
   },
-  signUpLink: {
-    fontSize: 14,
+  signupLink: {
+    fontSize: 19,
     fontWeight: "700",
-    color: BeeColors.yellow[600],
-    textDecorationLine: "underline",
+    lineHeight: 26,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   loginButton: {
     width: "100%",
