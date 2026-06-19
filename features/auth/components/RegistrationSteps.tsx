@@ -24,6 +24,17 @@ import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { ResumeRegistrationScreen } from './ResumeRegistrationScreen';
 import { biometricStorage } from '@/shared/services/biometricStorage';
 import { LIMITS, PATTERNS, trimToMax } from '@/shared/constants/validation';
+import { useAuth as useClerkAuth, useSignUp } from '@clerk/clerk-expo';
+
+/** Pull a readable message out of a Clerk API error (or any error). */
+function extractClerkError(err: unknown): string {
+  if (err && typeof err === 'object' && 'errors' in err && Array.isArray((err as { errors?: unknown }).errors)) {
+    const first = (err as { errors: { longMessage?: string; message?: string }[] }).errors[0];
+    return first?.longMessage || first?.message || 'Something went wrong. Please try again.';
+  }
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong. Please try again.';
+}
 
 type RegistrationStep =
   | 'email-entry'
@@ -53,6 +64,14 @@ export function RegistrationSteps() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
+
+  // Clerk: email registration now creates the account in Clerk (email path only).
+  const { isLoaded: signUpLoaded, signUp, setActive } = useSignUp();
+  const { isSignedIn: clerkSignedIn, signOut: clerkSignOut } = useClerkAuth();
+  /** Which channel the user is registering with — email goes through Clerk, phone stays legacy. */
+  const [channel, setChannel] = useState<'email' | 'phone'>('email');
+  /** True once the email code is verified and the session is being activated (email path). */
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const [currentStep, setCurrentStep] = useState<RegistrationStep>('email-entry');
   const [emailVerifiedViaOtp, setEmailVerifiedViaOtp] = useState(false);
@@ -211,79 +230,118 @@ export function RegistrationSteps() {
     );
   };
 
-  /** Email flow: send OTP to email */
+  /**
+   * Email flow (Clerk): validate email and continue to account details. The
+   * Clerk account is created (and the code sent) AFTER the password is entered,
+   * because Clerk needs email+password together for signUp.create().
+   */
   const handleSendEmailOtp = async () => {
     const email = registrationData.email.trim().toLowerCase();
     if (!email || !isValidEmail(email)) {
       setError('Please enter a valid email address');
       return;
     }
-    setIsLoading(true);
     setError(null);
     setEmailVerifiedViaOtp(false);
+    setChannel('email');
+    setCurrentStep('enter-details');
+  };
+
+  /**
+   * Email flow (Clerk): after account details, create the Clerk sign-up and send
+   * the email verification code, then go to the OTP step.
+   */
+  const handleStartClerkSignUp = async () => {
+    const validationError = validateBasicDetailsForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (!signUpLoaded || !signUp) {
+      setError('Sign-up is not ready yet. Please try again in a moment.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
     try {
-      let status: RegistrationStatus | null = null;
-      try {
-        status = await registrationService.checkRegistrationStatus(email);
-        setRegistrationStatus(status);
-      } catch {
-        // proceed to send OTP
+      // Clerk is single-session: clear any leftover session first.
+      if (clerkSignedIn) {
+        await clerkSignOut();
       }
-      if (status?.registrationComplete) {
-        Alert.alert(
-          'Account exists',
-          'This email is already registered. Please log in instead.',
-          [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
-        );
-        return;
-      }
-      if (status?.emailVerified && !status.registrationComplete && status.canResume) {
-        setCurrentStep('resume-prompt');
-        return;
-      }
-      await authService.sendOtp({ email });
+      const email = registrationData.email.trim().toLowerCase();
+      const name = registrationData.fullName.trim();
+      const sp = name.indexOf(' ');
+      const firstName = sp === -1 ? name : name.slice(0, sp);
+      const lastName = sp === -1 ? undefined : name.slice(sp + 1).trim() || undefined;
+      await signUp.create({
+        emailAddress: email,
+        password: registrationData.password,
+        firstName,
+        lastName,
+        legalAccepted: true,
+        // Role is conveyed by the driver app's "X-Bee-Role: driver" header on
+        // /api/auth/me (not Clerk metadata). Phone rides in metadata for the webhook.
+        unsafeMetadata: {
+          phoneNumber: registrationData.phoneNumber.trim() || null,
+        },
+      });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
       setCurrentStep('email-otp');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send verification code. Please try again.');
+      const message = extractClerkError(err);
+      setError(message);
+      Alert.alert('Error', message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  /** Email flow: resend OTP */
+  /** Email flow (Clerk): resend the email verification code */
   const handleResendEmailOtp = async () => {
-    const email = registrationData.email.trim().toLowerCase();
-    if (!email) return;
+    if (!signUpLoaded || !signUp) return;
     setIsLoading(true);
     setError(null);
     try {
-      await authService.resendOtp(email);
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
       Alert.alert('Code sent', 'A new verification code has been sent to your email.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to resend code. Please try again.');
+      setError(extractClerkError(err));
     } finally {
       setIsLoading(false);
     }
   };
 
-  /** Email flow: verify OTP then continue to account details */
+  /**
+   * Email flow (Clerk): verify the email code and activate the session. On
+   * success the root guard redirects the driver into post-login onboarding
+   * (liveness/documents); the backend profile is created by the Clerk webhook.
+   */
   const handleContinueFromEmailOtp = async () => {
     setError(null);
-    const email = registrationData.email.trim().toLowerCase();
     if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
       setError('Please enter the 6-digit code sent to your email');
       Alert.alert('Invalid code', 'Please enter the full 6-digit code sent to your email.');
       return;
     }
+    if (!signUpLoaded || !signUp) {
+      setError('Sign-up is not ready yet. Please try again in a moment.');
+      return;
+    }
     setIsLoading(true);
     try {
-      await authService.verifyOtp({ email, otp: registrationData.otp.trim() });
-      setEmailVerifiedViaOtp(true);
-      setCurrentStep('enter-details');
+      const attempt = await signUp.attemptEmailAddressVerification({ code: registrationData.otp.trim() });
+      if (attempt.status === 'complete' && attempt.createdSessionId) {
+        setEmailVerifiedViaOtp(true);
+        setIsSigningIn(true); // keep this on; screen stays here until the root guard redirects
+        await setActive({ session: attempt.createdSessionId });
+        // Signed in — root guard takes over (onboarding/liveness).
+      } else {
+        setError('Verification could not be completed. Please try again.');
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Invalid or expired code. Please try again.';
+      const message = extractClerkError(err);
       setError(message);
       Alert.alert('Invalid code', message);
     } finally {
@@ -301,6 +359,7 @@ export function RegistrationSteps() {
     setIsLoading(true);
     setError(null);
     setEmailVerifiedViaOtp(false);
+    setChannel('phone');
     try {
       await authService.sendSmsOtp({ phoneNumber: phone });
       setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
@@ -550,7 +609,7 @@ export function RegistrationSteps() {
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
             keyboardShouldPersistTaps="handled">
             <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('email-entry')}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-details')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
@@ -596,11 +655,16 @@ export function RegistrationSteps() {
                 </View>
               )}
               <TouchableOpacity
-                style={[styles.submitButton, isLoading && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
+                style={[styles.submitButton, (isLoading || isSigningIn) && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
                 onPress={handleContinueFromEmailOtp}
-                disabled={isLoading}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.primaryText} />
+                disabled={isLoading || isSigningIn}>
+                {isLoading || isSigningIn ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator size="small" color={theme.primaryText} />
+                    {isSigningIn && (
+                      <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Signing you in…</Text>
+                    )}
+                  </View>
                 ) : (
                   <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
                 )}
@@ -885,7 +949,7 @@ export function RegistrationSteps() {
             <View style={styles.headerContainer}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => setCurrentStep(emailVerifiedViaOtp ? 'email-otp' : 'enter-otp')}>
+                onPress={() => setCurrentStep(channel === 'email' ? 'email-entry' : 'enter-otp')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Create your account</Text>
@@ -973,6 +1037,12 @@ export function RegistrationSteps() {
                   { backgroundColor: theme.primary },
                 ]}
                 onPress={() => {
+                  // Email path → Clerk sign-up + email code. Phone path → legacy
+                  // security questions + registerByPhone (unchanged).
+                  if (channel === 'email') {
+                    handleStartClerkSignUp();
+                    return;
+                  }
                   const validationError = validateBasicDetailsForm();
                   if (validationError) {
                     setError(validationError);

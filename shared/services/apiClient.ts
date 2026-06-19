@@ -34,11 +34,23 @@ class ApiClient {
   private config: ApiClientConfig;
 
   /**
+   * Optional Clerk token provider. When Clerk is enabled, a hook wires this to
+   * Clerk's getToken(); when null (no Clerk key), the client falls back to the
+   * legacy tokenStorage path, so behaviour is unchanged until Clerk is turned on.
+   */
+  private clerkTokenProvider: (() => Promise<string | null>) | null = null;
+
+  /**
    * Create a new API client instance
    * @param config - API client configuration
    */
   constructor(config: Partial<ApiClientConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /** Register/clear the Clerk token provider (called from a React effect). */
+  setClerkTokenProvider(provider: (() => Promise<string | null>) | null): void {
+    this.clerkTokenProvider = provider;
   }
 
   /**
@@ -93,13 +105,27 @@ class ApiClient {
    */
   private async getHeaders(config: RequestConfig = {}, endpoint?: string): Promise<HeadersInit> {
     const headers: Record<string, string> = {
+      // Identifies this as the driver app so the backend provisions a new user
+      // (just-in-time on /api/auth/me) with the Driver role. Absent → Customer.
+      'X-Bee-Role': 'driver',
       ...this.config.defaultHeaders,
       ...config.headers,
     };
 
     // Automatically inject token if auth is required (default: true)
     if (config.requiresAuth !== false) {
-      let token = await tokenStorage.getAccessToken();
+      // Prefer a Clerk-issued token when Clerk is enabled; otherwise use legacy storage.
+      let token: string | null = null;
+      if (this.clerkTokenProvider) {
+        try {
+          token = await this.clerkTokenProvider();
+        } catch (err) {
+          if (__DEV__) console.warn('[API] Clerk token provider failed, falling back:', err);
+        }
+      }
+      if (!token) {
+        token = await tokenStorage.getAccessToken();
+      }
       // One retry after short delay for cold start (e.g. app opened from push - storage may not be ready yet)
       if (!token) {
         await new Promise((r) => setTimeout(r, 350));

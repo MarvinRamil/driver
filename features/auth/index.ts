@@ -10,6 +10,12 @@ export { AuthProvider, useAuthContext } from './context/AuthContext';
 // Export hooks
 export { useAuth } from './hooks/useAuth';
 export { useLogin } from './hooks/useLogin';
+// Clerk-native password reset (email-code). Replaces legacy backend OTP + security-question recovery.
+export { useClerkPasswordReset } from './hooks/useClerkPasswordReset';
+export type {
+  ClerkPasswordResetStep,
+  UseClerkPasswordResetReturn
+} from './hooks/useClerkPasswordReset';
 
 // Export services
 export { authService } from './services/authService';
