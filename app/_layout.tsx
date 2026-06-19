@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/features/auth';
 import { isAllowedRole } from '@/features/auth/utils/roleValidation';
+import { AppClerkProvider } from '@/shared/providers/AppClerkProvider';
 import { DriverStatusProvider } from '@/features/driver/context/DriverStatusContext';
 import { useColorScheme } from '@/shared/hooks/use-color-scheme';
 import { useNotifications } from '@/shared/hooks/useNotifications';
@@ -144,9 +145,11 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <RootLayoutNav />
-    </SafeAreaProvider>
+    <AppClerkProvider>
+      <SafeAreaProvider>
+        <RootLayoutNav />
+      </SafeAreaProvider>
+    </AppClerkProvider>
   );
 }
 

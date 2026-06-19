@@ -14,14 +14,17 @@
     "update:preview": "eas update --branch preview --message \"Preview update\""
   },
   "dependencies": {
+    "@clerk/clerk-expo": "^2.19.31",
     "@expo/vector-icons": "^15.0.3",
     "@microsoft/signalr": "^10.0.0",
     "@react-navigation/native": "^7.1.8",
     "@rnmapbox/maps": "^10.2.10",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.35",
+    "expo-auth-session": "~7.0.11",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.12",
+    "expo-crypto": "~15.0.9",
     "expo-device": "~8.0.10",
     "expo-font": "~14.0.12",
     "expo-image": "^3.0.11",
