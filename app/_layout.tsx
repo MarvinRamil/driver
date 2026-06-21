@@ -4,7 +4,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,11 +13,15 @@ import { AuthProvider, useAuth } from '@/features/auth';
 import { isAllowedRole } from '@/features/auth/utils/roleValidation';
 import { AppClerkProvider } from '@/shared/providers/AppClerkProvider';
 import { DriverStatusProvider } from '@/features/driver/context/DriverStatusContext';
+import { AnimatedSplash } from '@/shared/components/AnimatedSplash';
 import { useColorScheme } from '@/shared/hooks/use-color-scheme';
 import { useNotifications } from '@/shared/hooks/useNotifications';
 import { useOTAUpdates } from '@/shared/hooks/useOTAUpdates';
 import { BiometricPromptManager } from '@/shared/components/BiometricPromptManager';
 import { LoginAdkitPopup } from '@/shared/components/LoginAdkitPopup';
+
+// Import images as constants for reliable bundling in release builds
+const splashIcon = require('../assets/images/splash-icon.png');
 
 // Initialize Mapbox (required before any map renders)
 import Mapbox from '@rnmapbox/maps';
@@ -35,6 +39,9 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// Cross-fade the native (OS) splash into the animated splash instead of a hard
+// cut, for a smoother handoff. `fade` is iOS-only; Android still cuts.
+SplashScreen.setOptions({ fade: true, duration: 200 });
 
 function hideSplash() {
   SplashScreen.hideAsync().catch(() => {});
@@ -138,18 +145,40 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
+  // The native splash is hidden by AnimatedSplash (inside SafeAreaProvider) once
+  // it has actually painted — hiding it eagerly here would expose a white flash
+  // during SafeAreaProvider's first-frame inset measurement. This timer is only
+  // a safety net in case the splash component never mounts.
   useEffect(() => {
-    hideSplash();
-    const timers = [50, 250, 1000].map((ms) => setTimeout(hideSplash, ms));
-    return () => timers.forEach(clearTimeout);
+    const fallback = setTimeout(hideSplash, 3000);
+    return () => clearTimeout(fallback);
   }, []);
 
   return (
     <AppClerkProvider>
-      <SafeAreaProvider>
+      <SafeAreaProvider style={{ flex: 1, backgroundColor: '#ffcd36' }}>
         <RootLayoutNav />
       </SafeAreaProvider>
     </AppClerkProvider>
+  );
+}
+
+/**
+ * Animated in-app splash overlay. Lives inside AuthProvider so it can loop
+ * until the auth session has finished resolving, then fades itself out.
+ */
+function SplashGate() {
+  const { isLoading } = useAuth();
+  const [show, setShow] = useState(true);
+
+  if (!show) return null;
+
+  return (
+    <AnimatedSplash
+      logo={splashIcon}
+      appReady={!isLoading}
+      onHidden={() => setShow(false)}
+    />
   );
 }
 
@@ -184,6 +213,7 @@ function RootLayoutNav() {
             />
           </Stack>
           <StatusBar style="light" />
+          <SplashGate />
         </DriverStatusProvider>
       </AuthProvider>
     </ThemeProvider>

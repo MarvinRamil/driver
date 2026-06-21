@@ -7,12 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": "beedriversapp",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#ffcd36",
     "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash-blank.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffcd36",
       "imageWidth": 120
@@ -33,6 +34,7 @@
     },
     "android": {
       "userInterfaceStyle": "light",
+      "backgroundColor": "#ffcd36",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FFD700"
@@ -67,7 +69,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-blank.png",
           "backgroundColor": "#ffcd36",
           "resizeMode": "contain",
           "android": {
