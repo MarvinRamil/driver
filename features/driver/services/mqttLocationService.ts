@@ -1,5 +1,6 @@
 import mqtt, { MqttClient } from 'mqtt';
 import * as Device from 'expo-device';
+import { configService } from '@/shared/services/configService';
 
 // Polyfills for React Native / Hermes environment where these might be missing
 if (typeof setImmediate === 'undefined') {
@@ -65,17 +66,18 @@ class MqttLocationService {
    */
   async fetchCredentials(): Promise<MqttCredentials> {
     try {
-      console.log('[MQTT] Loading credentials from environment variables');
+      console.log('[MQTT] Loading credentials from config (Vault, with env fallback)');
 
-      // Use env variables but DEFAULT to WS/80 (plain WebSocket)
-      // This ensures that if env vars are missing (OTA issue), it still connects
-      const host = process.env.EXPO_PUBLIC_MQTT_HOST || 'mqtt.ilocosscript.live';
-      let port = parseInt(process.env.EXPO_PUBLIC_MQTT_PORT || '80', 10);
+      // Values resolve from Vault (configService) and fall back to EXPO_PUBLIC_MQTT_*
+      // env vars, then to the hardcoded defaults below — so MQTT connects whether or
+      // not the env vars are present in the build.
+      const host = configService.getMqttHost() || 'mqtt.ilocosscript.live';
+      let port = parseInt(configService.getMqttPort() || '80', 10);
       const explicitAppEnv = (process.env.EXPO_PUBLIC_APP_ENV || '').trim().toLowerCase();
       const inferredAppEnv = __DEV__ ? 'dev' : 'staging';
       const appEnv = explicitAppEnv || inferredAppEnv;
       // Default to WS (false) unless explicitly set to 'true' or '1'
-      const sslEnv = process.env.EXPO_PUBLIC_MQTT_USE_SSL;
+      const sslEnv = configService.getMqttUseSsl();
       const useSsl = (sslEnv === 'true' || sslEnv === '1') ? true : false;
 
       // WSS must use port 443; port 80 is for plain WS (e.g. behind Cloudflare tunnel)
@@ -84,8 +86,8 @@ class MqttLocationService {
         port = 443;
       }
 
-      const username = process.env.EXPO_PUBLIC_MQTT_USERNAME || 'ilocosscript';
-      const password = process.env.EXPO_PUBLIC_MQTT_PASSWORD || 'passwordZxc123AbC';
+      const username = configService.getMqttUsername() || 'ilocosscript';
+      const password = configService.getMqttPassword() || 'passwordZxc123AbC';
       const normalizedAppEnv =
         appEnv === 'production' || appEnv === 'prod'
           ? 'prod'
@@ -96,20 +98,20 @@ class MqttLocationService {
         normalizedAppEnv === 'prod'
           ? 'beelogistics/drivers'
           : `${normalizedAppEnv}/beelogistics/drivers`;
-      const topicPrefix = process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || defaultTopicPrefix;
-      const path = process.env.EXPO_PUBLIC_MQTT_PATH || '/mqtt';
+      const topicPrefix = configService.getMqttTopicPrefix() || defaultTopicPrefix;
+      const path = configService.getMqttPath() || '/mqtt';
 
       // Build WebSocket URL for logging (before final protocol determination)
       const protocolForLog = useSsl ? 'wss' : 'ws';
       const safePathForLog = path.startsWith('/') ? path : `/${path}`;
       const wsUrlForLog = `${protocolForLog}://${host}:${port}${safePathForLog}`;
 
-      console.log('[MQTT] 🔍 Environment Variable Diagnostics:', {
-        'EXPO_PUBLIC_MQTT_HOST': process.env.EXPO_PUBLIC_MQTT_HOST || '(not set)',
-        'EXPO_PUBLIC_MQTT_PORT': process.env.EXPO_PUBLIC_MQTT_PORT || '(not set)',
-        'EXPO_PUBLIC_MQTT_USE_SSL': process.env.EXPO_PUBLIC_MQTT_USE_SSL || '(not set)',
-        'EXPO_PUBLIC_MQTT_USERNAME': process.env.EXPO_PUBLIC_MQTT_USERNAME || '(not set)',
-        'EXPO_PUBLIC_MQTT_TOPIC_PREFIX': process.env.EXPO_PUBLIC_MQTT_TOPIC_PREFIX || '(not set)',
+      console.log('[MQTT] 🔍 Resolved Config Diagnostics (Vault → env → default):', {
+        'MQTT_HOST': configService.getMqttHost() || '(not set)',
+        'MQTT_PORT': configService.getMqttPort() || '(not set)',
+        'MQTT_USE_SSL': configService.getMqttUseSsl() || '(not set)',
+        'MQTT_USERNAME': configService.getMqttUsername() || '(not set)',
+        'MQTT_TOPIC_PREFIX': configService.getMqttTopicPrefix() || '(not set)',
         'sslEnv (raw)': sslEnv === undefined ? 'undefined' : `"${sslEnv}"`,
         'sslEnv type': typeof sslEnv,
         'sslEnv length': sslEnv?.length ?? 'N/A',

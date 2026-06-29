@@ -15,6 +15,7 @@ import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidatio
 import { locationTrackingService } from "@/features/driver/services/locationTrackingService";
 import { isClerkEnabled } from "@/shared/providers/AppClerkProvider";
 import { setLastLoginUser } from "@/shared/services/lastLoginStorage";
+import { configService } from "@/shared/services/configService";
 import type { User } from "../types";
 
 /**
@@ -121,6 +122,7 @@ function LegacyAuthProvider({ children }: AuthProviderProps) {
             email: currentUser.email,
             fullName: currentUser.fullName,
           });
+          await configService.loadRemoteConfig();
         }
 
         // Initialize SignalR connection if user is authenticated
@@ -194,6 +196,7 @@ function LegacyAuthProvider({ children }: AuthProviderProps) {
         email: loginResponse.user.email,
         fullName: loginResponse.user.fullName,
       });
+      await configService.loadRemoteConfig();
 
       // Store temporary credentials for biometric prompt ONLY if biometric is not already enabled
       // (If user already has biometric enabled, they don't need the "Enable biometric?" prompt)
@@ -270,6 +273,7 @@ function LegacyAuthProvider({ children }: AuthProviderProps) {
         console.warn("Failed to clear biometric credentials on logout:", biometricErr);
       }
 
+      await configService.clearRemoteConfig();
       setUser(null);
     } catch (err) {
       // Even if logout fails, clear local state
@@ -349,6 +353,7 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
     }
     setUser(currentUser);
     await setLastLoginUser({ email: currentUser.email, fullName: currentUser.fullName });
+    await configService.loadRemoteConfig();
     try {
       await chatSignalRService.start();
     } catch (signalRErr) {
@@ -450,6 +455,7 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
       } catch (biometricErr) {
         console.warn("Failed to clear biometric credentials on logout:", biometricErr);
       }
+      await configService.clearRemoteConfig();
       setUser(null);
     } catch (err) {
       setUser(null);

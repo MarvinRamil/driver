@@ -23,12 +23,18 @@ import { LoginAdkitPopup } from '@/shared/components/LoginAdkitPopup';
 // Import images as constants for reliable bundling in release builds
 const splashIcon = require('../assets/images/splash-icon.png');
 
-// Initialize Mapbox (required before any map renders)
+// Set the Mapbox access token synchronously at module load (required before any map
+// renders). Uses the build-time env token as the bootstrap; configService then hydrates
+// the cached/Vault value and re-applies it (here via initialize(), and on login via
+// loadRemoteConfig()) so Vault overrides the env value at runtime.
 import Mapbox from '@rnmapbox/maps';
+import { configService } from '@/shared/services/configService';
+
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (mapboxToken) {
   Mapbox.setAccessToken(mapboxToken);
 }
+configService.initialize();
 
 export {
   ErrorBoundary,

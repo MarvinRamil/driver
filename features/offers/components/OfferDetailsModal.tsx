@@ -12,6 +12,7 @@ import {
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
 import { useTheme } from '@/shared/hooks/use-theme';
+import { configService } from '@/shared/services/configService';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
@@ -20,7 +21,6 @@ import { getPickupAddress, getDropoffAddress, getPickupStop, getDropoffStops, is
 
 // Manila fallback when no coordinates
 const DEFAULT_CENTER: [number, number] = [120.9842, 14.5995];
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
 type OfferDetailsModalProps = {
   visible: boolean;
@@ -102,6 +102,25 @@ const OfferDetailsMap = React.memo(function OfferDetailsMap({
   textSecondaryColor: string;
   borderColor: string;
 }) {
+  // Apply the Mapbox access token to the native SDK before the map renders.
+  // The global bootstrap (_layout.tsx + configService.applyMapboxToken) can race
+  // the Vault config fetch on cold start, leaving the SDK without a token and the
+  // tiles failing to load. Re-applying from configService here — mirroring the
+  // customer app's MapView — guarantees the token is set whenever the map mounts.
+  // No-op on web / Expo Go (native module absent) or before the token resolves.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const token = configService.getMapboxAccessToken()?.trim();
+    if (!token || token === 'your_mapbox_public_token_here') return;
+    try {
+      const mapbox = require('@rnmapbox/maps');
+      const Mapbox = mapbox?.default ?? mapbox;
+      Mapbox?.setAccessToken?.(token);
+    } catch {
+      // Native module unavailable — ignore.
+    }
+  }, [coords]);
+
   const MapContent = useMemo(() => {
     if (Platform.OS === 'web') return null;
     try {
@@ -258,9 +277,12 @@ async function fetchRoute(coords: [number, number][]): Promise<LineStringGeoJSON
 
 /** Fetch route and distance from Mapbox Directions API */
 async function fetchRouteWithDistance(coords: [number, number][]): Promise<RouteResult> {
-  if (!MAPBOX_TOKEN || coords.length < 2) return null;
+  // Token resolves from Vault (configService) with env fallback, so it works with or
+  // without EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN set.
+  const mapboxToken = configService.getMapboxAccessToken();
+  if (!mapboxToken || coords.length < 2) return null;
   const coordsStr = coords.map((c) => c.join(',')).join(';');
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?geometries=geojson&access_token=${MAPBOX_TOKEN}`;
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?geometries=geojson&access_token=${mapboxToken}`;
   try {
     const res = await fetch(url);
     const data = await res.json();
