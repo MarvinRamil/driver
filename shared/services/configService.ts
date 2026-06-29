@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { apiClient } from './apiClient';
 
@@ -46,6 +47,27 @@ class ConfigService {
     } catch (error) {
       console.warn('[ConfigService] Failed to hydrate config from SecureStore:', error);
     }
+    this.applyMapboxToken();
+  }
+
+  /**
+   * Re-apply the Mapbox access token to the native SDK. Called after config is
+   * hydrated/loaded so the token (Vault value, or env fallback) is set before any
+   * map renders — needed because Mapbox.setAccessToken runs once and the value
+   * isn't available at module-load time. No-op on web or when the native module
+   * isn't present (e.g. Expo Go).
+   */
+  private applyMapboxToken(): void {
+    if (Platform.OS === 'web') return;
+    const token = this.getMapboxAccessToken();
+    if (!token) return;
+    try {
+      const mapbox = require('@rnmapbox/maps');
+      const Mapbox = mapbox?.default ?? mapbox;
+      Mapbox?.setAccessToken?.(token);
+    } catch {
+      // Native module unavailable — ignore.
+    }
   }
 
   /**
@@ -58,7 +80,11 @@ class ConfigService {
       const response = await apiClient.get<RemoteConfig>('config');
       if (!response.success || !response.data) return;
 
-      const config = response.data;
+      // apiClient wraps the HTTP body under response.data, and the /api/config body is
+      // itself the shared { success, data } envelope — so the actual fields live one
+      // level deeper. Tolerate both shapes (flat or enveloped), same as the customer app.
+      const body = response.data as RemoteConfig & { data?: RemoteConfig };
+      const config: RemoteConfig = body.data ?? body;
       const entries: [string, string][] = ([
         [CONFIG_KEYS.MQTT_HOST, config.mqtt_host],
         [CONFIG_KEYS.MQTT_PORT, config.mqtt_port !== undefined ? String(config.mqtt_port) : undefined],
@@ -78,6 +104,7 @@ class ConfigService {
         }),
       );
 
+      this.applyMapboxToken();
       console.log('[ConfigService] Remote config loaded successfully');
     } catch (error) {
       console.warn('[ConfigService] Remote config fetch failed, using cached/env fallback:', error);
