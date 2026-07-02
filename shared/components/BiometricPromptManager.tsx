@@ -14,7 +14,7 @@ interface TempCredentials {
 /**
  * Biometric prompt manager component
  * Shows biometric enable prompt after successful login ONLY on the main app screens (tabs).
- * Does NOT show during registration, onboarding (liveness, driver-complete), or other auth flows.
+ * Does NOT show during registration, onboarding (liveness, driver-complete, welcome), or other auth flows.
  * Should be placed in the app layout after AuthProvider.
  */
 export function BiometricPromptManager() {
@@ -25,7 +25,7 @@ export function BiometricPromptManager() {
   const [tempCredentials, setTempCredentials] = useState<TempCredentials | null>(null);
 
   // Only show the biometric prompt on the main authenticated screens (tabs),
-  // NOT during signup, liveness, driver-complete, or other onboarding flows.
+  // NOT during signup, liveness, driver-complete, welcome, or other onboarding flows.
   const isOnMainAppScreens = segments[0] === '(tabs)';
 
   // Check for temporary credentials and show prompt if needed (only when user does NOT already have biometric enabled)

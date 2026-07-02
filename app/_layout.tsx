@@ -5,6 +5,10 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import {
+  getDriverApplicationSubmitted,
+  clearDriverApplicationSubmitted,
+} from '@/shared/services/driverApplicationStorage';
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -57,9 +61,32 @@ function NavigationGuard() {
   const { user, isLoading, logout } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
 
   const isAuthenticated = user !== null;
   const hasAllowedRole = isAllowedRole(user);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!user) {
+      setApplicationSubmitted(false);
+      return;
+    }
+
+    (async () => {
+      const fromStore = await getDriverApplicationSubmitted();
+      const fromProfile = Boolean(
+        user.vehiclePlate?.trim() || user.vehicleModel?.trim()
+      );
+      if (mounted) {
+        setApplicationSubmitted(fromStore || fromProfile);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (isLoading) {
@@ -74,13 +101,17 @@ function NavigationGuard() {
       const isForgotPasswordPage = currentRoute === 'forgot-password';
       const isLivenessPage = currentRoute === 'liveness';
       const isDriverCompletePage = currentRoute === 'driver-complete';
+      const isWelcomePage = currentRoute === 'welcome';
 
       const isDriver = user?.role === 'Driver';
       const livenessVerifiedAt =
         user?.livenessVerifiedAt ??
         (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
       const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
-      const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
+      const needsDriverComplete =
+        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && !applicationSubmitted;
+      const needsWelcome =
+        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && applicationSubmitted;
 
       if (!isAuthenticated) {
         if (isLoginPage || isSignupPage || isForgotPasswordPage) {
@@ -90,12 +121,20 @@ function NavigationGuard() {
         return;
       }
 
+      if (user?.isOnboarded) {
+        clearDriverApplicationSubmitted().catch(() => {});
+      }
+
       if (needsLiveness && !isLivenessPage) {
         router.replace('/liveness');
         return;
       }
       if (needsDriverComplete && !isDriverCompletePage) {
         router.replace('/driver-complete');
+        return;
+      }
+      if (needsWelcome && !isWelcomePage) {
+        router.replace('/welcome');
         return;
       }
 
@@ -116,7 +155,26 @@ function NavigationGuard() {
           router.replace('/driver-complete');
           return;
         }
-        router.replace('/(tabs)');
+        // TEMP: land on welcome after login (pending-review screen) instead of dashboard.
+        router.replace('/welcome');
+        return;
+      }
+
+      if (isAuthenticated && hasAllowedRole && isForgotPasswordPage) {
+        if (needsLiveness) {
+          router.replace('/liveness');
+          return;
+        }
+        if (needsDriverComplete) {
+          router.replace('/driver-complete');
+          return;
+        }
+        router.replace('/welcome');
+        return;
+      }
+
+      if (isAuthenticated && hasAllowedRole && isDriver && inTabsGroup && !isWelcomePage) {
+        router.replace('/welcome');
         return;
       }
 
@@ -126,6 +184,7 @@ function NavigationGuard() {
         (inTabsGroup ||
           currentRoute === 'liveness' ||
           currentRoute === 'driver-complete' ||
+          currentRoute === 'welcome' ||
           currentRoute === 'accept-booking' ||
           currentRoute === 'in-ride' ||
           currentRoute === 'rating' ||
@@ -139,7 +198,16 @@ function NavigationGuard() {
     } catch (error) {
       console.error('[NavigationGuard]', error);
     }
-  }, [user, isLoading, segments, router, isAuthenticated, hasAllowedRole, logout]);
+  }, [
+    user,
+    isLoading,
+    segments,
+    router,
+    isAuthenticated,
+    hasAllowedRole,
+    logout,
+    applicationSubmitted,
+  ]);
 
   return null;
 }
@@ -206,6 +274,7 @@ function RootLayoutNav() {
             <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
             <Stack.Screen name="liveness" options={{ headerShown: false }} />
             <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
+            <Stack.Screen name="welcome" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />

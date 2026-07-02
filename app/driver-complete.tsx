@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth";
 import { profileService } from "@/features/profile/services/profileService";
 import { apiClient } from "@/shared/services/apiClient";
+import { setDriverApplicationSubmitted } from "@/shared/services/driverApplicationStorage";
 import { LIMITS, trimToMax } from "@/shared/constants/validation";
 
 /**
@@ -225,13 +226,9 @@ export default function DriverCompleteScreen() {
       }
 
       console.log("[DriverComplete] Submission successful, refreshing user...");
+      await setDriverApplicationSubmitted();
       await refreshUser?.();
-      
-      Alert.alert(
-        "Registration complete",
-        "Your documents have been submitted. You can now use the app.",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
-      );
+      router.replace("/welcome");
     } catch (e) {
       console.error("[DriverComplete] Error during submission:", e);
       
