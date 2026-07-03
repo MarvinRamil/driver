@@ -51,6 +51,10 @@
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.5.1"
   },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "devDependencies": {
     "@types/mqtt": "^0.0.34",
     "@types/react": "~19.1.0",
