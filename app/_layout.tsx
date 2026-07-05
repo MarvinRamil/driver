@@ -131,7 +131,10 @@ function NavigationGuard() {
         router.replace('/complete-registration');
         return;
       }
-      if (needsWelcome && !isWelcomePage) {
+      // Allow the application page too: rejected drivers navigate from /welcome to
+      // /complete-registration to resubmit. The form itself redirects drivers whose
+      // application is not rejected back to /welcome.
+      if (needsWelcome && !isWelcomePage && !isApplicationPage) {
         router.replace('/welcome');
         return;
       }

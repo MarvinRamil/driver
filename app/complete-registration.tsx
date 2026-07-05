@@ -32,6 +32,20 @@ interface DocumentState {
   label: string;
 }
 
+interface MyApplicationData {
+  id?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string | null;
+  vehicleType?: string | null;
+  vehiclePlate?: string | null;
+  status?: string;
+  createdAt?: string;
+  /** Admin rejection reason — absent on older responses */
+  notes?: string | null;
+  submissionCount?: number;
+}
+
 /**
  * Complete Registration screen
  * Shown after login when driver needs to complete registration
@@ -48,19 +62,46 @@ export default function CompleteRegistrationScreen() {
   const [isCheckingApplication, setIsCheckingApplication] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // If the driver already submitted an application, show the pending screen instead
+  // Resubmission state (existing application was rejected)
+  const [isResubmission, setIsResubmission] = useState(false);
+  const [rejectionNotes, setRejectionNotes] = useState<string | null>(null);
+  const [showRejectionBanner, setShowRejectionBanner] = useState(false);
+
+  // Profile data
+  const [phone, setPhone] = useState('');
+  const [facebookProfileUrl, setFacebookProfileUrl] = useState('');
+
+  // Vehicle data
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
+  const [vehiclePlate, setVehiclePlate] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+
+  // If the driver already submitted an application, show the pending screen instead —
+  // unless it was rejected, in which case they stay here to resubmit.
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const response = await apiClient.get<{ success: boolean; data?: unknown }>(
+        const response = await apiClient.get<{ success: boolean; data?: MyApplicationData }>(
           'api/driver-applications/my-application',
           { requiresAuth: true }
         );
-        if (mounted && response.success && response.data?.data) {
-          await setDriverApplicationSubmitted();
-          router.replace('/welcome');
-          return;
+        const application = response.success ? response.data?.data : undefined;
+        if (mounted && application) {
+          if (application.status === 'Rejected') {
+            // Rejected — allow resubmission: stay on the form, prefill known fields
+            setIsResubmission(true);
+            setRejectionNotes(application.notes ?? null);
+            setShowRejectionBanner(true);
+            if (application.phone) setPhone(application.phone);
+            if (application.vehicleType) setVehicleType(application.vehicleType);
+            if (application.vehiclePlate) setVehiclePlate(application.vehiclePlate);
+          } else {
+            await setDriverApplicationSubmitted();
+            router.replace('/welcome');
+            return;
+          }
         }
       } catch {
         // 404 = no application yet — stay on this screen
@@ -73,16 +114,6 @@ export default function CompleteRegistrationScreen() {
       mounted = false;
     };
   }, [router]);
-
-  // Profile data
-  const [phone, setPhone] = useState('');
-  const [facebookProfileUrl, setFacebookProfileUrl] = useState('');
-
-  // Vehicle data
-  const [vehicleType, setVehicleType] = useState<string | null>(null);
-  const [vehiclePlate, setVehiclePlate] = useState('');
-  const [vehicleModel, setVehicleModel] = useState('');
-  const [vehicleColor, setVehicleColor] = useState('');
 
   // Documents (all optional for now)
   const [documents, setDocuments] = useState<Record<string, DocumentState>>({
@@ -207,9 +238,11 @@ export default function CompleteRegistrationScreen() {
         throw new Error('User information not found. Please login again.');
       }
 
-      // Validate that at least one document is provided (should already be validated, but double-check)
+      // Validate that at least one document is provided (should already be validated, but double-check).
+      // On resubmission, previously uploaded documents are kept server-side unless replaced,
+      // so uploading none is allowed.
       const hasAnyDocument = Object.values(documents).some((doc) => doc.uri !== null);
-      if (!hasAnyDocument) {
+      if (!hasAnyDocument && !isResubmission) {
         throw new Error('Please upload at least one document');
       }
 
@@ -249,7 +282,11 @@ export default function CompleteRegistrationScreen() {
       });
 
       // Submit driver application
-      const response = await apiClient.post('api/driver-applications', {
+      const response = await apiClient.post<{
+        message?: string;
+        existingApplicationId?: string;
+        data?: unknown;
+      }>('api/driver-applications', {
         body: formData,
         requiresAuth: true, // User is logged in
       });
@@ -292,8 +329,13 @@ export default function CompleteRegistrationScreen() {
         ]
       );
     } catch (err) {
+      // apiClient throws plain ApiError objects (not Error instances) for HTTP failures,
+      // so read `message` structurally to surface backend messages (e.g. submission cap).
+      const rawMessage = (err as { message?: unknown } | null)?.message;
       const errorMessage =
-        err instanceof Error ? err.message : 'Failed to submit application. Please try again.';
+        typeof rawMessage === 'string' && rawMessage.trim()
+          ? rawMessage
+          : 'Failed to submit application. Please try again.';
       setError(errorMessage);
       console.error('[CompleteRegistration] Error:', errorMessage, err);
     } finally {
@@ -450,6 +492,16 @@ export default function CompleteRegistrationScreen() {
               </Text>
             </View>
 
+            {isResubmission && (
+              <View style={[styles.resubmitHint, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="information-circle-outline" size={18} color={theme.primary} />
+                <Text style={[styles.resubmitHintText, { color: theme.textSecondary }]}>
+                  Your previously uploaded documents are kept unless you replace them here. You can
+                  continue without uploading new ones.
+                </Text>
+              </View>
+            )}
+
             <View style={styles.documentsContainer}>
               {Object.entries(documents).map(([key, doc]) => (
                 <View key={key} style={styles.documentItem}>
@@ -487,9 +539,11 @@ export default function CompleteRegistrationScreen() {
             <TouchableOpacity
               style={[styles.continueButton, { backgroundColor: theme.primary }]}
               onPress={() => {
-                // Validate that at least one document is uploaded
+                // Validate that at least one document is uploaded.
+                // On resubmission, previous documents are kept server-side unless replaced,
+                // so no new upload is required.
                 const hasAnyDocument = Object.values(documents).some((doc) => doc.uri !== null);
-                if (!hasAnyDocument) {
+                if (!hasAnyDocument && !isResubmission) {
                   setError('Please upload at least one document before continuing');
                   return;
                 }
@@ -576,6 +630,15 @@ export default function CompleteRegistrationScreen() {
                 )}
               </View>
 
+              {isResubmission && uploadedDocuments.length === 0 && (
+                <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>Documents</Text>
+                  <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>
+                    No new documents uploaded — your previously submitted documents will be kept.
+                  </Text>
+                </View>
+              )}
+
               {uploadedDocuments.length > 0 && (
                 <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <Text style={[styles.sectionTitle, { color: theme.text }]}>Documents ({uploadedDocuments.length})</Text>
@@ -603,7 +666,9 @@ export default function CompleteRegistrationScreen() {
               {isLoading ? (
                 <ActivityIndicator size="small" color={theme.primaryText} />
               ) : (
-                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Submit Application</Text>
+                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>
+                  {isResubmission ? 'Resubmit Application' : 'Submit Application'}
+                </Text>
               )}
             </TouchableOpacity>
           </ScrollView>
@@ -623,8 +688,33 @@ export default function CompleteRegistrationScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
+          {isResubmission && showRejectionBanner && (
+            <View style={styles.rejectionBanner}>
+              <Ionicons name="alert-circle" size={20} color={BeeColors.red[600]} style={styles.rejectionBannerIcon} />
+              <View style={styles.rejectionBannerBody}>
+                <Text style={styles.rejectionBannerTitle}>
+                  Your previous application was rejected
+                </Text>
+                {rejectionNotes ? (
+                  <Text style={styles.rejectionBannerReason}>Reason: {rejectionNotes}</Text>
+                ) : null}
+                <Text style={styles.rejectionBannerText}>
+                  Please update your details below and resubmit your application.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowRejectionBanner(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Dismiss">
+                <Ionicons name="close" size={18} color={BeeColors.red[600]} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.headerContainer}>
-            <Text style={[styles.headline, { color: theme.text }]}>Complete Your Registration</Text>
+            <Text style={[styles.headline, { color: theme.text }]}>
+              {isResubmission ? 'Resubmit Your Application' : 'Complete Your Registration'}
+            </Text>
             <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
               Please provide the following information to complete your driver application
             </Text>
@@ -894,5 +984,53 @@ const styles = StyleSheet.create({
   vehicleTypeChipText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  rejectionBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: BeeColors.red[50],
+    borderWidth: 1,
+    borderColor: BeeColors.red[200],
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    gap: 8,
+  },
+  rejectionBannerIcon: {
+    marginTop: 1,
+  },
+  rejectionBannerBody: {
+    flex: 1,
+    gap: 4,
+  },
+  rejectionBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: BeeColors.red[700],
+  },
+  rejectionBannerReason: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: BeeColors.red[700],
+  },
+  rejectionBannerText: {
+    fontSize: 13,
+    color: BeeColors.red[700],
+  },
+  resubmitHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+  },
+  resubmitHintText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

@@ -3,7 +3,8 @@ import { useAuth } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
+import { apiClient } from "@/shared/services/apiClient";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -138,6 +139,13 @@ function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
+interface MyApplicationData {
+  /** "Pending" | "Approved" | "Rejected" */
+  status?: string;
+  /** Admin rejection reason — absent on older responses */
+  notes?: string | null;
+}
+
 /**
  * Post-registration welcome screen shown after driver documents are submitted.
  * Drivers stay here while their application is under review (main menu hidden).
@@ -147,9 +155,12 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { user, isLoading, logout, refreshUser } = useAuth();
+  const router = useRouter();
   const float = useSharedValue(0);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+  const [rejectionNotes, setRejectionNotes] = useState<string | null>(null);
 
   // Poll for approval so the driver is let in without having to re-login
   useEffect(() => {
@@ -159,6 +170,32 @@ export default function WelcomeScreen() {
     }, 30000);
     return () => clearInterval(interval);
   }, [refreshUser]);
+
+  // Fetch the driver's application so rejected drivers see the rejection state
+  // (with the admin's reason) instead of "under review" forever.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const response = await apiClient.get<{ success: boolean; data?: MyApplicationData }>(
+          "api/driver-applications/my-application",
+          { requiresAuth: true }
+        );
+        const application = response.success ? response.data?.data : undefined;
+        if (mounted && application?.status) {
+          setApplicationStatus(application.status);
+          setRejectionNotes(application.notes ?? null);
+        }
+      } catch {
+        // No application / fetch failure — keep the default under-review UI
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const isRejected = applicationStatus === "Rejected";
 
   useEffect(() => {
     float.value = withRepeat(
@@ -216,7 +253,7 @@ export default function WelcomeScreen() {
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       <View style={styles.blobTop} />
       <View style={styles.blobBottom} />
-      <ConfettiLayer />
+      {!isRejected && <ConfettiLayer />}
 
       <View
         style={[
@@ -233,29 +270,60 @@ export default function WelcomeScreen() {
             <Image source={WELCOME_LOGO} style={styles.logo} contentFit="contain" />
           </Animated.View>
 
-          <View style={styles.copyBlock}>
-            <Text style={[styles.display, { color: theme.text }]}>
-              Thanks for registering!
-            </Text>
-            <Text style={[styles.bodyLg, { color: "#696454" }]}>
-              Your account application is currently under review by our team. We manually verify all
-              registrations to maintain platform security.
-            </Text>
-            
-            <Text style={[styles.bodyMd, { color: "#696454" }]}>
-              No further action is required from you at this time.
-            </Text>
-          </View>
+          {isRejected ? (
+            <>
+              <View style={styles.copyBlock}>
+                <Text style={[styles.display, { color: theme.text }]}>
+                  Your application was not approved
+                </Text>
+                {rejectionNotes ? (
+                  <View style={styles.rejectionNotesBox}>
+                    <Text style={styles.rejectionNotesLabel}>Reason from our team</Text>
+                    <Text style={styles.rejectionNotesText}>{rejectionNotes}</Text>
+                  </View>
+                ) : null}
+                <Text style={[styles.bodyMd, { color: "#696454" }]}>
+                  Don't worry, {name} — you can update your details and submit a new application.
+                </Text>
+              </View>
 
-          <TouchableOpacity
-            style={styles.ctaButton}
-            onPress={() => setShowReviewPanel(true)}
-            activeOpacity={0.9}
-            disabled={isLoggingOut}
-          >
-            <Text style={styles.ctaText}>Got it</Text>
-            <Ionicons name="checkmark-circle" size={22} color="#715700" />
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => router.replace("/complete-registration")}
+                activeOpacity={0.9}
+                disabled={isLoggingOut}
+              >
+                <Text style={styles.ctaText}>Submit New Application</Text>
+                <Ionicons name="arrow-forward-circle" size={22} color="#715700" />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={styles.copyBlock}>
+                <Text style={[styles.display, { color: theme.text }]}>
+                  Thanks for registering!
+                </Text>
+                <Text style={[styles.bodyLg, { color: "#696454" }]}>
+                  Your account application is currently under review by our team. We manually verify all
+                  registrations to maintain platform security.
+                </Text>
+
+                <Text style={[styles.bodyMd, { color: "#696454" }]}>
+                  No further action is required from you at this time.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => setShowReviewPanel(true)}
+                activeOpacity={0.9}
+                disabled={isLoggingOut}
+              >
+                <Text style={styles.ctaText}>Got it</Text>
+                <Ionicons name="checkmark-circle" size={22} color="#715700" />
+              </TouchableOpacity>
+            </>
+          )}
 
           <TouchableOpacity
             style={styles.logoutButton}
@@ -385,6 +453,28 @@ const styles = StyleSheet.create({
   bodyEmphasis: {
     fontWeight: "800",
     color: "#755b00",
+  },
+  rejectionNotesBox: {
+    width: "100%",
+    backgroundColor: BeeColors.red[50],
+    borderWidth: 1,
+    borderColor: BeeColors.red[200],
+    borderRadius: 12,
+    padding: 14,
+    gap: 4,
+  },
+  rejectionNotesLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: BeeColors.red[600],
+  },
+  rejectionNotesText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "600",
+    color: BeeColors.red[700],
   },
   ctaButton: {
     width: "100%",
