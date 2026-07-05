@@ -73,14 +73,15 @@ function NavigationGuard() {
       const isSignupPage = currentRoute === 'signup';
       const isForgotPasswordPage = currentRoute === 'forgot-password';
       const isLivenessPage = currentRoute === 'liveness';
-      const isDriverCompletePage = currentRoute === 'driver-complete';
+      const isApplicationPage =
+        currentRoute === 'complete-registration' || currentRoute === 'pending-approval';
 
       const isDriver = user?.role === 'Driver';
       const livenessVerifiedAt =
         user?.livenessVerifiedAt ??
         (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
       const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
-      const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
+      const needsApplication = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
 
       if (!isAuthenticated) {
         if (isLoginPage || isSignupPage || isForgotPasswordPage) {
@@ -94,8 +95,8 @@ function NavigationGuard() {
         router.replace('/liveness');
         return;
       }
-      if (needsDriverComplete && !isDriverCompletePage) {
-        router.replace('/driver-complete');
+      if (needsApplication && !isApplicationPage) {
+        router.replace('/complete-registration');
         return;
       }
 
@@ -112,8 +113,8 @@ function NavigationGuard() {
           router.replace('/liveness');
           return;
         }
-        if (needsDriverComplete) {
-          router.replace('/driver-complete');
+        if (needsApplication) {
+          router.replace('/complete-registration');
           return;
         }
         router.replace('/(tabs)');
@@ -125,7 +126,6 @@ function NavigationGuard() {
         hasAllowedRole &&
         (inTabsGroup ||
           currentRoute === 'liveness' ||
-          currentRoute === 'driver-complete' ||
           currentRoute === 'accept-booking' ||
           currentRoute === 'in-ride' ||
           currentRoute === 'rating' ||
@@ -205,7 +205,8 @@ function RootLayoutNav() {
             <Stack.Screen name="signup" options={{ headerShown: false }} />
             <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
             <Stack.Screen name="liveness" options={{ headerShown: false }} />
-            <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
+            <Stack.Screen name="complete-registration" options={{ headerShown: false }} />
+            <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />

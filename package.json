@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
+    "android": "bash scripts/run-android.sh",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:preview:android": "eas build --platform android --profile preview",

@@ -216,7 +216,7 @@ export default function LivenessScreen() {
           await refreshUser?.();
           // Small delay to ensure state is updated before redirect
           setTimeout(() => {
-            router.replace("/driver-complete");
+            router.replace("/complete-registration");
           }, 500);
         } else {
           console.log("[Liveness] Verification failed - allPassed never became true");

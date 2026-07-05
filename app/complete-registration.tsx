@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -42,7 +42,33 @@ export default function CompleteRegistrationScreen() {
 
   const [currentStep, setCurrentStep] = useState<Step>('profile');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingApplication, setIsCheckingApplication] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // If the driver already submitted an application, show the pending screen instead
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const response = await apiClient.get<{ success: boolean; data?: unknown }>(
+          'api/driver-applications/my-application',
+          { requiresAuth: true }
+        );
+        if (mounted && response.success && response.data?.data) {
+          router.replace('/pending-approval');
+          return;
+        }
+      } catch {
+        // 404 = no application yet — stay on this screen
+      }
+      if (mounted) {
+        setIsCheckingApplication(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   // Profile data
   const [phone, setPhone] = useState('');
@@ -204,7 +230,7 @@ export default function CompleteRegistrationScreen() {
             [
               {
                 text: 'OK',
-                onPress: () => router.replace('/(tabs)'),
+                onPress: () => router.replace('/pending-approval'),
               },
             ]
           );
@@ -222,7 +248,7 @@ export default function CompleteRegistrationScreen() {
         [
           {
             text: 'Continue',
-            onPress: () => router.replace('/(tabs)'),
+            onPress: () => router.replace('/pending-approval'),
           },
         ]
       );
@@ -235,6 +261,18 @@ export default function CompleteRegistrationScreen() {
       setIsLoading(false);
     }
   };
+
+  if (isCheckingApplication) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' },
+        ]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   // Documents step
   if (currentStep === 'documents') {

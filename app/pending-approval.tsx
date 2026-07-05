@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,7 +16,19 @@ export default function PendingApprovalScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+
+  // Poll for approval so the driver is let in without having to re-login
+  useEffect(() => {
+    if (user?.isOnboarded) {
+      router.replace('/(tabs)');
+      return;
+    }
+    const interval = setInterval(() => {
+      refreshUser?.().catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user?.isOnboarded, refreshUser, router]);
 
   const handleLogout = () => {
     logout().then(() => router.replace('/login'));
