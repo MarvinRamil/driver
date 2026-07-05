@@ -15,24 +15,64 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
+
+export type PushTokenType = 'fcm' | 'apns' | 'expo';
 
 export interface RegisterDeviceTokenRequest {
   deviceToken: string;
   platform: 'ios' | 'android';
   appType: 'driver';
+  /** Token type the backend uses to route delivery (fcm/apns -> Firebase, expo -> Expo). */
+  tokenType?: PushTokenType;
 }
 
 export interface RegisterDeviceTokenResponse {
   success: boolean;
   message?: string;
+  /** The token type the backend currently expects for this platform (vendor-sync hint). */
+  expectedTokenType?: PushTokenType;
+}
+
+/** GET /api/notifications/push-config response. */
+export interface PushConfigResponse {
+  provider: string;
+  expected: { ios: PushTokenType; android: PushTokenType };
 }
 
 class NotificationService {
   private deviceToken: string | null = null;
+  /** Token type resolved for the most recently acquired token. */
+  private resolvedTokenType: PushTokenType | null = null;
+  /** Guards against re-sync recursion when the backend reports a mismatch. */
+  private resyncing = false;
   private notificationListener: Notifications.Subscription | null = null;
   private responseListener: Notifications.Subscription | null = null;
+
+  /**
+   * Ask the backend which token type it currently expects for this platform, so the
+   * client stays in sync if the backend changes push vendor. Falls back to the native
+   * default (FCM/APNs) when the config call fails.
+   */
+  async getExpectedTokenType(): Promise<PushTokenType> {
+    const platform = Platform.OS === 'ios' ? 'ios' : 'android';
+    try {
+      const response = await apiClient.get<PushConfigResponse>(
+        '/api/notifications/push-config',
+        { requiresAuth: true }
+      );
+      const expected = response?.data?.expected?.[platform];
+      if (expected === 'fcm' || expected === 'apns' || expected === 'expo') {
+        return expected;
+      }
+    } catch (error) {
+      console.warn('Could not fetch push-config; using default token type.', error);
+    }
+    return platform === 'ios' ? 'apns' : 'fcm';
+  }
 
   /**
    * Request notification permissions
@@ -71,8 +111,12 @@ class NotificationService {
   }
 
   /**
-   * Get the device push token
-   * @returns Device push token or null if unavailable
+   * Acquire the push token matching the type the backend currently expects.
+   * - 'fcm' / 'apns' -> native token via getDevicePushTokenAsync (Firebase Admin SDK delivery)
+   * - 'expo'         -> Expo push token via getExpoPushTokenAsync
+   * If a native token is expected but unavailable (e.g. Expo Go / missing FCM creds),
+   * falls back to an Expo token tagged 'expo'. Sets resolvedTokenType accordingly.
+   * @returns push token or null if unavailable
    */
   async getDeviceToken(): Promise<string | null> {
     try {
@@ -80,15 +124,35 @@ class NotificationService {
         return null;
       }
 
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
-      });
+      const expected = await this.getExpectedTokenType();
 
-      return tokenData.data;
+      if (expected === 'expo') {
+        return await this.getExpoToken();
+      }
+
+      try {
+        const tokenData = await Notifications.getDevicePushTokenAsync();
+        this.resolvedTokenType = Platform.OS === 'ios' ? 'apns' : 'fcm';
+        return tokenData.data;
+      } catch (nativeError) {
+        // Native token unavailable (Expo Go, missing FCM credentials, etc.) -> fall back to Expo.
+        console.warn('Native push token unavailable; falling back to Expo token.', nativeError);
+        return await this.getExpoToken();
+      }
     } catch (error) {
       console.error('Error getting device token:', error);
+      this.resolvedTokenType = null;
       return null;
     }
+  }
+
+  /** Acquire an Expo push token and tag the resolved type as 'expo'. */
+  private async getExpoToken(): Promise<string | null> {
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID,
+    });
+    this.resolvedTokenType = 'expo';
+    return tokenData.data;
   }
 
   /**
@@ -99,7 +163,9 @@ class NotificationService {
   async registerDeviceToken(token: string): Promise<boolean> {
     try {
       const platform = Platform.OS === 'ios' ? 'ios' : 'android';
-      
+      const tokenType: PushTokenType =
+        this.resolvedTokenType ?? (Platform.OS === 'ios' ? 'apns' : 'fcm');
+
       const response = await apiClient.post<RegisterDeviceTokenResponse>(
         '/api/notifications/register-device',
         {
@@ -107,6 +173,7 @@ class NotificationService {
             deviceToken: token,
             platform,
             appType: 'driver',
+            tokenType,
           },
           requiresAuth: true,
         }
@@ -114,6 +181,22 @@ class NotificationService {
 
       if (response.success && response.data) {
         this.deviceToken = token;
+
+        // Vendor-sync: if the backend expects a different token type than we just sent,
+        // re-acquire the correct token and re-register once.
+        const expected = response.data.expectedTokenType;
+        if (expected && expected !== tokenType && !this.resyncing) {
+          this.resyncing = true;
+          try {
+            const newToken = await this.getDeviceToken();
+            if (newToken && this.resolvedTokenType === expected) {
+              await this.registerDeviceToken(newToken);
+            }
+          } finally {
+            this.resyncing = false;
+          }
+        }
+
         return true;
       }
 
