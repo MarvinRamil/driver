@@ -19,6 +19,7 @@ import { useTheme } from '@/shared/hooks/use-theme';
 import { BeeColors } from '@/constants/theme';
 import { useAuth } from '@/features/auth';
 import { apiClient } from '@/shared/services/apiClient';
+import { setDriverApplicationSubmitted } from '@/shared/services/driverApplicationStorage';
 import * as ImagePicker from 'expo-image-picker';
 
 type Step = 'profile' | 'documents' | 'review';
@@ -55,7 +56,8 @@ export default function CompleteRegistrationScreen() {
           { requiresAuth: true }
         );
         if (mounted && response.success && response.data?.data) {
-          router.replace('/pending-approval');
+          await setDriverApplicationSubmitted();
+          router.replace('/welcome');
           return;
         }
       } catch {
@@ -230,7 +232,10 @@ export default function CompleteRegistrationScreen() {
             [
               {
                 text: 'OK',
-                onPress: () => router.replace('/pending-approval'),
+                onPress: () => {
+                  setDriverApplicationSubmitted().catch(() => {});
+                  router.replace('/welcome');
+                },
               },
             ]
           );
@@ -238,6 +243,9 @@ export default function CompleteRegistrationScreen() {
         }
         throw new Error(response.message || 'Failed to submit driver application');
       }
+
+      // Mark submission locally so the guard routes to the welcome screen
+      await setDriverApplicationSubmitted();
 
       // Refresh user data
       await refreshUser();
@@ -248,7 +256,7 @@ export default function CompleteRegistrationScreen() {
         [
           {
             text: 'Continue',
-            onPress: () => router.replace('/pending-approval'),
+            onPress: () => router.replace('/welcome'),
           },
         ]
       );

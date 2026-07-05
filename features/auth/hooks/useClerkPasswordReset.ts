@@ -27,7 +27,7 @@ export interface UseClerkPasswordResetReturn {
   isResetting: boolean;
 
   requestReset: () => Promise<void>;
-  submitNewPassword: () => Promise<void>;
+  submitNewPassword: () => Promise<boolean>;
   resendCode: () => Promise<void>;
   backToRequest: () => void;
 }
@@ -108,24 +108,24 @@ export function useClerkPasswordReset(): UseClerkPasswordResetReturn {
     }
   }, [email, isLoaded, signIn, isSignedIn, signOut]);
 
-  const submitNewPassword = useCallback(async () => {
+  const submitNewPassword = useCallback(async (): Promise<boolean> => {
     setError(null);
     if (!isLoaded || !signIn) {
       setError('Password reset is not ready yet. Please try again in a moment.');
-      return;
+      return false;
     }
     if (code.trim().length === 0) {
       setError('Please enter the reset code from your email.');
-      return;
+      return false;
     }
     const pwError = validatePassword(password);
     if (pwError) {
       setError(pwError);
-      return;
+      return false;
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
-      return;
+      return false;
     }
 
     setIsResetting(true);
@@ -136,14 +136,14 @@ export function useClerkPasswordReset(): UseClerkPasswordResetReturn {
         password,
       });
       if (result.status === 'complete' && result.createdSessionId) {
-        // New password set; Clerk signs the user in. Root guard redirects.
         await setActive({ session: result.createdSessionId });
-      } else {
-        // e.g. needs_second_factor (MFA) — not enabled on the free tier.
-        setError('Additional verification is required and is not available yet.');
+        return true;
       }
+      setError('Additional verification is required and is not available yet.');
+      return false;
     } catch (err) {
       setError(extractClerkError(err));
+      return false;
     } finally {
       setIsResetting(false);
     }
