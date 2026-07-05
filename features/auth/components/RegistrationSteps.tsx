@@ -54,6 +54,7 @@ interface RegistrationData {
   password: string;
   fullName: string;
   otp: string;
+  referralCode: string;
 }
 
 /**
@@ -82,6 +83,7 @@ export function RegistrationSteps() {
     password: '',
     fullName: '',
     otp: '',
+    referralCode: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -267,6 +269,7 @@ export function RegistrationSteps() {
         legalAccepted: true,
         unsafeMetadata: {
           phoneNumber: registrationData.phoneNumber.trim() || null,
+          referralCode: registrationData.referralCode.trim().toUpperCase() || null,
         },
       });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
@@ -405,6 +408,7 @@ export function RegistrationSteps() {
           password: registrationData.password,
           fullName: registrationData.fullName.trim(),
           role: 'Driver',
+          referralCode: registrationData.referralCode.trim().toUpperCase() || null,
           ...buildSecurityQuestionsPayload(),
         });
       } else {
@@ -413,6 +417,7 @@ export function RegistrationSteps() {
           password: registrationData.password,
           fullName: registrationData.fullName.trim(),
           role: 'Driver',
+          referralCode: registrationData.referralCode.trim().toUpperCase() || null,
           ...buildSecurityQuestionsPayload(),
           ...(registrationToken ? { registrationToken } : {}),
         });
@@ -595,6 +600,11 @@ export function RegistrationSteps() {
             setConfirmPassword(v);
             setError(null);
           }}
+          referralCode={registrationData.referralCode}
+          setReferralCode={(v) => {
+            setRegistrationData({ ...registrationData, referralCode: v.slice(0, 20) });
+            setError(null);
+          }}
           disabled={isLoading}
         />
         <ErrorBanner error={error} />
@@ -695,6 +705,11 @@ export function RegistrationSteps() {
           confirmPassword={confirmPassword}
           setConfirmPassword={(v) => {
             setConfirmPassword(v);
+            setError(null);
+          }}
+          referralCode={registrationData.referralCode}
+          setReferralCode={(v) => {
+            setRegistrationData({ ...registrationData, referralCode: v.slice(0, 20) });
             setError(null);
           }}
           disabled={isLoading}
@@ -1019,6 +1034,8 @@ function DetailsFields({
   setPassword,
   confirmPassword,
   setConfirmPassword,
+  referralCode,
+  setReferralCode,
   disabled,
 }: {
   theme: ThemeColors;
@@ -1032,6 +1049,8 @@ function DetailsFields({
   setPassword: (v: string) => void;
   confirmPassword: string;
   setConfirmPassword: (v: string) => void;
+  referralCode: string;
+  setReferralCode: (v: string) => void;
   disabled: boolean;
 }) {
   return (
@@ -1093,6 +1112,21 @@ function DetailsFields({
             Passwords do not match
           </Text>
         )}
+      </View>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.text }]}>Referral code (optional)</Text>
+        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="Enter a friend's referral code"
+            placeholderTextColor={theme.placeholder}
+            value={referralCode}
+            onChangeText={setReferralCode}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!disabled}
+          />
+        </View>
       </View>
     </>
   );

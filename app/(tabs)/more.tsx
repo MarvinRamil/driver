@@ -74,6 +74,13 @@ export default function MoreScreen() {
       show: true,
     },
     {
+      id: 'referrals',
+      title: 'Refer & Earn',
+      icon: 'people-outline',
+      route: '/referrals',
+      show: true,
+    },
+    {
       id: 'giveaways',
       title: 'Giveaways',
       icon: 'gift-outline',

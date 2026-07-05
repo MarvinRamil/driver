@@ -91,7 +91,8 @@ function NavigationGuard() {
     }
 
     try {
-      const currentRoute = segments[0];
+      // Cast: expo-router's generated route union lags behind newly added screens
+      const currentRoute = segments[0] as string;
       const inTabsGroup = currentRoute === '(tabs)';
       const isLoginPage = currentRoute === 'login';
       const isSignupPage = currentRoute === 'signup';
@@ -188,6 +189,7 @@ function NavigationGuard() {
           currentRoute === 'rating' ||
           currentRoute === 'support' ||
           currentRoute === 'booking' ||
+          currentRoute === 'referrals' ||
           currentRoute === 'complete-registration')
       ) {
         return;
@@ -276,6 +278,7 @@ function RootLayoutNav() {
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />
             <Stack.Screen name="rating" options={{ headerShown: false }} />
+            <Stack.Screen name="referrals" options={{ headerShown: false }} />
             <Stack.Screen name="support" options={{ headerShown: false }} />
             <Stack.Screen name="support/ticket/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />

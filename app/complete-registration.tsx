@@ -22,7 +22,9 @@ import { apiClient } from '@/shared/services/apiClient';
 import { setDriverApplicationSubmitted } from '@/shared/services/driverApplicationStorage';
 import * as ImagePicker from 'expo-image-picker';
 
-type Step = 'profile' | 'documents' | 'review';
+type Step = 'profile' | 'vehicle' | 'documents' | 'review';
+
+const VEHICLE_TYPES = ['Motorcycle', 'Sedan', 'SUV', 'Van', 'Truck'] as const;
 
 interface DocumentState {
   uri: string | null;
@@ -76,6 +78,12 @@ export default function CompleteRegistrationScreen() {
   const [phone, setPhone] = useState('');
   const [facebookProfileUrl, setFacebookProfileUrl] = useState('');
 
+  // Vehicle data
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
+  const [vehiclePlate, setVehiclePlate] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+
   // Documents (all optional for now)
   const [documents, setDocuments] = useState<Record<string, DocumentState>>({
     driversLicense: { uri: null, name: 'driversLicense', label: "Driver's License" },
@@ -96,6 +104,15 @@ export default function CompleteRegistrationScreen() {
     const validationError = validateProfile();
     if (validationError) {
       setError(validationError);
+      return;
+    }
+    setError(null);
+    setCurrentStep('vehicle');
+  };
+
+  const handleVehicleSubmit = () => {
+    if (!vehicleType) {
+      setError('Please select your vehicle type');
       return;
     }
     setError(null);
@@ -205,6 +222,20 @@ export default function CompleteRegistrationScreen() {
         formData.append('facebookProfileUrl', facebookProfileUrl.trim());
       }
 
+      // Vehicle information
+      if (vehicleType) {
+        formData.append('vehicleType', vehicleType);
+      }
+      if (vehiclePlate.trim()) {
+        formData.append('vehiclePlate', vehiclePlate.trim());
+      }
+      if (vehicleModel.trim()) {
+        formData.append('vehicleModel', vehicleModel.trim());
+      }
+      if (vehicleColor.trim()) {
+        formData.append('vehicleColor', vehicleColor.trim());
+      }
+
       // Add documents (only if provided)
       Object.entries(documents).forEach(([key, doc]) => {
         if (doc.uri) {
@@ -282,6 +313,123 @@ export default function CompleteRegistrationScreen() {
     );
   }
 
+  // Vehicle step
+  if (currentStep === 'vehicle') {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled">
+            <View style={styles.headerContainer}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('profile')}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.headline, { color: theme.text }]}>Vehicle Details</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                Tell us about the vehicle you will use for deliveries
+              </Text>
+            </View>
+
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Vehicle Type *</Text>
+                <View style={styles.vehicleTypeGrid}>
+                  {VEHICLE_TYPES.map((type) => {
+                    const selected = vehicleType === type;
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.vehicleTypeChip,
+                          {
+                            backgroundColor: selected ? theme.primary : theme.surface,
+                            borderColor: selected ? theme.primary : theme.border,
+                          },
+                        ]}
+                        onPress={() => {
+                          setVehicleType(type);
+                          setError(null);
+                        }}>
+                        <Text
+                          style={[
+                            styles.vehicleTypeChipText,
+                            { color: selected ? theme.primaryText : theme.text },
+                          ]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Plate Number (Optional)</Text>
+                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder="e.g. ABC 1234"
+                    placeholderTextColor={theme.placeholder}
+                    value={vehiclePlate}
+                    onChangeText={setVehiclePlate}
+                    autoCapitalize="characters"
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Model (Optional)</Text>
+                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder="e.g. Toyota HiAce 2020"
+                    placeholderTextColor={theme.placeholder}
+                    value={vehicleModel}
+                    onChangeText={setVehicleModel}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Color (Optional)</Text>
+                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder="e.g. White"
+                    placeholderTextColor={theme.placeholder}
+                    value={vehicleColor}
+                    onChangeText={setVehicleColor}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              {error && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: theme.primary }]}
+                onPress={handleVehicleSubmit}>
+                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
   // Documents step
   if (currentStep === 'documents') {
     return (
@@ -293,7 +441,7 @@ export default function CompleteRegistrationScreen() {
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
             showsVerticalScrollIndicator={false}>
             <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('profile')}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('vehicle')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Upload Documents</Text>
@@ -398,6 +546,32 @@ export default function CompleteRegistrationScreen() {
                   <View style={styles.reviewItem}>
                     <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Facebook Profile</Text>
                     <Text style={[styles.reviewValue, { color: theme.text }]}>{facebookProfileUrl}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Vehicle</Text>
+                <View style={styles.reviewItem}>
+                  <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Type</Text>
+                  <Text style={[styles.reviewValue, { color: theme.text }]}>{vehicleType}</Text>
+                </View>
+                {vehiclePlate.trim() !== '' && (
+                  <View style={styles.reviewItem}>
+                    <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Plate Number</Text>
+                    <Text style={[styles.reviewValue, { color: theme.text }]}>{vehiclePlate}</Text>
+                  </View>
+                )}
+                {vehicleModel.trim() !== '' && (
+                  <View style={styles.reviewItem}>
+                    <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Model</Text>
+                    <Text style={[styles.reviewValue, { color: theme.text }]}>{vehicleModel}</Text>
+                  </View>
+                )}
+                {vehicleColor.trim() !== '' && (
+                  <View style={styles.reviewItem}>
+                    <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Color</Text>
+                    <Text style={[styles.reviewValue, { color: theme.text }]}>{vehicleColor}</Text>
                   </View>
                 )}
               </View>
@@ -703,5 +877,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     resizeMode: 'cover',
     marginTop: 8,
+  },
+  vehicleTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  vehicleTypeChip: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minWidth: 96,
+    alignItems: 'center',
+  },
+  vehicleTypeChipText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
