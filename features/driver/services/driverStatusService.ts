@@ -25,6 +25,14 @@ export interface UpdateDriverStatusResponse {
   isOnline: boolean;
 }
 
+/** Thrown when the backend requires a face check before the driver can go online (HTTP 409). */
+export class FaceCheckRequiredError extends Error {
+  constructor(message = 'Please complete a quick face check before going online.') {
+    super(message);
+    this.name = 'FaceCheckRequiredError';
+  }
+}
+
 /**
  * Service for managing driver online status
  */
@@ -60,6 +68,10 @@ class DriverStatusService {
       // API returns { success: true, data: { isOnline } }
       return response.data.data || { isOnline: response.data.isOnline ?? isOnline };
     } catch (error) {
+      // 409 FACE_CHECK_REQUIRED: driver must pass a per-shift face check first
+      if (error && typeof error === 'object' && (error as { code?: string }).code === 'FACE_CHECK_REQUIRED') {
+        throw new FaceCheckRequiredError((error as { message?: string }).message);
+      }
       console.error('Error updating driver status:', error);
       throw new Error(
         `Failed to update driver status: ${error instanceof Error ? error.message : 'Unknown error'}`

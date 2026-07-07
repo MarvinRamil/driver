@@ -98,6 +98,7 @@ function NavigationGuard() {
       const isSignupPage = currentRoute === 'signup';
       const isForgotPasswordPage = currentRoute === 'forgot-password';
       const isLivenessPage = currentRoute === 'liveness';
+      const isKycPage = currentRoute === 'kyc-verification';
       const isApplicationPage = currentRoute === 'complete-registration';
       const isWelcomePage = currentRoute === 'welcome';
 
@@ -105,11 +106,13 @@ function NavigationGuard() {
       const livenessVerifiedAt =
         user?.livenessVerifiedAt ??
         (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
-      const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
-      const needsApplication =
-        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && !applicationSubmitted;
+      // Onboarding order: documents first, then identity verification (Didit KYC:
+      // ID scan + selfie face-matched to the ID), then welcome/pending approval.
+      const needsApplication = isDriver && !user?.isOnboarded && !applicationSubmitted;
+      const needsKyc =
+        isDriver && !user?.isOnboarded && applicationSubmitted && !livenessVerifiedAt;
       const needsWelcome =
-        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && applicationSubmitted;
+        isDriver && !user?.isOnboarded && applicationSubmitted && !!livenessVerifiedAt;
 
       if (!isAuthenticated) {
         if (isLoginPage || isSignupPage || isForgotPasswordPage) {
@@ -123,12 +126,14 @@ function NavigationGuard() {
         clearDriverApplicationSubmitted().catch(() => {});
       }
 
-      if (needsLiveness && !isLivenessPage) {
-        router.replace('/liveness');
-        return;
-      }
       if (needsApplication && !isApplicationPage && !isWelcomePage) {
         router.replace('/complete-registration');
+        return;
+      }
+      // Allow the legacy liveness page too: the KYC screen falls back to it when
+      // the hosted verification provider is unavailable.
+      if (needsKyc && !isKycPage && !isLivenessPage) {
+        router.replace('/kyc-verification');
         return;
       }
       // Allow the application page too: rejected drivers navigate from /welcome to
@@ -148,12 +153,12 @@ function NavigationGuard() {
       }
 
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-        if (needsLiveness) {
-          router.replace('/liveness');
-          return;
-        }
         if (needsApplication) {
           router.replace('/complete-registration');
+          return;
+        }
+        if (needsKyc) {
+          router.replace('/kyc-verification');
           return;
         }
         if (needsWelcome) {
@@ -165,12 +170,12 @@ function NavigationGuard() {
       }
 
       if (isAuthenticated && hasAllowedRole && isForgotPasswordPage) {
-        if (needsLiveness) {
-          router.replace('/liveness');
-          return;
-        }
         if (needsApplication) {
           router.replace('/complete-registration');
+          return;
+        }
+        if (needsKyc) {
+          router.replace('/kyc-verification');
           return;
         }
         if (needsWelcome) {
@@ -186,6 +191,8 @@ function NavigationGuard() {
         hasAllowedRole &&
         (inTabsGroup ||
           currentRoute === 'liveness' ||
+          currentRoute === 'kyc-verification' ||
+          currentRoute === 'shift-check' ||
           currentRoute === 'welcome' ||
           currentRoute === 'accept-booking' ||
           currentRoute === 'in-ride' ||
@@ -275,6 +282,8 @@ function RootLayoutNav() {
             <Stack.Screen name="signup" options={{ headerShown: false }} />
             <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
             <Stack.Screen name="liveness" options={{ headerShown: false }} />
+            <Stack.Screen name="kyc-verification" options={{ headerShown: false }} />
+            <Stack.Screen name="shift-check" options={{ headerShown: false }} />
             <Stack.Screen name="complete-registration" options={{ headerShown: false }} />
             <Stack.Screen name="welcome" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
