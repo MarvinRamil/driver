@@ -16,7 +16,11 @@ import { useCameraPermissions } from "expo-camera";
 import { useAuth } from "@/features/auth";
 import { kycService, KycStatus, KycUnavailableError } from "@/features/kyc";
 
-const CALLBACK_SCHEME = "beedriversapp://";
+// Path marker of the Didit callback (Didit:CallbackUrl, e.g. beeapp://kyc-callback?...).
+// We match on the PATH, not the scheme, so it works regardless of the backend's chosen
+// scheme or this app's OS scheme (driver/customer) — and is always caught in-WebView so it
+// never escapes to the OS as an unhandled deep link ("Can't open url").
+const CALLBACK_MARKER = "kyc-callback";
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_ATTEMPTS = 24; // ~1 minute
 
@@ -166,6 +170,9 @@ export default function KycVerificationScreen() {
         <WebView
           source={{ uri: verificationUrl }}
           style={styles.webview}
+          // Whitelist the callback scheme so the WebView hands it to onShouldStartLoadWithRequest
+          // instead of Linking.openURL (which fails: "Can't open url beeapp://...").
+          originWhitelist={["http://*", "https://*", "beeapp://*"]}
           javaScriptEnabled
           domStorageEnabled
           allowsInlineMediaPlayback
@@ -178,7 +185,7 @@ export default function KycVerificationScreen() {
             </View>
           )}
           onShouldStartLoadWithRequest={(request) => {
-            if (request.url.startsWith(CALLBACK_SCHEME)) {
+            if (request.url.includes(CALLBACK_MARKER)) {
               pollStatus();
               return false;
             }
