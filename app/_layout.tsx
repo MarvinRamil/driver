@@ -106,13 +106,13 @@ function NavigationGuard() {
       const livenessVerifiedAt =
         user?.livenessVerifiedAt ??
         (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
-      // Onboarding order: documents first, then identity verification (Didit KYC:
-      // ID scan + selfie face-matched to the ID), then welcome/pending approval.
-      const needsApplication = isDriver && !user?.isOnboarded && !applicationSubmitted;
-      const needsKyc =
-        isDriver && !user?.isOnboarded && applicationSubmitted && !livenessVerifiedAt;
+      // Onboarding order: identity verification first (Didit KYC or legacy liveness
+      // fallback), then driver documents/application, then welcome/pending approval.
+      const needsKyc = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
+      const needsApplication =
+        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && !applicationSubmitted;
       const needsWelcome =
-        isDriver && !user?.isOnboarded && applicationSubmitted && !!livenessVerifiedAt;
+        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && applicationSubmitted;
 
       if (!isAuthenticated) {
         if (isLoginPage || isSignupPage || isForgotPasswordPage) {
@@ -126,14 +126,14 @@ function NavigationGuard() {
         clearDriverApplicationSubmitted().catch(() => {});
       }
 
-      if (needsApplication && !isApplicationPage && !isWelcomePage) {
-        router.replace('/complete-registration');
-        return;
-      }
       // Allow the legacy liveness page too: the KYC screen falls back to it when
       // the hosted verification provider is unavailable.
       if (needsKyc && !isKycPage && !isLivenessPage) {
         router.replace('/kyc-verification');
+        return;
+      }
+      if (needsApplication && !isApplicationPage && !isWelcomePage) {
+        router.replace('/complete-registration');
         return;
       }
       // Allow the application page too: rejected drivers navigate from /welcome to
@@ -153,12 +153,12 @@ function NavigationGuard() {
       }
 
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-        if (needsApplication) {
-          router.replace('/complete-registration');
-          return;
-        }
         if (needsKyc) {
           router.replace('/kyc-verification');
+          return;
+        }
+        if (needsApplication) {
+          router.replace('/complete-registration');
           return;
         }
         if (needsWelcome) {
@@ -170,12 +170,12 @@ function NavigationGuard() {
       }
 
       if (isAuthenticated && hasAllowedRole && isForgotPasswordPage) {
-        if (needsApplication) {
-          router.replace('/complete-registration');
-          return;
-        }
         if (needsKyc) {
           router.replace('/kyc-verification');
+          return;
+        }
+        if (needsApplication) {
+          router.replace('/complete-registration');
           return;
         }
         if (needsWelcome) {

@@ -337,6 +337,14 @@ export default function CompleteRegistrationScreen() {
           ? rawMessage
           : 'Failed to submit application. Please try again.';
       setError(errorMessage);
+      if (errorMessage.includes('complete identity verification first')) {
+        Alert.alert('Verification Required', errorMessage, [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/kyc-verification'),
+          },
+        ]);
+      }
       console.error('[CompleteRegistration] Error:', errorMessage, err);
     } finally {
       setIsLoading(false);

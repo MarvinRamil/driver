@@ -36,7 +36,7 @@ type Phase =
   | "error";
 
 /**
- * Identity verification (KYC) during driver onboarding, after document submission.
+ * Identity verification (KYC) during driver onboarding, before document submission.
  * Opens Didit's hosted flow in a WebView: ID document scan + selfie with liveness,
  * face-matched against the ID portrait. Result arrives via backend webhook; this
  * screen polls status after the flow completes.
@@ -53,9 +53,9 @@ export default function KycVerificationScreen() {
   const [statusReason, setStatusReason] = useState<string | null>(null);
   const pollAttempts = useRef(0);
 
-  const goToWelcome = useCallback(async () => {
+  const goToApplication = useCallback(async () => {
     await refreshUser?.();
-    router.replace("/welcome");
+    router.replace("/complete-registration");
   }, [refreshUser, router]);
 
   const applyStatus = useCallback(
@@ -217,9 +217,9 @@ export default function KycVerificationScreen() {
         icon="checkmark-circle"
         iconColor={BeeColors.green[500]}
         title="Identity verified!"
-        subtitle="Your ID and selfie were verified successfully."
+        subtitle="Your ID and selfie were verified successfully. Next, submit your driver application."
         buttonLabel="Continue"
-        onPress={goToWelcome}
+        onPress={goToApplication}
         insetsBottom={insets.bottom}
       />
     );
@@ -299,7 +299,7 @@ export default function KycVerificationScreen() {
         <View style={styles.stepsList}>
           <IntroStep icon="card" text="Scan your government ID or driver's license" theme={theme} />
           <IntroStep icon="happy" text="Take a selfie — we match it to your ID photo" theme={theme} />
-          <IntroStep icon="checkmark-done" text="Get verified and start driving" theme={theme} />
+          <IntroStep icon="checkmark-done" text="Submit your driver documents after verification" theme={theme} />
         </View>
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: theme.primary }]}

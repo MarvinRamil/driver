@@ -7,7 +7,7 @@ import { HeadPoseCapture } from "@/features/liveness/components/HeadPoseCapture"
 /**
  * Face liveness verification (legacy fallback) during driver onboarding.
  * Used when the hosted KYC provider is unavailable (see kyc-verification.tsx);
- * runs after document submission.
+ * runs before document submission.
  */
 export default function LivenessScreen() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export default function LivenessScreen() {
 
   const handleAllPassed = useCallback(async () => {
     await refreshUser?.();
-    router.replace("/welcome");
+    router.replace("/complete-registration");
   }, [refreshUser, router]);
 
   return (
