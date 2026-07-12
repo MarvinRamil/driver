@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Redirect, useRouter } from "expo-router";
 import { apiClient } from "@/shared/services/apiClient";
+import { clearDriverApplicationSubmitted } from "@/shared/services/driverApplicationStorage";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -161,6 +162,9 @@ export default function WelcomeScreen() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
   const [rejectionNotes, setRejectionNotes] = useState<string | null>(null);
+  // Gate the screen until the application check resolves, so we never flash the
+  // "under review" UI before a possible redirect (e.g. 404 -> complete-registration).
+  const [isCheckingApplication, setIsCheckingApplication] = useState(true);
 
   // Poll for approval so the driver is let in without having to re-login
   useEffect(() => {
@@ -186,14 +190,33 @@ export default function WelcomeScreen() {
           setApplicationStatus(application.status);
           setRejectionNotes(application.notes ?? null);
         }
-      } catch {
-        // No application / fetch failure — keep the default under-review UI
+        if (mounted) {
+          setIsCheckingApplication(false);
+        }
+      } catch (err) {
+        // A 404 means the backend has no application on record for this driver —
+        // e.g. an interrupted submit left the local "submitted" flag set but the
+        // request never reached the server. Without this, the driver would sit on
+        // the "under review" screen forever with nothing actually submitted.
+        // Recover by clearing the stale flag and sending them back to finish.
+        // Any other error is transient (offline, 5xx), so keep the under-review
+        // UI rather than bouncing a legitimately-pending driver.
+        const status = (err as { status?: number } | null)?.status;
+        if (status === 404 && mounted) {
+          await clearDriverApplicationSubmitted();
+          router.replace("/complete-registration");
+          // Leave the loader up while the redirect settles — don't clear the gate.
+          return;
+        }
+        if (mounted) {
+          setIsCheckingApplication(false);
+        }
       }
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [router]);
 
   const isRejected = applicationStatus === "Rejected";
 
@@ -244,6 +267,17 @@ export default function WelcomeScreen() {
 
   if (user.isOnboarded) {
     return <Redirect href="/(tabs)" />;
+  }
+
+  // Hold the loader until the application check resolves, so drivers with no
+  // application on record are redirected to finish rather than flashing the
+  // "under review" screen first.
+  if (isCheckingApplication) {
+    return (
+      <View style={[styles.loading, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={BeeColors.yellow[500]} />
+      </View>
+    );
   }
 
   const name = firstNameOf(user.fullName || user.email);
