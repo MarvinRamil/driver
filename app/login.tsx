@@ -8,13 +8,14 @@ import {
   getLastLoginUser,
   type LastLoginUser,
 } from "@/shared/services/lastLoginStorage";
+import { LIMITS, trimToMax } from "@/shared/constants/validation";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { Image } from "expo-image";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,14 +23,58 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Image as ExpoImage } from "expo-image";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LIMITS, trimToMax } from "@/shared/constants/validation";
+import { useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
+import Animated, {
+  Easing,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
-const HEADER_DARK = "#231e0f";
+const WELCOME_LOGO = require("@/assets/images/screen-welcome-logo.png");
 const VERIFIED_GREEN = "#6b8e23";
 
 let hasAutoPromptedBiometricThisSession = false;
+
+function AnimatedWelcomeLogo({
+  size = 160,
+  wrapSize = 192,
+  style,
+}: {
+  size?: number;
+  wrapSize?: number;
+  style?: object;
+}) {
+  const float = useSharedValue(0);
+
+  useEffect(() => {
+    float.value = withRepeat(
+      withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true
+    );
+    return () => cancelAnimation(float);
+  }, [float]);
+
+  const logoFloatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(float.value, [0, 1], [0, -15]) }],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        { width: wrapSize, height: wrapSize, alignItems: "center", justifyContent: "center" },
+        logoFloatStyle,
+        style,
+      ]}
+    >
+      <Image source={WELCOME_LOGO} style={{ width: size, height: size }} contentFit="contain" />
+    </Animated.View>
+  );
+}
 
 function getInitials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -46,11 +91,31 @@ function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
+function LoginScreenShell({
+  topColor,
+  bottomColor,
+  insets,
+  children,
+}: {
+  topColor: string;
+  bottomColor: string;
+  insets: EdgeInsets;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.container, { backgroundColor: bottomColor }]}>
+      <View style={{ height: insets.top, backgroundColor: topColor }} />
+      <View style={styles.flex}>{children}</View>
+      <View style={{ height: insets.bottom, backgroundColor: bottomColor }} />
+    </View>
+  );
+}
+
 /**
  * Driver login screen.
  * - welcome_back: a saved/returning user → yellow header + profile card (avatar
  *   from photo if available, else initials) + biometric + password.
- * - full_login: no saved user → dark brand header + email/password.
+ * - full_login: no saved user → yellow brand header + email + password.
  * Auth + biometric auto-prompt logic is unchanged.
  */
 export default function LoginScreen() {
@@ -85,6 +150,12 @@ export default function LoginScreen() {
     : lastUser !== null
       ? "welcome_back"
       : "full_login";
+
+  useFocusEffect(
+    useCallback(() => {
+      Keyboard.dismiss();
+    }, [])
+  );
 
   useEffect(() => {
     getLastLoginUser()
@@ -206,7 +277,6 @@ export default function LoginScreen() {
     hasAutoPromptedBiometricThisSession = false;
   };
 
-  // Shared password field
   const PasswordField = (
     <View style={styles.inputGroup}>
       <View style={styles.passwordLabelRow}>
@@ -245,263 +315,230 @@ export default function LoginScreen() {
     </View>
   ) : null;
 
-  // ---------- Loading ----------
   if (viewMode === "loading") {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" color={BeeColors.yellow[500]} />
-      </View>
+      <LoginScreenShell topColor={BRAND_YELLOW} bottomColor={theme.background} insets={insets}>
+        <View style={[styles.loadingContent, { backgroundColor: theme.background }]}>
+          <ActivityIndicator size="large" color={BeeColors.yellow[500]} />
+        </View>
+      </LoginScreenShell>
     );
   }
 
-  // ---------- Welcome back (saved user) ----------
   if (viewMode === "welcome_back" && lastUser) {
     const name = lastUser.fullName || lastUser.email;
     return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-      >
+      <LoginScreenShell topColor={BRAND_YELLOW} bottomColor={theme.background} insets={insets}>
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          style={styles.flex}
+          contentContainerStyle={[styles.scroll, styles.scrollWelcomeBack, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
           bounces={false}
         >
-          <View style={[styles.wbHeader, { paddingTop: insets.top + 24 }]}>
-            <Text style={styles.wbBrand}>Bee On-Demand</Text>
-            <Text style={styles.wbBrandTag}>RELIABLE. FAST. SECURE.</Text>
-            <Text style={styles.wbWelcome}>Welcome back!</Text>
-            <Text style={styles.wbWelcomeSub}>Ready to get moving today?</Text>
-          </View>
+            <View style={[styles.wbHeader, { paddingTop: 24 }]}>
+              <AnimatedWelcomeLogo size={140} wrapSize={140} style={styles.wbLogo} />
+              <Text style={styles.wbWelcome}>Welcome back!</Text>
+              <Text style={styles.wbWelcomeSub}>Ready to get moving today?</Text>
+            </View>
 
-          <View style={styles.wbCardWrap}>
-            <View style={[styles.wbCard, { backgroundColor: theme.surface }]}>
-              <View style={styles.wbAvatarWrap}>
-                <View style={styles.wbAvatarRing}>
-                  {lastUser.photoUrl ? (
-                    <ExpoImage source={{ uri: lastUser.photoUrl }} style={styles.wbAvatarImg} contentFit="cover" />
-                  ) : (
-                    <View style={styles.wbAvatarInitials}>
-                      <Text style={styles.wbAvatarInitialsText}>{getInitials(name)}</Text>
-                    </View>
-                  )}
+            <View style={styles.wbCardWrap}>
+              <View style={[styles.wbCard, { backgroundColor: theme.surface }]}>
+                <View style={styles.wbAvatarWrap}>
+                  <View style={styles.wbAvatarRing}>
+                    {lastUser.photoUrl ? (
+                      <Image source={{ uri: lastUser.photoUrl }} style={styles.wbAvatarImg} contentFit="cover" />
+                    ) : (
+                      <View style={styles.wbAvatarInitials}>
+                        <Text style={styles.wbAvatarInitialsText}>{getInitials(name)}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.wbVerifiedBadge}>
+                    <Ionicons name="checkmark" size={12} color="#ffffff" />
+                  </View>
                 </View>
-                <View style={styles.wbVerifiedBadge}>
-                  <Ionicons name="checkmark" size={12} color="#ffffff" />
+
+                <Text style={[styles.wbName, { color: theme.text }]}>{name}</Text>
+                <Text style={[styles.wbEmail, { color: theme.textSecondary }]}>{lastUser.email}</Text>
+
+                <View style={styles.wbActions}>
+                  {isBiometricReady && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.loginButton, (isBiometricLoading || isLoading) && styles.loginButtonDisabled]}
+                        onPress={handleTouchIDLogin}
+                        disabled={isBiometricLoading || isLoading}
+                        activeOpacity={0.95}
+                      >
+                        {isBiometricLoading ? (
+                          <ActivityIndicator size="small" color="#000000" />
+                        ) : (
+                          <>
+                            <Ionicons name="finger-print" size={22} color="#000000" />
+                            <Text style={styles.loginButtonText}>Sign in with {biometricType}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+
+                      <View style={styles.dividerRow}>
+                        <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+                        <Text style={[styles.dividerText, { color: theme.textSecondary }]}>OR</Text>
+                        <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+                      </View>
+                    </>
+                  )}
+
+                  {PasswordField}
+                  {ErrorBanner}
+
+                  <TouchableOpacity
+                    style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+                    onPress={handleLogin}
+                    disabled={isLoading}
+                    activeOpacity={0.95}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator size="small" color="#000000" />
+                    ) : (
+                      <>
+                        <Text style={styles.loginButtonText}>Log In</Text>
+                        <Ionicons name="arrow-forward" size={20} color="#000000" />
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              <Text style={[styles.wbName, { color: theme.text }]}>{name}</Text>
-              <Text style={[styles.wbEmail, { color: theme.textSecondary }]}>{lastUser.email}</Text>
-
-              <View style={styles.wbActions}>
-                {isBiometricReady && (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.loginButton, (isBiometricLoading || isLoading) && styles.loginButtonDisabled]}
-                      onPress={handleTouchIDLogin}
-                      disabled={isBiometricLoading || isLoading}
-                      activeOpacity={0.95}
-                    >
-                      {isBiometricLoading ? (
-                        <ActivityIndicator size="small" color="#000000" />
-                      ) : (
-                        <>
-                          <Ionicons name="finger-print" size={22} color="#000000" />
-                          <Text style={styles.loginButtonText}>Sign in with {biometricType}</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-
-                    <View style={styles.dividerRow}>
-                      <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-                      <Text style={[styles.dividerText, { color: theme.textSecondary }]}>OR</Text>
-                      <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
-                    </View>
-                  </>
-                )}
-
-                {PasswordField}
-                {ErrorBanner}
-
+              <View style={styles.wbSecondary}>
                 <TouchableOpacity
-                  style={[styles.outlineButton, { borderColor: theme.border, backgroundColor: theme.background }, isLoading && styles.loginButtonDisabled]}
-                  onPress={handleLogin}
-                  disabled={isLoading}
-                  activeOpacity={0.95}
+                  style={[styles.switchPill, { borderColor: theme.border, backgroundColor: theme.surface }]}
+                  onPress={handleSignInAsDifferentUser}
                 >
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color={theme.text} />
-                  ) : (
-                    <>
-                      <Text style={[styles.outlineButtonText, { color: theme.text }]}>Log In</Text>
-                      <Ionicons name="arrow-forward" size={20} color={theme.text} />
-                    </>
-                  )}
+                  <Ionicons name="swap-horizontal" size={18} color={theme.text} />
+                  <Text style={[styles.switchPillText, { color: theme.text }]}>Switch Account</Text>
                 </TouchableOpacity>
+                <Text style={[styles.footerText, { color: theme.textSecondary, marginTop: 20 }]}>
+                  Not {firstNameOf(name)}?{" "}
+                  <Text style={[styles.signUpLink, { color: theme.text }]} onPress={() => router.push("/signup")}>
+                    Sign up for a new account
+                  </Text>
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+      </LoginScreenShell>
+    );
+  }
+
+  return (
+    <LoginScreenShell topColor={BRAND_YELLOW} bottomColor={theme.background} insets={insets}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
+        bounces={false}
+      >
+          <View style={[styles.header, { paddingTop: 24 }]}>
+            <AnimatedWelcomeLogo size={150} wrapSize={150} />
+          </View>
+
+          <View style={[styles.card, { backgroundColor: theme.background, paddingBottom: 24 }]}>
+            <Text style={[styles.title, { color: theme.text }]}>Welcome!</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Sign in to continue your journey.</Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Email Address</Text>
+              <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="mail" size={20} color={theme.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: theme.text }]}
+                  placeholder="Enter your email"
+                  placeholderTextColor={theme.placeholder}
+                  value={email}
+                  onChangeText={(t) => {
+                    setEmail(trimToMax(t, LIMITS.EMAIL));
+                    clearError();
+                  }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={LIMITS.EMAIL}
+                  editable={!isLoading}
+                />
               </View>
             </View>
 
-            <View style={styles.wbSecondary}>
+            {PasswordField}
+            {ErrorBanner}
+
+            <TouchableOpacity
+              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={isLoading}
+              activeOpacity={0.95}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <>
+                  <Text style={styles.loginButtonText}>Log In</Text>
+                  <Ionicons name="arrow-forward" size={20} color="#000000" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {isBiometricReady && (
               <TouchableOpacity
-                style={[styles.switchPill, { borderColor: theme.border, backgroundColor: theme.surface }]}
-                onPress={handleSignInAsDifferentUser}
+                style={styles.faceIdButton}
+                onPress={handleTouchIDLogin}
+                disabled={isBiometricLoading || isLoading}
               >
-                <Ionicons name="swap-horizontal" size={18} color={theme.text} />
-                <Text style={[styles.switchPillText, { color: theme.text }]}>Switch Account</Text>
+                {isBiometricLoading ? (
+                  <ActivityIndicator size="small" color={theme.text} />
+                ) : (
+                  <>
+                    <Ionicons name="finger-print" size={20} color={theme.text} />
+                    <Text style={[styles.faceIdText, { color: theme.text }]}>Use {biometricType}</Text>
+                  </>
+                )}
               </TouchableOpacity>
-              <Text style={[styles.footerText, { color: theme.textSecondary, marginTop: 20 }]}>
-                Not {firstNameOf(name)}?{" "}
+            )}
+
+            <View style={styles.footerLinkWrap}>
+              <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+                Don't have an account?{" "}
                 <Text style={[styles.signUpLink, { color: theme.text }]} onPress={() => router.push("/signup")}>
-                  Sign up for a new account
+                  Sign Up
                 </Text>
               </Text>
             </View>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // ---------- Full login (no saved user) ----------
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: HEADER_DARK }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        bounces={false}
-      >
-        <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
-          {router.canGoBack() && (
-            <TouchableOpacity style={[styles.backButton, { top: insets.top + 8 }]} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#ffffff" />
-            </TouchableOpacity>
-          )}
-          <View style={styles.logoBox}>
-            <ExpoImage source={require("@/assets/images/bee_logo.png")} style={styles.logoImage} contentFit="contain" />
-          </View>
-          <Text style={styles.brandTitle}>Bee On-Demand</Text>
-          <Text style={styles.brandTagline}>FAST, RELIABLE &amp; SECURE DELIVERIES</Text>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: theme.background, paddingBottom: insets.bottom + 24 }]}>
-          <Text style={[styles.title, { color: theme.text }]}>Welcome Back</Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Sign in to continue driving.</Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: theme.text }]}>Email Address</Text>
-            <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Ionicons name="mail" size={20} color={theme.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: theme.text }]}
-                placeholder="Enter your email"
-                placeholderTextColor={theme.placeholder}
-                value={email}
-                onChangeText={(t) => {
-                  setEmail(trimToMax(t, LIMITS.EMAIL));
-                  clearError();
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                maxLength={LIMITS.EMAIL}
-                editable={!isLoading}
-              />
-            </View>
-          </View>
-
-          {PasswordField}
-          {ErrorBanner}
-
-          <TouchableOpacity
-            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
-            activeOpacity={0.95}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#000000" />
-            ) : (
-              <>
-                <Text style={styles.loginButtonText}>Log In</Text>
-                <Ionicons name="arrow-forward" size={20} color="#000000" />
-              </>
-            )}
-          </TouchableOpacity>
-
-          {isBiometricReady && (
-            <TouchableOpacity style={styles.faceIdButton} onPress={handleTouchIDLogin} disabled={isBiometricLoading || isLoading}>
-              {isBiometricLoading ? (
-                <ActivityIndicator size="small" color={theme.text} />
-              ) : (
-                <>
-                  <Ionicons name="finger-print" size={20} color={theme.text} />
-                  <Text style={[styles.faceIdText, { color: theme.text }]}>Use {biometricType}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.footerLinkWrap}>
-            <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-              Don't have an account?{" "}
-              <Text style={[styles.signUpLink, { color: theme.text }]} onPress={() => router.push("/signup")}>
-                Sign Up
-              </Text>
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </LoginScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  flex: { flex: 1 },
+  loadingContent: { flex: 1, justifyContent: "center", alignItems: "center" },
   scroll: { flexGrow: 1 },
+  scrollWelcomeBack: { minHeight: "100%" },
 
-  // ----- Full login (dark header) -----
   header: {
     minHeight: 260,
-    backgroundColor: HEADER_DARK,
+    backgroundColor: BRAND_YELLOW,
     alignItems: "center",
     justifyContent: "center",
     paddingBottom: 48,
     paddingHorizontal: 24,
   },
-  backButton: {
-    position: "absolute",
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoBox: {
-    width: 96,
-    height: 96,
-    backgroundColor: BRAND_YELLOW,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  logoImage: { width: 60, height: 60, borderRadius: 12 },
-  brandTitle: { color: "#ffffff", fontSize: 24, fontWeight: "700" },
-  brandTagline: { color: "rgba(255,255,255,0.75)", fontSize: 10, fontWeight: "600", letterSpacing: 3, marginTop: 4 },
   card: {
     flex: 1,
     marginTop: -28,
@@ -514,14 +551,17 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   title: { fontSize: 30, fontWeight: "700", marginBottom: 6 },
-  subtitle: { fontSize: 16, marginBottom: 28 },
+  subtitle: { fontSize: 16, marginBottom: 30, marginTop: -10 },
 
-  // ----- Welcome back (yellow header) -----
-  wbHeader: { backgroundColor: BRAND_YELLOW, alignItems: "center", paddingHorizontal: 24, paddingBottom: 80 },
-  wbBrand: { fontSize: 30, fontWeight: "800", color: "#241a00", letterSpacing: -0.5 },
-  wbBrandTag: { fontSize: 11, fontWeight: "700", color: "rgba(80,60,0,0.7)", letterSpacing: 3, marginTop: 2, marginBottom: 20 },
-  wbWelcome: { fontSize: 26, fontWeight: "700", color: "#241a00" },
-  wbWelcomeSub: { fontSize: 15, fontWeight: "500", color: "rgba(80,60,0,0.8)", marginTop: 2 },
+  wbHeader: {
+    backgroundColor: BRAND_YELLOW,
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+  wbLogo: { marginBottom: 12 },
+  wbWelcome: { fontSize: 26, fontWeight: "700", color: "#241a00", marginTop: -30 },
+  wbWelcomeSub: { fontSize: 15, fontWeight: "500", color: "rgba(111,87,0,0.8)", marginTop: 0, marginBottom: 30 },
   wbCardWrap: { paddingHorizontal: 24, marginTop: -48, alignItems: "center", width: "100%", maxWidth: 480, alignSelf: "center" },
   wbCard: {
     width: "100%",
@@ -582,7 +622,6 @@ const styles = StyleSheet.create({
   },
   switchPillText: { fontSize: 14, fontWeight: "600" },
 
-  // ----- Shared -----
   inputGroup: { marginBottom: 18, width: "100%" },
   label: { fontSize: 14, fontWeight: "600", marginBottom: 8 },
   passwordLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },

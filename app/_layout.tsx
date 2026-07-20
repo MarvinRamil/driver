@@ -5,6 +5,10 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import {
+  getDriverApplicationSubmitted,
+  clearDriverApplicationSubmitted,
+} from '@/shared/services/driverApplicationStorage';
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -57,9 +61,29 @@ function NavigationGuard() {
   const { user, isLoading, logout } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
 
   const isAuthenticated = user !== null;
   const hasAllowedRole = isAllowedRole(user);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!user) {
+      setApplicationSubmitted(false);
+      return;
+    }
+
+    (async () => {
+      const fromStore = await getDriverApplicationSubmitted();
+      if (mounted) {
+        setApplicationSubmitted(fromStore);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (isLoading) {
@@ -67,20 +91,28 @@ function NavigationGuard() {
     }
 
     try {
-      const currentRoute = segments[0];
+      // Cast: expo-router's generated route union lags behind newly added screens
+      const currentRoute = segments[0] as string;
       const inTabsGroup = currentRoute === '(tabs)';
       const isLoginPage = currentRoute === 'login';
       const isSignupPage = currentRoute === 'signup';
       const isForgotPasswordPage = currentRoute === 'forgot-password';
       const isLivenessPage = currentRoute === 'liveness';
-      const isDriverCompletePage = currentRoute === 'driver-complete';
+      const isKycPage = currentRoute === 'kyc-verification';
+      const isApplicationPage = currentRoute === 'complete-registration';
+      const isWelcomePage = currentRoute === 'welcome';
 
       const isDriver = user?.role === 'Driver';
       const livenessVerifiedAt =
         user?.livenessVerifiedAt ??
         (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
-      const needsLiveness = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
-      const needsDriverComplete = isDriver && !user?.isOnboarded && !!livenessVerifiedAt;
+      // Onboarding order: identity verification first (Didit KYC or legacy liveness
+      // fallback), then driver documents/application, then welcome/pending approval.
+      const needsKyc = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
+      const needsApplication =
+        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && !applicationSubmitted;
+      const needsWelcome =
+        isDriver && !user?.isOnboarded && !!livenessVerifiedAt && applicationSubmitted;
 
       if (!isAuthenticated) {
         if (isLoginPage || isSignupPage || isForgotPasswordPage) {
@@ -90,12 +122,25 @@ function NavigationGuard() {
         return;
       }
 
-      if (needsLiveness && !isLivenessPage) {
-        router.replace('/liveness');
+      if (user?.isOnboarded) {
+        clearDriverApplicationSubmitted().catch(() => {});
+      }
+
+      // Allow the legacy liveness page too: the KYC screen falls back to it when
+      // the hosted verification provider is unavailable.
+      if (needsKyc && !isKycPage && !isLivenessPage) {
+        router.replace('/kyc-verification');
         return;
       }
-      if (needsDriverComplete && !isDriverCompletePage) {
-        router.replace('/driver-complete');
+      if (needsApplication && !isApplicationPage && !isWelcomePage) {
+        router.replace('/complete-registration');
+        return;
+      }
+      // Allow the application page too: rejected drivers navigate from /welcome to
+      // /complete-registration to resubmit. The form itself redirects drivers whose
+      // application is not rejected back to /welcome.
+      if (needsWelcome && !isWelcomePage && !isApplicationPage) {
+        router.replace('/welcome');
         return;
       }
 
@@ -108,12 +153,33 @@ function NavigationGuard() {
       }
 
       if (isAuthenticated && hasAllowedRole && (isLoginPage || isSignupPage)) {
-        if (needsLiveness) {
-          router.replace('/liveness');
+        if (needsKyc) {
+          router.replace('/kyc-verification');
           return;
         }
-        if (needsDriverComplete) {
-          router.replace('/driver-complete');
+        if (needsApplication) {
+          router.replace('/complete-registration');
+          return;
+        }
+        if (needsWelcome) {
+          router.replace('/welcome');
+          return;
+        }
+        router.replace('/(tabs)');
+        return;
+      }
+
+      if (isAuthenticated && hasAllowedRole && isForgotPasswordPage) {
+        if (needsKyc) {
+          router.replace('/kyc-verification');
+          return;
+        }
+        if (needsApplication) {
+          router.replace('/complete-registration');
+          return;
+        }
+        if (needsWelcome) {
+          router.replace('/welcome');
           return;
         }
         router.replace('/(tabs)');
@@ -125,21 +191,32 @@ function NavigationGuard() {
         hasAllowedRole &&
         (inTabsGroup ||
           currentRoute === 'liveness' ||
-          currentRoute === 'driver-complete' ||
+          currentRoute === 'kyc-verification' ||
+          currentRoute === 'shift-check' ||
+          currentRoute === 'welcome' ||
           currentRoute === 'accept-booking' ||
           currentRoute === 'in-ride' ||
           currentRoute === 'rating' ||
           currentRoute === 'support' ||
           currentRoute === 'booking' ||
-          currentRoute === 'complete-registration' ||
-          currentRoute === 'pending-approval')
+          currentRoute === 'referrals' ||
+          currentRoute === 'complete-registration')
       ) {
         return;
       }
     } catch (error) {
       console.error('[NavigationGuard]', error);
     }
-  }, [user, isLoading, segments, router, isAuthenticated, hasAllowedRole, logout]);
+  }, [
+    user,
+    isLoading,
+    segments,
+    router,
+    isAuthenticated,
+    hasAllowedRole,
+    logout,
+    applicationSubmitted,
+  ]);
 
   return null;
 }
@@ -205,11 +282,15 @@ function RootLayoutNav() {
             <Stack.Screen name="signup" options={{ headerShown: false }} />
             <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
             <Stack.Screen name="liveness" options={{ headerShown: false }} />
-            <Stack.Screen name="driver-complete" options={{ headerShown: false }} />
+            <Stack.Screen name="kyc-verification" options={{ headerShown: false }} />
+            <Stack.Screen name="shift-check" options={{ headerShown: false }} />
+            <Stack.Screen name="complete-registration" options={{ headerShown: false }} />
+            <Stack.Screen name="welcome" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="accept-booking" options={{ headerShown: false }} />
             <Stack.Screen name="in-ride" options={{ headerShown: false }} />
             <Stack.Screen name="rating" options={{ headerShown: false }} />
+            <Stack.Screen name="referrals" options={{ headerShown: false }} />
             <Stack.Screen name="support" options={{ headerShown: false }} />
             <Stack.Screen name="support/ticket/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />

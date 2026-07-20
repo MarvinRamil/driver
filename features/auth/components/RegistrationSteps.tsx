@@ -5,18 +5,17 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
   FlatList,
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/shared/hooks/use-theme';
+import { useTheme, type ThemeColors } from '@/shared/hooks/use-theme';
 import { BeeColors } from '@/constants/theme';
 import { authService } from '../services/authService';
 import { registrationService, type RegistrationStatus } from '../services/registrationService';
@@ -25,6 +24,9 @@ import { ResumeRegistrationScreen } from './ResumeRegistrationScreen';
 import { biometricStorage } from '@/shared/services/biometricStorage';
 import { LIMITS, PATTERNS, trimToMax } from '@/shared/constants/validation';
 import { useAuth as useClerkAuth, useSignUp } from '@clerk/clerk-expo';
+
+const OTP_LENGTH = 6;
+const OTP_RESEND_COOLDOWN_SECONDS = 10 * 60;
 
 /** Pull a readable message out of a Clerk API error (or any error). */
 function extractClerkError(err: unknown): string {
@@ -52,30 +54,28 @@ interface RegistrationData {
   password: string;
   fullName: string;
   otp: string;
+  referralCode: string;
 }
 
 /**
  * Multi-step driver registration wizard.
- * Primary: email OTP → account details → security questions → register (Driver) → login.
- * Secondary: phone SMS OTP → same details flow → registerByPhone → login.
- * Post-login onboarding (liveness, documents) is handled outside this screen.
+ * Primary: email → account details → Clerk OTP → session.
+ * Secondary: phone SMS OTP → details → security questions → registerByPhone → login.
  */
 export function RegistrationSteps() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
 
-  // Clerk: email registration now creates the account in Clerk (email path only).
   const { isLoaded: signUpLoaded, signUp, setActive } = useSignUp();
   const { isSignedIn: clerkSignedIn, signOut: clerkSignOut } = useClerkAuth();
-  /** Which channel the user is registering with — email goes through Clerk, phone stays legacy. */
   const [channel, setChannel] = useState<'email' | 'phone'>('email');
-  /** True once the email code is verified and the session is being activated (email path). */
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const [currentStep, setCurrentStep] = useState<RegistrationStep>('email-entry');
   const [emailVerifiedViaOtp, setEmailVerifiedViaOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registrationData, setRegistrationData] = useState<RegistrationData>({
     email: '',
@@ -83,57 +83,59 @@ export function RegistrationSteps() {
     password: '',
     fullName: '',
     otp: '',
+    referralCode: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus | null>(null);
+  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
 
-  // Security questions (required for account recovery)
   const [securityQuestionsList, setSecurityQuestionsList] = useState<Array<{ id: number; question: string }>>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<[number | null, number | null, number | null]>([null, null, null]);
   const [questionAnswers, setQuestionAnswers] = useState<[string, string, string]>(['', '', '']);
-  const [questionPickerIndex, setQuestionPickerIndex] = useState<number | null>(null);
-  /** Token from verify-otp; sent with register so backend trusts OTP when cache is not shared (e.g. multiple API instances) */
+  const [questionPickerIndex, setQuestionPickerIndex] = useState<0 | 1 | 2 | null>(null);
   const [registrationToken, setRegistrationToken] = useState<string | null>(null);
-  /** 10-minute countdown on OTP screen before resend is allowed (seconds left) */
-  const OTP_RESEND_COOLDOWN_SECONDS = 10 * 60;
   const [otpResendSecondsLeft, setOtpResendSecondsLeft] = useState(0);
 
   useEffect(() => {
     authService.getSecurityQuestions().then(setSecurityQuestionsList).catch(() => {});
   }, []);
 
-  // 10-minute countdown timer on OTP verification steps
   useEffect(() => {
     if ((currentStep !== 'enter-otp' && currentStep !== 'email-otp') || otpResendSecondsLeft <= 0) return;
     const id = setInterval(() => {
-      setOtpResendSecondsLeft((prev) => (prev <= 0 ? 0 : prev - 1));
+      setOtpResendSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(id);
   }, [currentStep, otpResendSecondsLeft]);
 
   const isValidEmail = (email: string): boolean => PATTERNS.EMAIL.test(email);
-
   const isValidPhone = (phone: string): boolean => PATTERNS.PHONE.test(phone);
 
-  // Debounced registration-status check on email entry (not on every keystroke)
   useEffect(() => {
     if (currentStep !== 'email-entry') return;
     const email = registrationData.email.trim();
     if (!email || !isValidEmail(email)) {
       setRegistrationStatus(null);
+      setIsCheckingRegistration(false);
       return;
     }
+    setIsCheckingRegistration(true);
     const timer = setTimeout(async () => {
       try {
         const status = await registrationService.checkRegistrationStatus(email);
         setRegistrationStatus(status);
       } catch {
         setRegistrationStatus(null);
+      } finally {
+        setIsCheckingRegistration(false);
       }
     }, 500);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      setIsCheckingRegistration(false);
+    };
   }, [registrationData.email, currentStep]);
 
   const knownSteps: RegistrationStep[] = [
@@ -152,27 +154,15 @@ export function RegistrationSteps() {
     }
   }, [currentStep]);
 
-  /**
-   * Normalize local PH mobile number input into international format for API calls.
-   * - Accepts inputs like: 9XXXXXXXXX, 09XXXXXXXXX, 639XXXXXXXXX
-   * - Returns: 639XXXXXXXXX
-   */
   const normalizePhoneForApi = (raw: string): string => {
     const digits = raw.replace(/\D/g, '');
     if (!digits) return '';
-    if (digits.startsWith('639') && digits.length === 12) {
-      return digits;
-    }
-    if (digits.startsWith('09') && digits.length === 11) {
-      return `63${digits.slice(1)}`;
-    }
-    if (digits.startsWith('9')) {
-      return `63${digits}`;
-    }
+    if (digits.startsWith('639') && digits.length === 12) return digits;
+    if (digits.startsWith('09') && digits.length === 11) return `63${digits.slice(1)}`;
+    if (digits.startsWith('9')) return `63${digits}`;
     return `63${digits}`;
   };
 
-  /** Validates full name and password only (Step 1 of account creation) */
   const validateBasicDetailsForm = (): string | null => {
     if (!registrationData.fullName || registrationData.fullName.trim().length < 2) {
       return 'Please enter your full name (at least 2 characters)';
@@ -187,7 +177,6 @@ export function RegistrationSteps() {
     const hasLowerCase = /[a-z]/.test(registrationData.password);
     const hasNumber = /[0-9]/.test(registrationData.password);
     const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(registrationData.password);
-
     if (!(hasUpperCase && hasLowerCase && hasNumber && hasSpecial)) {
       return 'Password must contain uppercase, lowercase, number, and special character';
     }
@@ -197,7 +186,6 @@ export function RegistrationSteps() {
     return null;
   };
 
-  /** Validates full form including security questions (Step 2) */
   const validateForm = (): string | null => {
     const basicError = validateBasicDetailsForm();
     if (basicError) return basicError;
@@ -230,12 +218,19 @@ export function RegistrationSteps() {
     );
   };
 
-  /**
-   * Email flow (Clerk): validate email and continue to account details. The
-   * Clerk account is created (and the code sent) AFTER the password is entered,
-   * because Clerk needs email+password together for signUp.create().
-   */
-  const handleSendEmailOtp = async () => {
+  const navigateToLogin = () => router.replace('/login');
+  const navigateBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/login');
+  };
+
+  const dismissKeyboard = () => Keyboard.dismiss();
+  const withKeyboardDismiss = (fn: () => void) => () => {
+    dismissKeyboard();
+    fn();
+  };
+
+  const handleSendEmailOtp = () => {
     const email = registrationData.email.trim().toLowerCase();
     if (!email || !isValidEmail(email)) {
       setError('Please enter a valid email address');
@@ -247,10 +242,6 @@ export function RegistrationSteps() {
     setCurrentStep('enter-details');
   };
 
-  /**
-   * Email flow (Clerk): after account details, create the Clerk sign-up and send
-   * the email verification code, then go to the OTP step.
-   */
   const handleStartClerkSignUp = async () => {
     const validationError = validateBasicDetailsForm();
     if (validationError) {
@@ -264,10 +255,7 @@ export function RegistrationSteps() {
     setIsLoading(true);
     setError(null);
     try {
-      // Clerk is single-session: clear any leftover session first.
-      if (clerkSignedIn) {
-        await clerkSignOut();
-      }
+      if (clerkSignedIn) await clerkSignOut();
       const email = registrationData.email.trim().toLowerCase();
       const name = registrationData.fullName.trim();
       const sp = name.indexOf(' ');
@@ -279,10 +267,9 @@ export function RegistrationSteps() {
         firstName,
         lastName,
         legalAccepted: true,
-        // Role is conveyed by the driver app's "X-Bee-Role: driver" header on
-        // /api/auth/me (not Clerk metadata). Phone rides in metadata for the webhook.
         unsafeMetadata: {
           phoneNumber: registrationData.phoneNumber.trim() || null,
+          referralCode: registrationData.referralCode.trim().toUpperCase() || null,
         },
       });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
@@ -297,30 +284,23 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Email flow (Clerk): resend the email verification code */
   const handleResendEmailOtp = async () => {
     if (!signUpLoaded || !signUp) return;
-    setIsLoading(true);
+    setIsResending(true);
     setError(null);
     try {
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
-      Alert.alert('Code sent', 'A new verification code has been sent to your email.');
     } catch (err) {
       setError(extractClerkError(err));
     } finally {
-      setIsLoading(false);
+      setIsResending(false);
     }
   };
 
-  /**
-   * Email flow (Clerk): verify the email code and activate the session. On
-   * success the root guard redirects the driver into post-login onboarding
-   * (liveness/documents); the backend profile is created by the Clerk webhook.
-   */
   const handleContinueFromEmailOtp = async () => {
     setError(null);
-    if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
+    if (!registrationData.otp || registrationData.otp.trim().length !== OTP_LENGTH) {
       setError('Please enter the 6-digit code sent to your email');
       Alert.alert('Invalid code', 'Please enter the full 6-digit code sent to your email.');
       return;
@@ -334,9 +314,8 @@ export function RegistrationSteps() {
       const attempt = await signUp.attemptEmailAddressVerification({ code: registrationData.otp.trim() });
       if (attempt.status === 'complete' && attempt.createdSessionId) {
         setEmailVerifiedViaOtp(true);
-        setIsSigningIn(true); // keep this on; screen stays here until the root guard redirects
+        setIsSigningIn(true);
         await setActive({ session: attempt.createdSessionId });
-        // Signed in — root guard takes over (onboarding/liveness).
       } else {
         setError('Verification could not be completed. Please try again.');
       }
@@ -349,7 +328,6 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Step 1: Send SMS OTP to phone (secondary flow) */
   const handleSendOtp = async () => {
     const phone = normalizePhoneForApi(registrationData.phoneNumber);
     if (!phone || !isValidPhone(phone)) {
@@ -371,27 +349,24 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Resend SMS OTP */
   const handleResendOtp = async () => {
     const phone = normalizePhoneForApi(registrationData.phoneNumber);
     if (!phone) return;
-    setIsLoading(true);
+    setIsResending(true);
     setError(null);
     try {
       await authService.resendSmsOtp(phone);
       setOtpResendSecondsLeft(OTP_RESEND_COOLDOWN_SECONDS);
-      Alert.alert('Code sent', 'A new verification code has been sent via SMS.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend code. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsResending(false);
     }
   };
 
-  /** Step 2: Verify SMS OTP only. Show clear success or invalid feedback, then proceed to details. */
   const handleContinueFromOtp = async () => {
     setError(null);
-    if (!registrationData.otp || registrationData.otp.trim().length !== 6) {
+    if (!registrationData.otp || registrationData.otp.trim().length !== OTP_LENGTH) {
       setError('Please enter the 6-digit code sent to your phone');
       Alert.alert('Invalid code', 'Please enter the full 6-digit code sent to your phone.');
       return;
@@ -414,7 +389,6 @@ export function RegistrationSteps() {
     }
   };
 
-  /** Create account after details + security questions (email or phone path). */
   const handleCreateAccountAfterOtp = async () => {
     const validationError = validateForm();
     if (validationError) {
@@ -434,6 +408,7 @@ export function RegistrationSteps() {
           password: registrationData.password,
           fullName: registrationData.fullName.trim(),
           role: 'Driver',
+          referralCode: registrationData.referralCode.trim().toUpperCase() || null,
           ...buildSecurityQuestionsPayload(),
         });
       } else {
@@ -442,6 +417,7 @@ export function RegistrationSteps() {
           password: registrationData.password,
           fullName: registrationData.fullName.trim(),
           role: 'Driver',
+          referralCode: registrationData.referralCode.trim().toUpperCase() || null,
           ...buildSecurityQuestionsPayload(),
           ...(registrationToken ? { registrationToken } : {}),
         });
@@ -462,17 +438,10 @@ export function RegistrationSteps() {
   };
 
   const handleEmailVerified = () => {
-    // After email verification, redirect to login
-    // User will complete registration after logging in
     Alert.alert(
       'Email Verified',
       'Your email has been verified successfully. Please login to continue with your registration.',
-      [
-        {
-          text: 'Go to Login',
-          onPress: () => router.replace('/login'),
-        },
-      ]
+      [{ text: 'Go to Login', onPress: () => router.replace('/login') }]
     );
   };
 
@@ -484,633 +453,384 @@ export function RegistrationSteps() {
     );
   };
 
-  const renderChannelToggle = (target: 'email' | 'phone') => (
-    <TouchableOpacity
-      style={styles.channelToggle}
-      onPress={() => {
-        setError(null);
-        if (target === 'phone') {
-          setEmailVerifiedViaOtp(false);
-          setCurrentStep('enter-phone');
-        } else {
-          setRegistrationToken(null);
-          setCurrentStep('email-entry');
-        }
-      }}
-      disabled={isLoading}>
-      <Text style={[styles.channelToggleText, { color: theme.primary }]}>
-        {target === 'phone' ? 'Use phone number instead' : 'Use email instead'}
-      </Text>
-    </TouchableOpacity>
-  );
+  const switchToPhone = withKeyboardDismiss(() => {
+    setError(null);
+    setEmailVerifiedViaOtp(false);
+    setOtpResendSecondsLeft(0);
+    setChannel('phone');
+    setCurrentStep('enter-phone');
+  });
 
-  const renderLoginFooter = () => (
-    <View style={styles.loginContainer}>
-      <Text style={[styles.loginText, { color: theme.textMuted }]}>
-        Already have an account?{' '}
-        <Text style={[styles.loginLink, { color: theme.text }]} onPress={() => router.replace('/login')}>
-          Log In
-        </Text>
-      </Text>
-    </View>
-  );
+  const switchToEmail = withKeyboardDismiss(() => {
+    setError(null);
+    setRegistrationToken(null);
+    setOtpResendSecondsLeft(0);
+    setChannel('email');
+    setCurrentStep('email-entry');
+  });
 
-  // Email flow: enter email and send OTP
-  if (currentStep === 'email-entry') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
+  const emailTaken = registrationStatus?.registrationComplete === true;
+
+  const renderShell = (
+    shellKey: string,
+    onBack: (() => void) | null,
+    headline: string,
+    subheadline: string,
+    children: React.ReactNode,
+    options?: { centeredForm?: boolean; hideBack?: boolean }
+  ) => (
+    <View key={shellKey} style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={{ height: insets.top, backgroundColor: theme.background }} />
+      <View style={styles.flex}>
+        <View style={styles.content}>
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            keyboardShouldPersistTaps="handled">
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
+          >
             <View style={styles.headerContainer}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => (router.canGoBack() ? router.back() : router.replace('/login'))}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Enter your email to receive a verification code
-              </Text>
-            </View>
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Email</Text>
-                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <Ionicons name="mail-outline" size={20} color={theme.textSecondary} style={styles.inputLeadingIcon} />
-                  <TextInput
-                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
-                    placeholder="you@example.com"
-                    placeholderTextColor={theme.placeholder}
-                    value={registrationData.email}
-                    onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, email: trimToMax(text, LIMITS.EMAIL) });
-                      setError(null);
-                    }}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!isLoading}
-                    maxLength={LIMITS.EMAIL}
-                  />
-                </View>
-                {registrationStatus && (
-                  <View style={styles.statusIndicator}>
-                    {registrationStatus.registrationComplete ? (
-                      <Text style={[styles.statusText, { color: theme.info }]}>
-                        Account exists. Please log in instead.
-                      </Text>
-                    ) : registrationStatus.emailVerified ? (
-                      <Text style={[styles.statusText, { color: theme.success }]}>
-                        Email verified. Log in to continue registration.
-                      </Text>
-                    ) : null}
-                  </View>
-                )}
-              </View>
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
+              {onBack && !options?.hideBack ? (
+                <TouchableOpacity style={styles.backButton} onPress={onBack}>
+                  <Ionicons name="arrow-back" size={24} color={theme.text} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.backButton} />
               )}
-              <TouchableOpacity
-                style={[styles.submitButton, isLoading && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
-                onPress={handleSendEmailOtp}
-                disabled={isLoading}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.primaryText} />
-                ) : (
-                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Send verification code</Text>
-                )}
-              </TouchableOpacity>
-              {renderChannelToggle('phone')}
-              {renderLoginFooter()}
+              <Text style={[styles.headline, { color: theme.text }]}>{headline}</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>{subheadline}</Text>
             </View>
+            <View style={[styles.form, options?.centeredForm && styles.formCentered]}>{children}</View>
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Email flow: verify OTP
-  if (currentStep === 'email-otp') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            keyboardShouldPersistTaps="handled">
-            <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-details')}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                We sent a 6-digit code to {registrationData.email.trim().toLowerCase()}
-              </Text>
-            </View>
-            <View style={[styles.form, styles.formCentered]}>
-              <View style={styles.otpInputWrap}>
-                <Text style={[styles.label, { color: theme.text }]}>Enter the code from your email</Text>
-                <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <TextInput
-                    style={[styles.otpInput, { color: theme.text }]}
-                    placeholder="000000"
-                    placeholderTextColor={theme.placeholder}
-                    value={registrationData.otp}
-                    onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, otp: text.replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH) });
-                      setError(null);
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={LIMITS.OTP_LENGTH}
-                    editable={!isLoading}
-                  />
-                </View>
-                {otpResendSecondsLeft > 0 ? (
-                  <View style={styles.timerRow}>
-                    <Ionicons name="time-outline" size={18} color={theme.textSecondary} />
-                    <Text style={[styles.timerText, { color: theme.textSecondary }]}>
-                      Resend code in {Math.floor(otpResendSecondsLeft / 60)}:{(otpResendSecondsLeft % 60).toString().padStart(2, '0')}
-                    </Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity onPress={handleResendEmailOtp} disabled={isLoading} style={styles.resendButton}>
-                    <Text style={[styles.resendText, { color: theme.primary }]}>Resend code</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={[styles.submitButton, (isLoading || isSigningIn) && styles.submitButtonDisabled, { backgroundColor: theme.primary }]}
-                onPress={handleContinueFromEmailOtp}
-                disabled={isLoading || isSigningIn}>
-                {isLoading || isSigningIn ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <ActivityIndicator size="small" color={theme.primaryText} />
-                    {isSigningIn && (
-                      <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Signing you in…</Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
-                )}
-              </TouchableOpacity>
-              {renderLoginFooter()}
-            </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Phone flow: enter phone and send SMS OTP
-  if (currentStep === 'enter-phone') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            keyboardShouldPersistTaps="handled">
-            <View style={styles.headerContainer}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => (router.canGoBack() ? router.back() : router.replace('/login'))}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Create Driver Account</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Enter your phone number to receive a verification code
-              </Text>
-            </View>
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Phone number</Text>
-                <View
-                  style={[
-                    styles.inputContainer,
-                    styles.inputContainerLarge,
-                    styles.phoneInputContainer,
-                    { backgroundColor: theme.surface, borderColor: theme.border },
-                  ]}>
-                  <View style={[styles.countryCodeBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-                    <Text style={[styles.countryCodeText, { color: theme.text }]}>+63</Text>
-                  </View>
-                  <TextInput
-                    style={[styles.input, styles.inputLarge, styles.phoneInput, { color: theme.text }]}
-                    placeholder="9XXXXXXXXX"
-                    placeholderTextColor={theme.placeholder}
-                    value={registrationData.phoneNumber}
-                    onChangeText={(text) => {
-                      // Keep only digits and enforce starting with 9 for PH mobiles
-                      let next = text.replace(/\D/g, '');
-                      if (next.startsWith('09')) {
-                        next = next.slice(1);
-                      }
-                      if (next && !next.startsWith('9')) {
-                        next = next.replace(/^[0-8]+/, '');
-                      }
-                      next = next.slice(0, 10); // 9 + 9 digits
-                      setRegistrationData({
-                        ...registrationData,
-                        phoneNumber: trimToMax(next, LIMITS.PHONE),
-                      });
-                      setError(null);
-                    }}
-                    keyboardType="phone-pad"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!isLoading}
-                    maxLength={10}
-                  />
-                </View>
-              </View>
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  isLoading && styles.submitButtonDisabled,
-                  { backgroundColor: theme.primary },
-                ]}
-                onPress={handleSendOtp}
-                disabled={isLoading}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.primaryText} />
-                ) : (
-                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>
-                    Send verification code
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {renderChannelToggle('email')}
-              {renderLoginFooter()}
-            </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Phone flow: verify SMS OTP
-  if (currentStep === 'enter-otp') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            keyboardShouldPersistTaps="handled">
-            <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-phone')}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Verification code</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                We sent a 6-digit code to +63 {registrationData.phoneNumber}
-              </Text>
-            </View>
-            <View style={[styles.form, styles.formCentered]}>
-              <View style={styles.otpInputWrap}>
-                <Text style={[styles.label, { color: theme.text }]}>Enter the code from your SMS</Text>
-                <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <TextInput
-                    style={[styles.otpInput, { color: theme.text }]}
-                    placeholder="000000"
-                    placeholderTextColor={theme.placeholder}
-                    value={registrationData.otp}
-                    onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, otp: text.replace(/\D/g, '').slice(0, LIMITS.OTP_LENGTH) });
-                      setError(null);
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={LIMITS.OTP_LENGTH}
-                    editable={!isLoading}
-                  />
-                </View>
-                {otpResendSecondsLeft > 0 ? (
-                  <View style={styles.timerRow}>
-                    <Ionicons name="time-outline" size={18} color={theme.textSecondary} />
-                    <Text style={[styles.timerText, { color: theme.textSecondary }]}>
-                      Resend code in {Math.floor(otpResendSecondsLeft / 60)}:{(otpResendSecondsLeft % 60).toString().padStart(2, '0')}
-                    </Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity onPress={handleResendOtp} disabled={isLoading} style={styles.resendButton}>
-                    <Text style={[styles.resendText, { color: theme.primary }]}>Resend code</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  isLoading && styles.submitButtonDisabled,
-                  { backgroundColor: theme.primary },
-                ]}
-                onPress={handleContinueFromOtp}
-                disabled={isLoading}>
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.primaryText} />
-                ) : (
-                  <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
-                )}
-              </TouchableOpacity>
-              {renderLoginFooter()}
-            </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Reusable security questions block + picker modal
-  const renderSecurityQuestionsBlock = (showSectionHeader: boolean) => (
-    <View style={styles.securityQuestionsSection}>
-      {showSectionHeader && (
-        <>
-          <Text style={[styles.securityQuestionsTitle, { color: theme.text }]}>
-            Security questions <Text style={styles.required}>*</Text>
-          </Text>
-          <Text style={[styles.securityQuestionsSubtitle, { color: theme.textSecondary }]}>
-            All 3 are required for account recovery (e.g. forgot password)
-          </Text>
-        </>
-      )}
-      {([0, 1, 2] as const).map((index) => {
-        const selectedId = selectedQuestionIds[index];
-        const selectedQuestion = selectedId ? securityQuestionsList.find((q) => q.id === selectedId) : null;
-        return (
-          <View key={index} style={styles.securityQuestionRow}>
-            <Text style={[styles.label, { color: theme.text }]}>Security question {index + 1}</Text>
-            <TouchableOpacity
-              style={[styles.pickerButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => setQuestionPickerIndex(index)}
-              disabled={isLoading}>
-              <Text style={[styles.pickerButtonText, { color: selectedQuestion ? theme.text : theme.textSecondary }]} numberOfLines={1}>
-                {selectedQuestion ? selectedQuestion.question : 'Select a question'}
-              </Text>
-              <Ionicons name="chevron-down" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, styles.inputLarge, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border }, styles.securityAnswerInput]}
-              placeholder="Your answer"
-              placeholderTextColor={theme.placeholder}
-              value={questionAnswers[index]}
-              onChangeText={(text) => {
-                const next = [...questionAnswers] as [string, string, string];
-                next[index] = trimToMax(text, LIMITS.SECURITY_ANSWER_MAX);
-                setQuestionAnswers(next);
-                setError(null);
-              }}
-              editable={!isLoading}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={LIMITS.SECURITY_ANSWER_MAX}
-            />
-          </View>
-        );
-      })}
-    </View>
-  );
-
-  const questionPickerModal = questionPickerIndex !== null && (
-    <Modal visible transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setQuestionPickerIndex(null)} />
-        <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>Select question {questionPickerIndex + 1}</Text>
-          <FlatList
-            data={securityQuestionsList.filter(
-              (q) =>
-                selectedQuestionIds[questionPickerIndex] === q.id ||
-                !selectedQuestionIds.some((id, i) => i !== questionPickerIndex && id === q.id)
-            )}
-            keyExtractor={(item) => String(item.id)}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.modalOption, { borderBottomColor: theme.border }]}
-                onPress={() => {
-                  const next = [...selectedQuestionIds];
-                  next[questionPickerIndex] = item.id;
-                  setSelectedQuestionIds(next);
-                  setQuestionPickerIndex(null);
-                }}>
-                <Text style={[styles.modalOptionText, { color: theme.text }]}>{item.question}</Text>
-              </TouchableOpacity>
-            )}
-          />
-          <TouchableOpacity style={[styles.modalCancel, { borderColor: theme.border }]} onPress={() => setQuestionPickerIndex(null)}>
-            <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>Cancel</Text>
-          </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+      <View style={{ height: insets.bottom, backgroundColor: theme.background }} />
+    </View>
   );
 
-  // OTP flow: Step 3a – Full name + password only
-  if (currentStep === 'enter-details') {
-    return (
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-        <View style={[styles.content, { paddingTop: insets.top }]}>
-          <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            keyboardShouldPersistTaps="handled">
-            <View style={styles.headerContainer}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => setCurrentStep(channel === 'email' ? 'email-entry' : 'enter-otp')}>
-                <Ionicons name="arrow-back" size={24} color={theme.text} />
-              </TouchableOpacity>
-              <Text style={[styles.headline, { color: theme.text }]}>Create your account</Text>
-              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                Step 1 of 2: Enter your name and password
-              </Text>
-            </View>
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Full name</Text>
-                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <TextInput
-                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
-                    placeholder="As it appears on your ID"
-                    placeholderTextColor={theme.placeholder}
-                    value={registrationData.fullName}
-                    onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, fullName: text.slice(0, LIMITS.FULL_NAME) });
-                      setError(null);
-                    }}
-                    autoCapitalize="words"
-                    editable={!isLoading}
-                    maxLength={LIMITS.FULL_NAME}
-                  />
-                </View>
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Password</Text>
-                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <TextInput
-                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
-                    placeholder="Min. 8 characters, include uppercase, number & symbol"
-                    placeholderTextColor={theme.placeholder}
-                    value={registrationData.password}
-                    onChangeText={(text) => {
-                      setRegistrationData({ ...registrationData, password: text });
-                      setError(null);
-                    }}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    editable={!isLoading}
-                  />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.visibilityButton}>
-                    <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={24} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Confirm password</Text>
-                <View style={[styles.inputContainer, styles.inputContainerLarge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <TextInput
-                    style={[styles.input, styles.inputLarge, { color: theme.text }]}
-                    placeholder="Re-enter your password"
-                    placeholderTextColor={theme.placeholder}
-                    value={confirmPassword}
-                    onChangeText={(text) => {
-                      setConfirmPassword(text);
-                      setError(null);
-                    }}
-                    secureTextEntry={!showConfirmPassword}
-                    autoCapitalize="none"
-                    editable={!isLoading}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={styles.visibilityButton}>
-                    <Ionicons
-                      name={showConfirmPassword ? 'eye-off' : 'eye'}
-                      size={24}
-                      color={theme.textSecondary}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  isLoading && styles.submitButtonDisabled,
-                  { backgroundColor: theme.primary },
-                ]}
-                onPress={() => {
-                  // Email path → Clerk sign-up + email code. Phone path → legacy
-                  // security questions + registerByPhone (unchanged).
-                  if (channel === 'email') {
-                    handleStartClerkSignUp();
-                    return;
-                  }
-                  const validationError = validateBasicDetailsForm();
-                  if (validationError) {
-                    setError(validationError);
-                    return;
-                  }
-                  setError(null);
-                  setCurrentStep('enter-security-questions');
-                }}
-                disabled={isLoading}>
-                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
-              </TouchableOpacity>
-              {renderLoginFooter()}
-            </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
+  // ---- Email OTP: signing in ----
+  if (currentStep === 'email-otp' && isSigningIn) {
+    return renderShell(
+      'email-otp-signing-in',
+      null,
+      'Email verified',
+      'Signing you in…',
+      <View style={styles.signingInSection}>
+        <Ionicons name="checkmark-circle" size={64} color={theme.success} />
+        <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 24 }} />
+      </View>,
+      { hideBack: true }
     );
   }
 
-  // Step 2: Security questions
+  // ---- Email OTP ----
+  if (currentStep === 'email-otp') {
+    return renderShell(
+      'email-otp',
+      withKeyboardDismiss(() => setCurrentStep('enter-details')),
+      'Verification code',
+      `We sent a 6-digit code to ${registrationData.email.trim().toLowerCase()}`,
+      <>
+        <View style={styles.otpInputWrap}>
+          <Text style={[styles.label, { color: theme.text }]}>Enter the code from your email</Text>
+          <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <TextInput
+              style={[styles.otpInput, { color: theme.text }]}
+              placeholder="000000"
+              placeholderTextColor={theme.placeholder}
+              value={registrationData.otp}
+              onChangeText={(t) => {
+                setRegistrationData({ ...registrationData, otp: t.replace(/\D/g, '').slice(0, OTP_LENGTH) });
+                setError(null);
+              }}
+              keyboardType="number-pad"
+              maxLength={OTP_LENGTH}
+              autoFocus
+              editable={!isLoading}
+            />
+          </View>
+          <OtpResendControl
+            theme={theme}
+            secondsLeft={otpResendSecondsLeft}
+            isResending={isResending}
+            onResend={handleResendEmailOtp}
+          />
+        </View>
+        <ErrorBanner error={error} />
+        <SubmitButton
+          theme={theme}
+          label="Continue"
+          loading={isLoading}
+          disabled={isLoading || registrationData.otp.trim().length === 0}
+          onPress={handleContinueFromEmailOtp}
+        />
+        <LoginFooter theme={theme} onLogin={navigateToLogin} />
+      </>,
+      { centeredForm: true }
+    );
+  }
+
+  // ---- Email: enter details ----
+  if (currentStep === 'enter-details' && channel === 'email') {
+    return renderShell(
+      'email-enter-details',
+      withKeyboardDismiss(() => setCurrentStep('email-entry')),
+      'Create your account',
+      registrationData.email.trim().toLowerCase(),
+      <>
+        <DetailsFields
+          theme={theme}
+          showPassword={showPassword}
+          setShowPassword={setShowPassword}
+          showConfirmPassword={showConfirmPassword}
+          setShowConfirmPassword={setShowConfirmPassword}
+          fullName={registrationData.fullName}
+          setFullName={(v) => {
+            setRegistrationData({ ...registrationData, fullName: v.slice(0, LIMITS.FULL_NAME) });
+            setError(null);
+          }}
+          password={registrationData.password}
+          setPassword={(v) => {
+            setRegistrationData({ ...registrationData, password: v });
+            setError(null);
+          }}
+          confirmPassword={confirmPassword}
+          setConfirmPassword={(v) => {
+            setConfirmPassword(v);
+            setError(null);
+          }}
+          referralCode={registrationData.referralCode}
+          setReferralCode={(v) => {
+            setRegistrationData({ ...registrationData, referralCode: v.slice(0, 20) });
+            setError(null);
+          }}
+          disabled={isLoading}
+        />
+        <ErrorBanner error={error} />
+        <SubmitButton
+          theme={theme}
+          label="Send verification code"
+          loading={isLoading}
+          disabled={isLoading}
+          onPress={handleStartClerkSignUp}
+        />
+        <LoginFooter theme={theme} onLogin={navigateToLogin} />
+      </>
+    );
+  }
+
+  // ---- Phone: security questions ----
   if (currentStep === 'enter-security-questions') {
     return (
       <>
-        {questionPickerModal}
-        <KeyboardAvoidingView
-          style={[styles.container, { backgroundColor: theme.background }]}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-          <View style={[styles.content, { paddingTop: insets.top }]}>
-            <ScrollView
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-              keyboardShouldPersistTaps="handled">
-              <View style={styles.headerContainer}>
-                <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('enter-details')}>
-                  <Ionicons name="arrow-back" size={24} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headline, { color: theme.text }]}>Security questions</Text>
-                <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
-                  Step 2 of 2: Set up security questions for account recovery
-                </Text>
-              </View>
-              <View style={styles.form}>
-                {renderSecurityQuestionsBlock(false)}
-                {error && (
-                  <View style={styles.errorContainer}>
-                    <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={[
-                    styles.submitButton,
-                    isLoading && styles.submitButtonDisabled,
-                    { backgroundColor: theme.primary },
-                  ]}
-                  onPress={handleCreateAccountAfterOtp}
-                  disabled={isLoading}>
-                  {isLoading ? (
-                    <ActivityIndicator size="small" color={theme.primaryText} />
-                  ) : (
-                    <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Create account</Text>
-                  )}
-                </TouchableOpacity>
-                {renderLoginFooter()}
-              </View>
-            </ScrollView>
+        {renderShell(
+          'phone-security-questions',
+          withKeyboardDismiss(() => setCurrentStep('enter-details')),
+          'Security questions',
+          'Step 2 of 2: Set up security questions for account recovery',
+          <>
+            <SecurityQuestionsBlock
+              theme={theme}
+              securityQuestions={securityQuestionsList}
+              securityFields={selectedQuestionIds.map((questionId, i) => ({
+                questionId,
+                answer: questionAnswers[i],
+              })) as [{ questionId: number | null; answer: string }, { questionId: number | null; answer: string }, { questionId: number | null; answer: string }]}
+              onOpenPicker={setQuestionPickerIndex}
+              onAnswerChange={(index, answer) => {
+                const next = [...questionAnswers] as [string, string, string];
+                next[index] = trimToMax(answer, LIMITS.SECURITY_ANSWER_MAX);
+                setQuestionAnswers(next);
+                setError(null);
+              }}
+              disabled={isLoading}
+            />
+            <ErrorBanner error={error} />
+            <SubmitButton
+              theme={theme}
+              label="Create account"
+              loading={isLoading}
+              disabled={isLoading}
+              onPress={handleCreateAccountAfterOtp}
+            />
+            <LoginFooter theme={theme} onLogin={navigateToLogin} />
+          </>
+        )}
+        <QuestionPickerModal
+          visible={questionPickerIndex !== null}
+          questions={securityQuestionsList}
+          selectedIds={selectedQuestionIds}
+          currentIndex={questionPickerIndex}
+          onSelect={(questionId) => {
+            if (questionPickerIndex !== null) {
+              const next = [...selectedQuestionIds] as [number | null, number | null, number | null];
+              next[questionPickerIndex] = questionId;
+              setSelectedQuestionIds(next);
+              setError(null);
+            }
+            setQuestionPickerIndex(null);
+          }}
+          onClose={() => setQuestionPickerIndex(null)}
+          theme={theme}
+        />
+      </>
+    );
+  }
+
+  // ---- Phone: enter details ----
+  if (currentStep === 'enter-details' && channel === 'phone') {
+    return renderShell(
+      'phone-enter-details',
+      withKeyboardDismiss(() => setCurrentStep('enter-otp')),
+      'Create your account',
+      `Step 1 of 2: +63 ${registrationData.phoneNumber}`,
+      <>
+        <DetailsFields
+          theme={theme}
+          showPassword={showPassword}
+          setShowPassword={setShowPassword}
+          showConfirmPassword={showConfirmPassword}
+          setShowConfirmPassword={setShowConfirmPassword}
+          fullName={registrationData.fullName}
+          setFullName={(v) => {
+            setRegistrationData({ ...registrationData, fullName: v.slice(0, LIMITS.FULL_NAME) });
+            setError(null);
+          }}
+          password={registrationData.password}
+          setPassword={(v) => {
+            setRegistrationData({ ...registrationData, password: v });
+            setError(null);
+          }}
+          confirmPassword={confirmPassword}
+          setConfirmPassword={(v) => {
+            setConfirmPassword(v);
+            setError(null);
+          }}
+          referralCode={registrationData.referralCode}
+          setReferralCode={(v) => {
+            setRegistrationData({ ...registrationData, referralCode: v.slice(0, 20) });
+            setError(null);
+          }}
+          disabled={isLoading}
+        />
+        <ErrorBanner error={error} />
+        <SubmitButton
+          theme={theme}
+          label="Continue"
+          onPress={() => {
+            const validationError = validateBasicDetailsForm();
+            if (validationError) {
+              setError(validationError);
+              return;
+            }
+            setError(null);
+            setCurrentStep('enter-security-questions');
+          }}
+        />
+        <LoginFooter theme={theme} onLogin={navigateToLogin} />
+      </>
+    );
+  }
+
+  // ---- Phone: OTP ----
+  if (currentStep === 'enter-otp') {
+    return renderShell(
+      'phone-enter-otp',
+      withKeyboardDismiss(() => setCurrentStep('enter-phone')),
+      'Verification code',
+      `We sent a 6-digit code to +63 ${registrationData.phoneNumber}`,
+      <>
+        <View style={styles.otpInputWrap}>
+          <Text style={[styles.label, { color: theme.text }]}>Enter the code from your SMS</Text>
+          <View style={[styles.otpInputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <TextInput
+              style={[styles.otpInput, { color: theme.text }]}
+              placeholder="000000"
+              placeholderTextColor={theme.placeholder}
+              value={registrationData.otp}
+              onChangeText={(t) => {
+                setRegistrationData({ ...registrationData, otp: t.replace(/\D/g, '').slice(0, OTP_LENGTH) });
+                setError(null);
+              }}
+              keyboardType="number-pad"
+              maxLength={OTP_LENGTH}
+              autoFocus
+              editable={!isLoading}
+            />
           </View>
-        </KeyboardAvoidingView>
+          <OtpResendControl
+            theme={theme}
+            secondsLeft={otpResendSecondsLeft}
+            isResending={isResending}
+            onResend={handleResendOtp}
+          />
+        </View>
+        <ErrorBanner error={error} />
+        <SubmitButton
+          theme={theme}
+          label="Continue"
+          loading={isLoading}
+          disabled={isLoading || registrationData.otp.trim().length === 0}
+          onPress={handleContinueFromOtp}
+        />
+        <LoginFooter theme={theme} onLogin={navigateToLogin} />
+      </>,
+      { centeredForm: true }
+    );
+  }
+
+  // ---- Phone: enter phone ----
+  if (currentStep === 'enter-phone') {
+    return renderShell(
+      'phone-enter-phone',
+      withKeyboardDismiss(navigateBack),
+      'Create Account',
+      'Enter your phone number to receive a verification code',
+      <>
+        <View style={styles.inputGroup}>
+          <Text style={[styles.label, { color: theme.text }]}>Phone number</Text>
+          <View
+            style={[
+              styles.inputContainer,
+              styles.phoneInputContainer,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <View style={[styles.countryCodeBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+              <Text style={[styles.countryCodeText, { color: theme.text }]}>+63</Text>
+            </View>
+            <TextInput
+              style={[styles.input, styles.phoneInput, { color: theme.text }]}
+              placeholder="9XXXXXXXXX"
+              placeholderTextColor={theme.placeholder}
+              value={registrationData.phoneNumber}
+              onChangeText={(text) => {
+                let next = text.replace(/\D/g, '');
+                if (next.startsWith('09')) next = next.slice(1);
+                if (next && !next.startsWith('9')) next = next.replace(/^[0-8]+/, '');
+                next = next.slice(0, 10);
+                setRegistrationData({ ...registrationData, phoneNumber: trimToMax(next, LIMITS.PHONE) });
+                setError(null);
+              }}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+              maxLength={10}
+            />
+          </View>
+        </View>
+        <ErrorBanner error={error} />
+        <SubmitButton
+          theme={theme}
+          label="Send verification code"
+          loading={isLoading}
+          disabled={isLoading}
+          onPress={handleSendOtp}
+        />
+        <ChannelToggle theme={theme} label="Use email instead" onPress={switchToEmail} disabled={isLoading} />
+        <LoginFooter theme={theme} onLogin={navigateToLogin} />
       </>
     );
   }
@@ -1135,16 +855,400 @@ export function RegistrationSteps() {
     );
   }
 
-  return null;
+  // ---- Email entry (default) ----
+  return renderShell(
+    'email-entry',
+    withKeyboardDismiss(navigateBack),
+    'Create Account',
+    'Enter your email to get started',
+    <>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.text }]}>Email</Text>
+        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Ionicons name="mail-outline" size={20} color={theme.textSecondary} style={styles.inputLeadingIcon} />
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="you@example.com"
+            placeholderTextColor={theme.placeholder}
+            value={registrationData.email}
+            onChangeText={(v) => {
+              setRegistrationData({ ...registrationData, email: trimToMax(v, LIMITS.EMAIL) });
+              setError(null);
+            }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+            maxLength={LIMITS.EMAIL}
+          />
+        </View>
+        {isCheckingRegistration && (
+          <Text style={[styles.statusText, { color: theme.textSecondary }]}>Checking email…</Text>
+        )}
+        {registrationStatus?.registrationComplete && (
+          <View style={styles.statusIndicator}>
+            <Text style={[styles.statusText, { color: theme.info }]}>Account exists. Please log in instead.</Text>
+          </View>
+        )}
+        {!registrationStatus?.registrationComplete && registrationStatus?.emailVerified && (
+          <View style={styles.statusIndicator}>
+            <Text style={[styles.statusText, { color: theme.success }]}>
+              Email verified. You can continue to create your account.
+            </Text>
+          </View>
+        )}
+      </View>
+      <ErrorBanner error={error} />
+      <SubmitButton
+        theme={theme}
+        label="Continue"
+        disabled={emailTaken}
+        onPress={() => {
+          if (!emailTaken) handleSendEmailOtp();
+        }}
+      />
+      {/* Phone registration — not supported yet; re-enable when backend is ready
+      <ChannelToggle theme={theme} label="Use phone number instead" onPress={switchToPhone} disabled={isLoading} />
+      */}
+      <LoginFooter theme={theme} onLogin={navigateToLogin} />
+    </>
+  );
+}
+
+function OtpResendControl({
+  theme,
+  secondsLeft,
+  isResending,
+  onResend,
+}: {
+  theme: ThemeColors;
+  secondsLeft: number;
+  isResending: boolean;
+  onResend: () => void;
+}) {
+  if (secondsLeft > 0) {
+    return (
+      <View style={styles.timerRow}>
+        <Ionicons name="time-outline" size={16} color="#000000" />
+        <Text style={styles.timerText}>
+          Resend code in {Math.floor(secondsLeft / 60)}:{(secondsLeft % 60).toString().padStart(2, '0')}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity onPress={onResend} disabled={isResending} style={styles.resendButton}>
+      <Text style={[styles.resendText, { color: theme.primary }]}>
+        {isResending ? 'Resending…' : 'Resend code'}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function ErrorBanner({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <View style={styles.errorContainer}>
+      <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+      <Text style={styles.errorText}>{error}</Text>
+    </View>
+  );
+}
+
+function SubmitButton({
+  theme,
+  label,
+  onPress,
+  loading,
+  disabled,
+}: {
+  theme: ThemeColors;
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={styles.buttonGroup}>
+      <TouchableOpacity
+        style={[
+          styles.submitButton,
+          { backgroundColor: theme.primary },
+          (loading || disabled) && styles.submitButtonDisabled,
+        ]}
+        onPress={onPress}
+        disabled={loading || disabled}
+        activeOpacity={0.98}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={theme.primaryText} />
+        ) : (
+          <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>{label}</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ChannelToggle({
+  theme,
+  label,
+  onPress,
+  disabled,
+}: {
+  theme: ThemeColors;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity style={styles.channelToggle} onPress={onPress} disabled={disabled}>
+      <Text style={[styles.channelToggleText, { color: theme.primary }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function LoginFooter({ theme, onLogin }: { theme: ThemeColors; onLogin: () => void }) {
+  return (
+    <View style={styles.loginContainer}>
+      <Text style={[styles.loginText, { color: theme.textMuted }]}>
+        Already have an account?{' '}
+        <Text style={[styles.loginLink, { color: theme.text }]} onPress={onLogin}>
+          Log In
+        </Text>
+      </Text>
+    </View>
+  );
+}
+
+function DetailsFields({
+  theme,
+  showPassword,
+  setShowPassword,
+  showConfirmPassword,
+  setShowConfirmPassword,
+  fullName,
+  setFullName,
+  password,
+  setPassword,
+  confirmPassword,
+  setConfirmPassword,
+  referralCode,
+  setReferralCode,
+  disabled,
+}: {
+  theme: ThemeColors;
+  showPassword: boolean;
+  setShowPassword: (v: boolean) => void;
+  showConfirmPassword: boolean;
+  setShowConfirmPassword: (v: boolean) => void;
+  fullName: string;
+  setFullName: (v: string) => void;
+  password: string;
+  setPassword: (v: string) => void;
+  confirmPassword: string;
+  setConfirmPassword: (v: string) => void;
+  referralCode: string;
+  setReferralCode: (v: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.text }]}>Full name</Text>
+        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="As it appears on your ID"
+            placeholderTextColor={theme.placeholder}
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
+            editable={!disabled}
+          />
+        </View>
+      </View>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.text }]}>Password</Text>
+        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="Min. 8 characters, include uppercase, number & symbol"
+            placeholderTextColor={theme.placeholder}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            editable={!disabled}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.visibilityButton}>
+            <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.text }]}>Confirm password</Text>
+        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="Re-enter your password"
+            placeholderTextColor={theme.placeholder}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry={!showConfirmPassword}
+            autoCapitalize="none"
+            editable={!disabled}
+          />
+          <TouchableOpacity
+            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            style={styles.visibilityButton}
+          >
+            <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        {confirmPassword.length > 0 && confirmPassword !== password && (
+          <Text style={[styles.statusText, { color: BeeColors.red[600], marginTop: 4 }]}>
+            Passwords do not match
+          </Text>
+        )}
+      </View>
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.text }]}>Referral code (optional)</Text>
+        <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <TextInput
+            style={[styles.input, { color: theme.text }]}
+            placeholder="Enter a friend's referral code"
+            placeholderTextColor={theme.placeholder}
+            value={referralCode}
+            onChangeText={setReferralCode}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!disabled}
+          />
+        </View>
+      </View>
+    </>
+  );
+}
+
+function SecurityQuestionsBlock({
+  theme,
+  securityQuestions,
+  securityFields,
+  onOpenPicker,
+  onAnswerChange,
+  disabled,
+}: {
+  theme: ThemeColors;
+  securityQuestions: { id: number; question: string }[];
+  securityFields: [{ questionId: number | null; answer: string }, { questionId: number | null; answer: string }, { questionId: number | null; answer: string }];
+  onOpenPicker: (index: 0 | 1 | 2) => void;
+  onAnswerChange: (index: 0 | 1 | 2, answer: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <View style={styles.securityQuestionsSection}>
+      <Text style={[styles.securityQuestionsSubtitle, { color: theme.textSecondary }]}>
+        All 3 are required for account recovery (e.g. forgot password)
+      </Text>
+      {([0, 1, 2] as const).map((index) => {
+        const field = securityFields[index];
+        const selected = field.questionId ? securityQuestions.find((q) => q.id === field.questionId) : null;
+        return (
+          <View key={index} style={styles.securityQuestionRow}>
+            <Text style={[styles.label, { color: theme.text }]}>
+              Security question {index + 1} <Text style={styles.required}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[styles.pickerButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => onOpenPicker(index)}
+              disabled={disabled}
+            >
+              <Text
+                style={[styles.pickerButtonText, { color: selected ? theme.text : theme.textSecondary }]}
+                numberOfLines={1}
+              >
+                {selected?.question ?? 'Select a question'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <TextInput
+              style={[
+                styles.securityAnswerInput,
+                { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+              placeholder="Your answer"
+              placeholderTextColor={theme.placeholder}
+              value={field.answer}
+              onChangeText={(v) => onAnswerChange(index, v)}
+              editable={!disabled}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function QuestionPickerModal({
+  visible,
+  questions,
+  selectedIds,
+  currentIndex,
+  onSelect,
+  onClose,
+  theme,
+}: {
+  visible: boolean;
+  questions: { id: number; question: string }[];
+  selectedIds: (number | null)[];
+  currentIndex: 0 | 1 | 2 | null;
+  onSelect: (questionId: number) => void;
+  onClose: () => void;
+  theme: ThemeColors;
+}) {
+  const filtered = questions.filter(
+    (q) =>
+      selectedIds[currentIndex ?? -1] === q.id ||
+      !selectedIds.some((id, i) => i !== currentIndex && id === q.id)
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>
+            Select question {(currentIndex ?? 0) + 1}
+          </Text>
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.modalOption, { borderBottomColor: theme.border }]}
+                onPress={() => onSelect(item.id)}
+              >
+                <Text style={[styles.modalOptionText, { color: theme.text }]}>{item.question}</Text>
+              </TouchableOpacity>
+            )}
+          />
+          <TouchableOpacity style={[styles.modalCancel, { borderColor: theme.border }]} onPress={onClose}>
+            <Text style={[styles.modalCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  content: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 16,
@@ -1177,44 +1281,44 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   formCentered: {
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    marginTop: 24,
     alignItems: 'center',
   },
+  signingInSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    width: '100%',
+  },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 18,
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+  buttonGroup: {
     paddingHorizontal: 16,
     width: '100%',
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  required: {
+    color: BeeColors.red[600],
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderRadius: 12,
-    paddingHorizontal: 18,
-    minHeight: 56,
+    paddingHorizontal: 16,
     height: 56,
-  },
-  inputContainerLarge: {
-    minHeight: 64,
-    height: 64,
-    borderRadius: 14,
-    paddingHorizontal: 20,
   },
   input: {
     flex: 1,
-    fontSize: 17,
-    paddingVertical: 4,
+    fontSize: 16,
   },
-  inputLarge: {
-    fontSize: 19,
+  inputLeadingIcon: {
+    marginRight: 12,
   },
   phoneInputContainer: {
     gap: 8,
@@ -1237,6 +1341,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     marginBottom: 24,
+    paddingHorizontal: 16,
   },
   otpInputContainer: {
     width: '100%',
@@ -1250,6 +1355,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     minHeight: 72,
     height: 72,
+    marginTop: 10,
   },
   otpInput: {
     flex: 1,
@@ -1263,7 +1369,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   resendButton: {
-    marginTop: 8,
+    marginTop: 12,
     paddingHorizontal: 16,
     alignSelf: 'flex-start',
   },
@@ -1274,17 +1380,20 @@ const styles = StyleSheet.create({
   timerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     marginTop: 10,
-    paddingHorizontal: 4,
+    width: '100%',
+    alignSelf: 'center',
   },
   timerText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    color: '#000000',
   },
   statusIndicator: {
     marginTop: 4,
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
   },
   statusText: {
     fontSize: 12,
@@ -1309,13 +1418,10 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     width: '100%',
-    maxWidth: 480,
-    height: 48,
-    borderRadius: 8,
+    height: 56,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginHorizontal: 16,
     marginTop: 12,
     shadowColor: BeeColors.yellow[500],
     shadowOffset: { width: 0, height: 2 },
@@ -1329,6 +1435,14 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  channelToggle: {
+    alignItems: 'center',
+    paddingTop: 16,
+  },
+  channelToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   loginContainer: {
     alignItems: 'center',
@@ -1344,32 +1458,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
-  channelToggle: {
-    alignItems: 'center',
-    paddingTop: 16,
-  },
-  channelToggleText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  inputLeadingIcon: {
-    marginRight: 8,
-  },
   securityQuestionsSection: {
     marginTop: 4,
     width: '100%',
-  },
-  securityQuestionsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  required: {
-    color: BeeColors.red[600],
+    paddingHorizontal: 16,
   },
   securityQuestionsSubtitle: {
     fontSize: 12,
-    marginBottom: 4,
+    marginBottom: 12,
   },
   securityQuestionRow: {
     marginBottom: 16,
@@ -1396,7 +1492,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     minHeight: 52,
-    marginTop: 0,
+    fontSize: 17,
   },
   modalOverlay: {
     flex: 1,

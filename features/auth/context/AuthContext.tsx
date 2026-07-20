@@ -16,7 +16,64 @@ import { locationTrackingService } from "@/features/driver/services/locationTrac
 import { isClerkEnabled } from "@/shared/providers/AppClerkProvider";
 import { setLastLoginUser } from "@/shared/services/lastLoginStorage";
 import { configService } from "@/shared/services/configService";
+import { tokenStorage } from "@/shared/services/tokenStorage";
 import type { User } from "../types";
+
+/** Strip functions so Clerk resources log as readable JSON in Metro. */
+function toPrettyJson(value: unknown): string {
+  const seen = new WeakSet<object>();
+  return JSON.stringify(
+    value,
+    (_key, current) => {
+      if (typeof current === "function") return undefined;
+      if (current && typeof current === "object") {
+        if (seen.has(current)) return "[Circular]";
+        seen.add(current);
+      }
+      return current;
+    },
+    2,
+  );
+}
+
+function logClerkSignInResponse(label: string, attempt: Record<string, unknown>): void {
+  const snapshot = {
+    status: attempt.status,
+    id: attempt.id,
+    createdSessionId: attempt.createdSessionId,
+    identifier: attempt.identifier,
+    clientTrustState: attempt.clientTrustState,
+    supportedFirstFactors: attempt.supportedFirstFactors,
+    supportedSecondFactors: attempt.supportedSecondFactors,
+    firstFactorVerification: attempt.firstFactorVerification,
+    secondFactorVerification: attempt.secondFactorVerification,
+  };
+  console.log(`[Clerk login] ${label}:\n${toPrettyJson(snapshot)}`);
+}
+
+function logClerkLoginError(err: unknown): void {
+  const clerkErrors = (err as { errors?: unknown[] })?.errors;
+  const message =
+    (err as { errors?: { message?: string }[] })?.errors?.[0]?.message ??
+    (err as { message?: string })?.message ??
+    (err instanceof Error ? err.message : undefined);
+  console.log("[Clerk login] error message:", message ?? "(none)");
+  if (clerkErrors?.length) {
+    console.log(`[Clerk login] error errors:\n${toPrettyJson(clerkErrors)}`);
+  }
+  console.log(`[Clerk login] error raw:\n${toPrettyJson(err)}`);
+}
+
+function extractClerkLoginErrorMessage(err: unknown): string {
+  const clerkMessage = (err as { errors?: { message?: string }[] })?.errors?.[0]?.message;
+  if (clerkMessage) return clerkMessage;
+  if (err && typeof err === "object" && "message" in err) {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.length > 0) return msg;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return "Login failed";
+}
 
 /**
  * Auth context value interface
@@ -348,6 +405,17 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
   const loadBackendUser = useCallback(async (): Promise<User> => {
     const currentUser = await authService.getCurrentUser();
     if (!isAllowedRole(currentUser)) {
+      console.log(
+        "[Clerk login] role rejected — /api/auth/me response:\n",
+        toPrettyJson(currentUser),
+      );
+      console.log("[Clerk login] role check:", {
+        role: currentUser.role,
+        isSoloDriver: currentUser.isSoloDriver,
+        tenantId: currentUser.tenantId,
+        isOnboarded: currentUser.isOnboarded,
+        email: currentUser.email,
+      });
       await signOut();
       throw new Error(getRoleRestrictionMessage(currentUser));
     }
@@ -414,16 +482,40 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
       setError(null);
       setUser(null);
       try {
-        const attempt = await signIn.create({ identifier: email, password });
+        // Fresh login: clear legacy tokens → Clerk sign-out → reset sign-in → create.
+        console.log("[Clerk login] step 1: clearing stored tokens");
+        await tokenStorage.clearAllTokens();
+
+        console.log("[Clerk login] step 2: Clerk signOut");
+        try {
+          await signOut();
+        } catch (signOutErr) {
+          console.warn(
+            "[Clerk login] signOut skipped:",
+            extractClerkLoginErrorMessage(signOutErr),
+          );
+        }
+
+        console.log("[Clerk login] step 3: signIn.reset");
+        try {
+          await signIn.reset();
+        } catch (resetErr) {
+          console.warn("[Clerk login] signIn.reset() skipped:", extractClerkLoginErrorMessage(resetErr));
+        }
+
+        const identifier = email.trim().toLowerCase();
+        console.log("[Clerk login] step 4: signIn.create identifier:", identifier);
+        const attempt = await signIn.create({ identifier, password });
+        logClerkSignInResponse("signIn.create response", attempt as unknown as Record<string, unknown>);
         if (attempt.status !== "complete") {
+          logClerkSignInResponse("incomplete sign-in — full attempt", attempt as unknown as Record<string, unknown>);
           throw new Error("Additional verification is required to sign in.");
         }
         await setActive!({ session: attempt.createdSessionId });
         await loadBackendUser(); // throws if role not allowed (already signs out)
       } catch (err) {
-        const message =
-          (err as { errors?: { message?: string }[] })?.errors?.[0]?.message ??
-          (err instanceof Error ? err.message : "Login failed");
+        logClerkLoginError(err);
+        const message = extractClerkLoginErrorMessage(err);
         setError(message);
         setUser(null);
         throw new Error(message);
@@ -431,7 +523,7 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
         setIsLoading(false);
       }
     },
-    [signIn, setActive, signInLoaded, loadBackendUser],
+    [signIn, setActive, signInLoaded, loadBackendUser, signOut],
   );
 
   const logout = useCallback(async () => {
@@ -449,6 +541,12 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
         console.warn("Failed to stop SignalR:", signalRErr);
       }
       await signOut();
+      await tokenStorage.clearAllTokens();
+      try {
+        await signIn.reset();
+      } catch (resetErr) {
+        console.warn("Failed to reset Clerk sign-in on logout:", extractClerkLoginErrorMessage(resetErr));
+      }
       try {
         await biometricStorage.clearCredentials();
         await clearTempCredentialsForPrompt();
@@ -463,7 +561,7 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [signOut]);
+  }, [signOut, signIn]);
 
   const refreshUser = useCallback(async () => {
     if (!isAuthenticated) {

@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  *
  * Step 1 (request): enter email → Clerk emails a reset code.
  * Step 2 (reset): enter the code + a new password → Clerk sets the password and
- * signs the user in; the root guard in app/_layout.tsx redirects into the app.
+ * signs the user in; on success the app redirects to the welcome screen.
  *
  * Replaces the legacy backend OTP + security-question recovery.
  */
@@ -36,6 +36,13 @@ export default function ForgotPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
 
   const navigateToLogin = () => router.replace("/login");
+
+  const handleSubmitNewPassword = async () => {
+    const success = await flow.submitNewPassword();
+    if (success) {
+      router.replace("/welcome");
+    }
+  };
 
   const Logo = (
     <View style={styles.logoContainer}>
@@ -168,7 +175,7 @@ export default function ForgotPasswordScreen() {
 
               <TouchableOpacity
                 style={[styles.primaryButton, flow.isResetting && styles.primaryButtonDisabled]}
-                onPress={flow.submitNewPassword}
+                onPress={handleSubmitNewPassword}
                 disabled={flow.isResetting}
                 activeOpacity={0.98}
               >

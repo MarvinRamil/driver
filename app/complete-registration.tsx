@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,14 +19,31 @@ import { useTheme } from '@/shared/hooks/use-theme';
 import { BeeColors } from '@/constants/theme';
 import { useAuth } from '@/features/auth';
 import { apiClient } from '@/shared/services/apiClient';
+import { setDriverApplicationSubmitted } from '@/shared/services/driverApplicationStorage';
 import * as ImagePicker from 'expo-image-picker';
 
-type Step = 'profile' | 'documents' | 'review';
+type Step = 'profile' | 'vehicle' | 'documents' | 'review';
+
+const VEHICLE_TYPES = ['Motorcycle', 'Sedan', 'SUV', 'Van', 'Truck'] as const;
 
 interface DocumentState {
   uri: string | null;
   name: string;
   label: string;
+}
+
+interface MyApplicationData {
+  id?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string | null;
+  vehicleType?: string | null;
+  vehiclePlate?: string | null;
+  status?: string;
+  createdAt?: string;
+  /** Admin rejection reason — absent on older responses */
+  notes?: string | null;
+  submissionCount?: number;
 }
 
 /**
@@ -42,11 +59,61 @@ export default function CompleteRegistrationScreen() {
 
   const [currentStep, setCurrentStep] = useState<Step>('profile');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingApplication, setIsCheckingApplication] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Resubmission state (existing application was rejected)
+  const [isResubmission, setIsResubmission] = useState(false);
+  const [rejectionNotes, setRejectionNotes] = useState<string | null>(null);
+  const [showRejectionBanner, setShowRejectionBanner] = useState(false);
 
   // Profile data
   const [phone, setPhone] = useState('');
   const [facebookProfileUrl, setFacebookProfileUrl] = useState('');
+
+  // Vehicle data
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
+  const [vehiclePlate, setVehiclePlate] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+
+  // If the driver already submitted an application, show the pending screen instead —
+  // unless it was rejected, in which case they stay here to resubmit.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const response = await apiClient.get<{ success: boolean; data?: MyApplicationData }>(
+          'api/driver-applications/my-application',
+          { requiresAuth: true }
+        );
+        const application = response.success ? response.data?.data : undefined;
+        if (mounted && application) {
+          if (application.status === 'Rejected') {
+            // Rejected — allow resubmission: stay on the form, prefill known fields
+            setIsResubmission(true);
+            setRejectionNotes(application.notes ?? null);
+            setShowRejectionBanner(true);
+            if (application.phone) setPhone(application.phone);
+            if (application.vehicleType) setVehicleType(application.vehicleType);
+            if (application.vehiclePlate) setVehiclePlate(application.vehiclePlate);
+          } else {
+            await setDriverApplicationSubmitted();
+            router.replace('/welcome');
+            return;
+          }
+        }
+      } catch {
+        // 404 = no application yet — stay on this screen
+      }
+      if (mounted) {
+        setIsCheckingApplication(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   // Documents (all optional for now)
   const [documents, setDocuments] = useState<Record<string, DocumentState>>({
@@ -68,6 +135,15 @@ export default function CompleteRegistrationScreen() {
     const validationError = validateProfile();
     if (validationError) {
       setError(validationError);
+      return;
+    }
+    setError(null);
+    setCurrentStep('vehicle');
+  };
+
+  const handleVehicleSubmit = () => {
+    if (!vehicleType) {
+      setError('Please select your vehicle type');
       return;
     }
     setError(null);
@@ -162,9 +238,11 @@ export default function CompleteRegistrationScreen() {
         throw new Error('User information not found. Please login again.');
       }
 
-      // Validate that at least one document is provided (should already be validated, but double-check)
+      // Validate that at least one document is provided (should already be validated, but double-check).
+      // On resubmission, previously uploaded documents are kept server-side unless replaced,
+      // so uploading none is allowed.
       const hasAnyDocument = Object.values(documents).some((doc) => doc.uri !== null);
-      if (!hasAnyDocument) {
+      if (!hasAnyDocument && !isResubmission) {
         throw new Error('Please upload at least one document');
       }
 
@@ -175,6 +253,20 @@ export default function CompleteRegistrationScreen() {
 
       if (facebookProfileUrl.trim()) {
         formData.append('facebookProfileUrl', facebookProfileUrl.trim());
+      }
+
+      // Vehicle information
+      if (vehicleType) {
+        formData.append('vehicleType', vehicleType);
+      }
+      if (vehiclePlate.trim()) {
+        formData.append('vehiclePlate', vehiclePlate.trim());
+      }
+      if (vehicleModel.trim()) {
+        formData.append('vehicleModel', vehicleModel.trim());
+      }
+      if (vehicleColor.trim()) {
+        formData.append('vehicleColor', vehicleColor.trim());
       }
 
       // Add documents (only if provided)
@@ -190,7 +282,11 @@ export default function CompleteRegistrationScreen() {
       });
 
       // Submit driver application
-      const response = await apiClient.post('api/driver-applications', {
+      const response = await apiClient.post<{
+        message?: string;
+        existingApplicationId?: string;
+        data?: unknown;
+      }>('api/driver-applications', {
         body: formData,
         requiresAuth: true, // User is logged in
       });
@@ -204,7 +300,10 @@ export default function CompleteRegistrationScreen() {
             [
               {
                 text: 'OK',
-                onPress: () => router.replace('/(tabs)'),
+                onPress: () => {
+                  setDriverApplicationSubmitted().catch(() => {});
+                  router.replace('/welcome');
+                },
               },
             ]
           );
@@ -212,6 +311,9 @@ export default function CompleteRegistrationScreen() {
         }
         throw new Error(response.message || 'Failed to submit driver application');
       }
+
+      // Mark submission locally so the guard routes to the welcome screen
+      await setDriverApplicationSubmitted();
 
       // Refresh user data
       await refreshUser();
@@ -222,19 +324,161 @@ export default function CompleteRegistrationScreen() {
         [
           {
             text: 'Continue',
-            onPress: () => router.replace('/(tabs)'),
+            onPress: () => router.replace('/welcome'),
           },
         ]
       );
     } catch (err) {
+      // apiClient throws plain ApiError objects (not Error instances) for HTTP failures,
+      // so read `message` structurally to surface backend messages (e.g. submission cap).
+      const rawMessage = (err as { message?: unknown } | null)?.message;
       const errorMessage =
-        err instanceof Error ? err.message : 'Failed to submit application. Please try again.';
+        typeof rawMessage === 'string' && rawMessage.trim()
+          ? rawMessage
+          : 'Failed to submit application. Please try again.';
       setError(errorMessage);
+      if (errorMessage.includes('complete identity verification first')) {
+        Alert.alert('Verification Required', errorMessage, [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/kyc-verification'),
+          },
+        ]);
+      }
       console.error('[CompleteRegistration] Error:', errorMessage, err);
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (isCheckingApplication) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' },
+        ]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
+  // Vehicle step
+  if (currentStep === 'vehicle') {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <ScrollView
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled">
+            <View style={styles.headerContainer}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('profile')}>
+                <Ionicons name="arrow-back" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.headline, { color: theme.text }]}>Vehicle Details</Text>
+              <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
+                Tell us about the vehicle you will use for deliveries
+              </Text>
+            </View>
+
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Vehicle Type *</Text>
+                <View style={styles.vehicleTypeGrid}>
+                  {VEHICLE_TYPES.map((type) => {
+                    const selected = vehicleType === type;
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.vehicleTypeChip,
+                          {
+                            backgroundColor: selected ? theme.primary : theme.surface,
+                            borderColor: selected ? theme.primary : theme.border,
+                          },
+                        ]}
+                        onPress={() => {
+                          setVehicleType(type);
+                          setError(null);
+                        }}>
+                        <Text
+                          style={[
+                            styles.vehicleTypeChipText,
+                            { color: selected ? theme.primaryText : theme.text },
+                          ]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Plate Number (Optional)</Text>
+                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder="e.g. ABC 1234"
+                    placeholderTextColor={theme.placeholder}
+                    value={vehiclePlate}
+                    onChangeText={setVehiclePlate}
+                    autoCapitalize="characters"
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Model (Optional)</Text>
+                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder="e.g. Toyota HiAce 2020"
+                    placeholderTextColor={theme.placeholder}
+                    value={vehicleModel}
+                    onChangeText={setVehicleModel}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: theme.text }]}>Color (Optional)</Text>
+                <View style={[styles.inputContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: theme.text }]}
+                    placeholder="e.g. White"
+                    placeholderTextColor={theme.placeholder}
+                    value={vehicleColor}
+                    onChangeText={setVehicleColor}
+                    editable={!isLoading}
+                  />
+                </View>
+              </View>
+
+              {error && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: theme.primary }]}
+                onPress={handleVehicleSubmit}>
+                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   // Documents step
   if (currentStep === 'documents') {
@@ -247,7 +491,7 @@ export default function CompleteRegistrationScreen() {
             contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
             showsVerticalScrollIndicator={false}>
             <View style={styles.headerContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('profile')}>
+              <TouchableOpacity style={styles.backButton} onPress={() => setCurrentStep('vehicle')}>
                 <Ionicons name="arrow-back" size={24} color={theme.text} />
               </TouchableOpacity>
               <Text style={[styles.headline, { color: theme.text }]}>Upload Documents</Text>
@@ -255,6 +499,16 @@ export default function CompleteRegistrationScreen() {
                 Upload your documents (all optional for now)
               </Text>
             </View>
+
+            {isResubmission && (
+              <View style={[styles.resubmitHint, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="information-circle-outline" size={18} color={theme.primary} />
+                <Text style={[styles.resubmitHintText, { color: theme.textSecondary }]}>
+                  Your previously uploaded documents are kept unless you replace them here. You can
+                  continue without uploading new ones.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.documentsContainer}>
               {Object.entries(documents).map(([key, doc]) => (
@@ -293,9 +547,11 @@ export default function CompleteRegistrationScreen() {
             <TouchableOpacity
               style={[styles.continueButton, { backgroundColor: theme.primary }]}
               onPress={() => {
-                // Validate that at least one document is uploaded
+                // Validate that at least one document is uploaded.
+                // On resubmission, previous documents are kept server-side unless replaced,
+                // so no new upload is required.
                 const hasAnyDocument = Object.values(documents).some((doc) => doc.uri !== null);
-                if (!hasAnyDocument) {
+                if (!hasAnyDocument && !isResubmission) {
                   setError('Please upload at least one document before continuing');
                   return;
                 }
@@ -356,6 +612,41 @@ export default function CompleteRegistrationScreen() {
                 )}
               </View>
 
+              <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Vehicle</Text>
+                <View style={styles.reviewItem}>
+                  <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Type</Text>
+                  <Text style={[styles.reviewValue, { color: theme.text }]}>{vehicleType}</Text>
+                </View>
+                {vehiclePlate.trim() !== '' && (
+                  <View style={styles.reviewItem}>
+                    <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Plate Number</Text>
+                    <Text style={[styles.reviewValue, { color: theme.text }]}>{vehiclePlate}</Text>
+                  </View>
+                )}
+                {vehicleModel.trim() !== '' && (
+                  <View style={styles.reviewItem}>
+                    <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Model</Text>
+                    <Text style={[styles.reviewValue, { color: theme.text }]}>{vehicleModel}</Text>
+                  </View>
+                )}
+                {vehicleColor.trim() !== '' && (
+                  <View style={styles.reviewItem}>
+                    <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>Color</Text>
+                    <Text style={[styles.reviewValue, { color: theme.text }]}>{vehicleColor}</Text>
+                  </View>
+                )}
+              </View>
+
+              {isResubmission && uploadedDocuments.length === 0 && (
+                <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>Documents</Text>
+                  <Text style={[styles.reviewLabel, { color: theme.textSecondary }]}>
+                    No new documents uploaded — your previously submitted documents will be kept.
+                  </Text>
+                </View>
+              )}
+
               {uploadedDocuments.length > 0 && (
                 <View style={[styles.reviewSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <Text style={[styles.sectionTitle, { color: theme.text }]}>Documents ({uploadedDocuments.length})</Text>
@@ -383,7 +674,9 @@ export default function CompleteRegistrationScreen() {
               {isLoading ? (
                 <ActivityIndicator size="small" color={theme.primaryText} />
               ) : (
-                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>Submit Application</Text>
+                <Text style={[styles.submitButtonText, { color: theme.primaryText }]}>
+                  {isResubmission ? 'Resubmit Application' : 'Submit Application'}
+                </Text>
               )}
             </TouchableOpacity>
           </ScrollView>
@@ -403,8 +696,33 @@ export default function CompleteRegistrationScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
+          {isResubmission && showRejectionBanner && (
+            <View style={styles.rejectionBanner}>
+              <Ionicons name="alert-circle" size={20} color={BeeColors.red[600]} style={styles.rejectionBannerIcon} />
+              <View style={styles.rejectionBannerBody}>
+                <Text style={styles.rejectionBannerTitle}>
+                  Your previous application was rejected
+                </Text>
+                {rejectionNotes ? (
+                  <Text style={styles.rejectionBannerReason}>Reason: {rejectionNotes}</Text>
+                ) : null}
+                <Text style={styles.rejectionBannerText}>
+                  Please update your details below and resubmit your application.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowRejectionBanner(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Dismiss">
+                <Ionicons name="close" size={18} color={BeeColors.red[600]} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.headerContainer}>
-            <Text style={[styles.headline, { color: theme.text }]}>Complete Your Registration</Text>
+            <Text style={[styles.headline, { color: theme.text }]}>
+              {isResubmission ? 'Resubmit Your Application' : 'Complete Your Registration'}
+            </Text>
             <Text style={[styles.subheadline, { color: theme.textSecondary }]}>
               Please provide the following information to complete your driver application
             </Text>
@@ -657,5 +975,70 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     resizeMode: 'cover',
     marginTop: 8,
+  },
+  vehicleTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  vehicleTypeChip: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minWidth: 96,
+    alignItems: 'center',
+  },
+  vehicleTypeChipText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  rejectionBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: BeeColors.red[50],
+    borderWidth: 1,
+    borderColor: BeeColors.red[200],
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    gap: 8,
+  },
+  rejectionBannerIcon: {
+    marginTop: 1,
+  },
+  rejectionBannerBody: {
+    flex: 1,
+    gap: 4,
+  },
+  rejectionBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: BeeColors.red[700],
+  },
+  rejectionBannerReason: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: BeeColors.red[700],
+  },
+  rejectionBannerText: {
+    fontSize: 13,
+    color: BeeColors.red[700],
+  },
+  resubmitHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+  },
+  resubmitHintText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

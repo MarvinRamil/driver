@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { driverStatusService } from '../services/driverStatusService';
+import { router } from 'expo-router';
+import { driverStatusService, FaceCheckRequiredError } from '../services/driverStatusService';
 import { locationTrackingService } from '../services/locationTrackingService';
 import type { DriverStatus } from '../services/driverStatusService';
 import { useAuth } from '@/features/auth';
@@ -152,6 +153,13 @@ export function DriverStatusProvider({ children }: DriverStatusProviderProps) {
         await fetchStatus();
       }
     } catch (err) {
+      // Backend requires a face check before going online — open the check screen
+      // instead of surfacing an error; on pass it retries going online.
+      if (err instanceof FaceCheckRequiredError) {
+        setIsOnline(false);
+        router.push('/shift-check');
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : 'Failed to update driver status';
       setError(errorMessage);
       // Revert on error
