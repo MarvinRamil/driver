@@ -89,7 +89,7 @@ export default function CompleteRegistrationScreen() {
         );
         const application = response.success ? response.data?.data : undefined;
         if (mounted && application) {
-          if (application.status === 'Rejected') {
+          if (!application.status || application.status === 'Rejected') {
             // Rejected — allow resubmission: stay on the form, prefill known fields
             setIsResubmission(true);
             setRejectionNotes(application.notes ?? null);
@@ -117,7 +117,6 @@ export default function CompleteRegistrationScreen() {
 
   // Documents (all optional for now)
   const [documents, setDocuments] = useState<Record<string, DocumentState>>({
-    driversLicense: { uri: null, name: 'driversLicense', label: "Driver's License" },
     clearance: { uri: null, name: 'clearance', label: 'Clearance' },
     orCr: { uri: null, name: 'orCr', label: 'OR/CR' },
     ltfrbPa: { uri: null, name: 'ltfrbPa', label: 'LTFRB PA' },

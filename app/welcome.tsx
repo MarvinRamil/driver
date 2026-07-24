@@ -218,7 +218,7 @@ export default function WelcomeScreen() {
     };
   }, [router]);
 
-  const isRejected = applicationStatus === "Rejected";
+  const isRejected = !applicationStatus || applicationStatus === "Rejected";
 
   useEffect(() => {
     float.value = withRepeat(
