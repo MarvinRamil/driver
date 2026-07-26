@@ -13,6 +13,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type ThemeColors } from '@/shared/hooks/use-theme';
@@ -27,6 +28,38 @@ import { useAuth as useClerkAuth, useSignUp } from '@clerk/clerk-expo';
 
 const OTP_LENGTH = 6;
 const OTP_RESEND_COOLDOWN_SECONDS = 10 * 60;
+const PRIVACY_POLICY_URL = 'https://mybeeapp.com/privacy';
+const TERMS_URL = 'https://mybeeapp.com/terms';
+
+// Runs inside the policy WebViews. Two jobs: strip the site's "Sign In" nav button, and
+// post a message once the reader reaches the bottom so the Accept button can unlock.
+const POLICY_INJECTED_JS = `
+(function () {
+  var style = document.createElement('style');
+  style.textContent = 'header button { display: none !important; }';
+  document.head.appendChild(style);
+
+  var sent = false;
+  function checkAtEnd() {
+    if (sent) return;
+    var doc = document.documentElement;
+    var scrollTop = window.pageYOffset || doc.scrollTop || 0;
+    var viewport = window.innerHeight || doc.clientHeight || 0;
+    var total = Math.max(doc.scrollHeight, document.body ? document.body.scrollHeight : 0);
+    // 48px slack so a near-miss at the bottom still counts.
+    if (scrollTop + viewport >= total - 48) {
+      sent = true;
+      window.ReactNativeWebView.postMessage('reached-end');
+    }
+  }
+
+  window.addEventListener('scroll', checkAtEnd, { passive: true });
+  window.addEventListener('resize', checkAtEnd, { passive: true });
+  // Content shorter than the viewport never fires a scroll event - unlock after layout settles.
+  setTimeout(checkAtEnd, 800);
+})();
+true;
+`;
 
 /** Pull a readable message out of a Clerk API error (or any error). */
 function extractClerkError(err: unknown): string {
@@ -97,6 +130,10 @@ export function RegistrationSteps() {
   const [questionPickerIndex, setQuestionPickerIndex] = useState<0 | 1 | 2 | null>(null);
   const [registrationToken, setRegistrationToken] = useState<string | null>(null);
   const [otpResendSecondsLeft, setOtpResendSecondsLeft] = useState(0);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [privacyPolicyVisible, setPrivacyPolicyVisible] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
 
   useEffect(() => {
     authService.getSecurityQuestions().then(setSecurityQuestionsList).catch(() => {});
@@ -607,15 +644,63 @@ export function RegistrationSteps() {
           }}
           disabled={isLoading}
         />
+        <PolicyAgreementCheckbox
+          theme={theme}
+          checked={agreedToPrivacy}
+          // Ticking requires reading the document first, so the box can only be checked by
+          // accepting inside the modal. Unticking stays a plain toggle.
+          onToggle={() => {
+            if (agreedToPrivacy) setAgreedToPrivacy(false);
+            else setPrivacyPolicyVisible(true);
+          }}
+          onOpenDocument={() => setPrivacyPolicyVisible(true)}
+          leadingText="I have read and accept the"
+          linkLabel="Privacy Policy"
+          disabled={isLoading}
+        />
+        <PolicyAgreementCheckbox
+          theme={theme}
+          checked={agreedToTerms}
+          onToggle={() => {
+            if (agreedToTerms) setAgreedToTerms(false);
+            else setTermsVisible(true);
+          }}
+          onOpenDocument={() => setTermsVisible(true)}
+          leadingText="I have read and accept the"
+          linkLabel="Terms and Conditions"
+          disabled={isLoading}
+        />
         <ErrorBanner error={error} />
         <SubmitButton
           theme={theme}
           label="Send verification code"
           loading={isLoading}
-          disabled={isLoading}
+          disabled={isLoading || !agreedToPrivacy || !agreedToTerms}
           onPress={handleStartClerkSignUp}
         />
         <LoginFooter theme={theme} onLogin={navigateToLogin} />
+        <PolicyDocumentModal
+          theme={theme}
+          visible={privacyPolicyVisible}
+          title="Privacy Policy"
+          url={PRIVACY_POLICY_URL}
+          onClose={() => setPrivacyPolicyVisible(false)}
+          onAccept={() => {
+            setAgreedToPrivacy(true);
+            setPrivacyPolicyVisible(false);
+          }}
+        />
+        <PolicyDocumentModal
+          theme={theme}
+          visible={termsVisible}
+          title="Terms and Conditions"
+          url={TERMS_URL}
+          onClose={() => setTermsVisible(false)}
+          onAccept={() => {
+            setAgreedToTerms(true);
+            setTermsVisible(false);
+          }}
+        />
       </>
     );
   }
@@ -646,17 +731,63 @@ export function RegistrationSteps() {
               }}
               disabled={isLoading}
             />
+            <PolicyAgreementCheckbox
+              theme={theme}
+              checked={agreedToPrivacy}
+              onToggle={() => {
+                if (agreedToPrivacy) setAgreedToPrivacy(false);
+                else setPrivacyPolicyVisible(true);
+              }}
+              onOpenDocument={() => setPrivacyPolicyVisible(true)}
+              leadingText="I have read and accept the"
+              linkLabel="Privacy Policy"
+              disabled={isLoading}
+            />
+            <PolicyAgreementCheckbox
+              theme={theme}
+              checked={agreedToTerms}
+              onToggle={() => {
+                if (agreedToTerms) setAgreedToTerms(false);
+                else setTermsVisible(true);
+              }}
+              onOpenDocument={() => setTermsVisible(true)}
+              leadingText="I have read and accept the"
+              linkLabel="Terms and Conditions"
+              disabled={isLoading}
+            />
             <ErrorBanner error={error} />
             <SubmitButton
               theme={theme}
               label="Create account"
               loading={isLoading}
-              disabled={isLoading}
+              disabled={isLoading || !agreedToPrivacy || !agreedToTerms}
               onPress={handleCreateAccountAfterOtp}
             />
             <LoginFooter theme={theme} onLogin={navigateToLogin} />
           </>
         )}
+        <PolicyDocumentModal
+          theme={theme}
+          visible={privacyPolicyVisible}
+          title="Privacy Policy"
+          url={PRIVACY_POLICY_URL}
+          onClose={() => setPrivacyPolicyVisible(false)}
+          onAccept={() => {
+            setAgreedToPrivacy(true);
+            setPrivacyPolicyVisible(false);
+          }}
+        />
+        <PolicyDocumentModal
+          theme={theme}
+          visible={termsVisible}
+          title="Terms and Conditions"
+          url={TERMS_URL}
+          onClose={() => setTermsVisible(false)}
+          onAccept={() => {
+            setAgreedToTerms(true);
+            setTermsVisible(false);
+          }}
+        />
         <QuestionPickerModal
           visible={questionPickerIndex !== null}
           questions={securityQuestionsList}
@@ -1532,4 +1663,222 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  policyAgreementRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  policyCheckbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  policyAgreementText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  policyLink: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  policyModalContainer: {
+    flex: 1,
+  },
+  policyModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  policyModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  policyWebview: {
+    flex: 1,
+  },
+  policyWebviewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policyModalFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+  },
+  policyScrollHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  policyAcceptButton: {
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policyAcceptButtonDisabled: {
+    opacity: 0.45,
+  },
+  policyAcceptButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1d180c',
+  },
 });
+
+function PolicyAgreementCheckbox({
+  theme,
+  checked,
+  onToggle,
+  onOpenDocument,
+  leadingText,
+  linkLabel,
+  disabled,
+}: {
+  theme: ThemeColors;
+  checked: boolean;
+  onToggle: () => void;
+  onOpenDocument: () => void;
+  leadingText: string;
+  linkLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.policyAgreementRow}
+      onPress={onToggle}
+      disabled={disabled}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          styles.policyCheckbox,
+          { borderColor: theme.border },
+          checked && { backgroundColor: BeeColors.yellow[400], borderColor: BeeColors.yellow[400] },
+        ]}
+      >
+        {checked && <Ionicons name="checkmark" size={14} color="#1d180c" />}
+      </View>
+      <Text style={[styles.policyAgreementText, { color: theme.text }]}>
+        {leadingText}{' '}
+        {/* Nested Text handles its own press, so tapping the link opens the document
+            instead of toggling the checkbox. */}
+        <Text
+          style={[styles.policyLink, { color: theme.text }]}
+          onPress={onOpenDocument}
+          suppressHighlighting
+        >
+          {linkLabel}
+        </Text>
+        .
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function PolicyDocumentModal({
+  theme,
+  visible,
+  title,
+  url,
+  onClose,
+  onAccept,
+}: {
+  theme: ThemeColors;
+  visible: boolean;
+  title: string;
+  url: string;
+  onClose: () => void;
+  onAccept: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [reachedEnd, setReachedEnd] = useState(false);
+
+  // Re-arm the scroll gate every time the document is reopened.
+  useEffect(() => {
+    if (visible) setReachedEnd(false);
+  }, [visible]);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
+      <View
+        style={[
+          styles.policyModalContainer,
+          { backgroundColor: theme.surface, paddingTop: insets.top },
+        ]}
+      >
+        <View style={[styles.policyModalHeader, { borderBottomColor: theme.border }]}>
+          <Text style={[styles.policyModalTitle, { color: theme.text }]}>{title}</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={`Close ${title}`}
+          >
+            <Ionicons name="close" size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
+
+        <WebView
+          source={{ uri: url }}
+          style={styles.policyWebview}
+          originWhitelist={['http://*', 'https://*']}
+          startInLoadingState
+          renderLoading={() => (
+            <View style={[styles.policyWebviewLoading, { backgroundColor: theme.surface }]}>
+              <ActivityIndicator size="large" color={theme.primary} />
+            </View>
+          )}
+          // Hides the site's sticky nav "Sign In" button (the header's only <button>) and reports
+          // back once the reader hits the bottom. Injected as CSS so it survives Next.js hydration
+          // re-rendering the header, which a one-shot element.remove() would not.
+          injectedJavaScript={POLICY_INJECTED_JS}
+          onMessage={(event) => {
+            if (event.nativeEvent.data === 'reached-end') setReachedEnd(true);
+          }}
+        />
+
+        <View
+          style={[
+            styles.policyModalFooter,
+            { borderTopColor: theme.border, paddingBottom: insets.bottom + 16 },
+          ]}
+        >
+          {!reachedEnd && (
+            <Text style={[styles.policyScrollHint, { color: theme.textSecondary }]}>
+              Please scroll to the end of the document to continue.
+            </Text>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.policyAcceptButton,
+              { backgroundColor: BeeColors.yellow[400] },
+              !reachedEnd && styles.policyAcceptButtonDisabled,
+            ]}
+            onPress={onAccept}
+            disabled={!reachedEnd}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.policyAcceptButtonText}>I have read and agree</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
