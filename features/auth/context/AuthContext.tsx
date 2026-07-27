@@ -13,6 +13,7 @@ import { storeTempCredentialsForPrompt, clearTempCredentialsForPrompt } from "@/
 import { biometricStorage } from "@/shared/services/biometricStorage";
 import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidation";
 import { locationTrackingService } from "@/features/driver/services/locationTrackingService";
+import { mqttLocationService } from "@/features/driver/services/mqttLocationService";
 import { isClerkEnabled } from "@/shared/providers/AppClerkProvider";
 import { setLastLoginUser } from "@/shared/services/lastLoginStorage";
 import { configService } from "@/shared/services/configService";
@@ -277,6 +278,10 @@ function LegacyAuthProvider({ children }: AuthProviderProps) {
         console.warn("Failed to start SignalR after login:", signalRErr);
         // Don't fail login if SignalR fails
       }
+
+      // Mint the MQTT token now rather than at the first GPS fix, so a credential problem is
+      // visible in the log at login. Never throws — MQTT is optional.
+      await mqttLocationService.prepareForDriver();
     } catch (err) {
       // Handle login errors - ensure tokens are cleared on failure
       const errorMessage = err instanceof Error ? err.message : "Login failed";
@@ -318,7 +323,15 @@ function LegacyAuthProvider({ children }: AuthProviderProps) {
       } catch (signalRErr) {
         console.warn("Failed to stop SignalR:", signalRErr);
       }
-      
+
+      // Erase the stored MQTT token: it authorizes publishing as THIS driver, so it must not
+      // survive logout on a shared device.
+      try {
+        await mqttLocationService.signOut();
+      } catch (mqttErr) {
+        console.warn("Failed to clear MQTT credentials:", mqttErr);
+      }
+
       // Clear tokens and user data
       await authService.logout();
 
@@ -427,6 +440,9 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
     } catch (signalRErr) {
       console.warn("Failed to start SignalR:", signalRErr);
     }
+    // Mint the MQTT token now rather than at the first GPS fix, so a credential problem is
+    // visible in the log at login. Never throws — MQTT is optional.
+    await mqttLocationService.prepareForDriver();
     return currentUser;
   }, [signOut]);
 
@@ -539,6 +555,12 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
         await chatSignalRService.stop();
       } catch (signalRErr) {
         console.warn("Failed to stop SignalR:", signalRErr);
+      }
+      // Erase the stored MQTT token — it authorizes publishing as THIS driver.
+      try {
+        await mqttLocationService.signOut();
+      } catch (mqttErr) {
+        console.warn("Failed to clear MQTT credentials:", mqttErr);
       }
       await signOut();
       await tokenStorage.clearAllTokens();
