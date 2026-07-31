@@ -23,8 +23,6 @@ export const LIMITS = {
   SECURITY_ANSWER_MIN: 3,
   /** Security question answer max (reasonable limit) */
   SECURITY_ANSWER_MAX: 200,
-  /** License number - reasonable limit */
-  LICENSE_NUMBER: 50,
   /** Address - reasonable limit */
   ADDRESS: 500,
   /** OTP length */
