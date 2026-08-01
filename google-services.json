@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:94811040896:android:4adb6b36230983b5fc0a65",
+        "mobilesdk_app_id": "1:94811040896:android:03d1b4be1efac8ecfc0a65",
         "android_client_info": {
-          "package_name": "com.mybee.app"
+          "package_name": "com.mybeeapp.customer"
         }
       },
       "oauth_client": [],
@@ -20,7 +20,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "94811040896-dqncnglueu1dsp858t5pqpvgmm1oi3dq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
@@ -39,7 +44,36 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "94811040896-dqncnglueu1dsp858t5pqpvgmm1oi3dq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:94811040896:android:94f51036a50fa4f6fc0a65",
+        "android_client_info": {
+          "package_name": "com.mybeeapp.driversapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAKpth-RsiN0JRaGBT0IpqtmsFTEvudy4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "94811040896-dqncnglueu1dsp858t5pqpvgmm1oi3dq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
