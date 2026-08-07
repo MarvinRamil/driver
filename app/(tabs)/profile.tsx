@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -42,16 +42,10 @@ export default function ProfileScreen() {
   const [vehiclePlate, setVehiclePlate] = useState(user?.vehiclePlate || '');
   const [vehicleType, setVehicleType] = useState(user?.vehicleType || '');
   const [isEditingVehicle, setIsEditingVehicle] = useState(false);
-  const [showVehicleTypePicker, setShowVehicleTypePicker] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
-  const VEHICLE_TYPES = [
-    'Motorcycle', 'Sedan', 'SUV', 'Van', 'Pickup',
-    'L300', 'FB2000', 'Aluminum2000', 'Truck3000', 'Truck7000', 'Truck12000',
-  ];
 
   // Sync vehicle fields when user data changes
   React.useEffect(() => {
@@ -131,10 +125,11 @@ export default function ProfileScreen() {
       return;
     }
     try {
+      // vehicleType is intentionally not sent: it is fixed at application approval and
+      // tied to the vehicle documents that were reviewed.
       await updateProfile({
         fullName,
         email,
-        vehicleType: vehicleType || undefined,
         vehicleModel: vehicleModel || undefined,
         vehicleColor: vehicleColor || undefined,
         vehiclePlate: vehiclePlate || undefined,
@@ -555,18 +550,14 @@ export default function ProfileScreen() {
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
                   Vehicle Type
                 </ThemedText>
-                {isEditingVehicle ? (
-                  <TouchableOpacity
-                    style={[styles.pickerButton, { borderColor: theme.border, backgroundColor: theme.background }]}
-                    onPress={() => setShowVehicleTypePicker(true)}>
-                    <ThemedText style={[styles.pickerButtonText, { color: vehicleType ? theme.text : theme.textSecondary }]}>
-                      {vehicleType || 'Select vehicle type'}
-                    </ThemedText>
-                    <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                ) : (
-                  <ThemedText style={[styles.detailValue, { color: theme.text }]}>
-                    {vehicleType || 'Not set'}
+                {/* Read-only: vehicle type is set from the approved application and is tied
+                    to the vehicle documents reviewed at that time. */}
+                <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+                  {vehicleType || 'Not set'}
+                </ThemedText>
+                {isEditingVehicle && (
+                  <ThemedText style={[styles.detailHint, { color: theme.textSecondary }]}>
+                    Set from your approved application and can&apos;t be changed here.
                   </ThemedText>
                 )}
               </View>
@@ -667,52 +658,6 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
-
-        {/* Vehicle Type Picker Modal */}
-        <Modal
-          visible={showVehicleTypePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowVehicleTypePicker(false)}>
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowVehicleTypePicker(false)}>
-            <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
-              <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
-                <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
-                  Select Vehicle Type
-                </ThemedText>
-                <TouchableOpacity onPress={() => setShowVehicleTypePicker(false)}>
-                  <Ionicons name="close" size={24} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-              <FlatList
-                data={VEHICLE_TYPES}
-                keyExtractor={(item) => item}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.modalOption,
-                      { borderBottomColor: theme.border },
-                      vehicleType === item && { backgroundColor: theme.primary + '15' },
-                    ]}
-                    onPress={() => {
-                      setVehicleType(item);
-                      setShowVehicleTypePicker(false);
-                    }}>
-                    <ThemedText style={[styles.modalOptionText, { color: theme.text }]}>
-                      {item}
-                    </ThemedText>
-                    {vehicleType === item && (
-                      <Ionicons name="checkmark" size={20} color={theme.primary} />
-                    )}
-                  </TouchableOpacity>
-                )}
-              />
-            </View>
-          </TouchableOpacity>
-        </Modal>
 
         {/* Edit Profile Button */}
         <TouchableOpacity
@@ -955,6 +900,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  detailHint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
   licenseRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1044,54 +993,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     marginTop: 4,
-  },
-  pickerButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  pickerButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '60%',
-    paddingBottom: 34,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  modalOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  modalOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
   },
   passwordField: {
     padding: 16,

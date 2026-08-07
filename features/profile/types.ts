@@ -20,8 +20,8 @@ export interface UpdateProfileRequest {
   vehicleModel?: string;
   /** Vehicle color (driver) */
   vehicleColor?: string;
-  /** Vehicle type (driver) */
-  vehicleType?: string;
+  // Vehicle type is intentionally absent: it is fixed when the driver application is
+  // approved (validated against the vehicle pricing table) and is not self-editable.
 }
 
 /**

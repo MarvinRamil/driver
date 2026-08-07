@@ -37,7 +37,6 @@ class ProfileService {
       if (data.vehiclePlate != null) body.VehiclePlate = data.vehiclePlate;
       if (data.vehicleModel != null) body.VehicleModel = data.vehicleModel;
       if (data.vehicleColor != null) body.VehicleColor = data.vehicleColor;
-      if (data.vehicleType != null) body.VehicleType = data.vehicleType;
 
       const response = await apiClient.put<{ message?: string }>(`/api/auth/profile`, {
         body,
