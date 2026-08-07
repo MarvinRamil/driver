@@ -37,6 +37,10 @@ import { configService } from '@/shared/services/configService';
 const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 if (mapboxToken) {
   Mapbox.setAccessToken(mapboxToken);
+  // Opt out of Mapbox's usage/location telemetry, which is on by default. Keeps
+  // "App interactions" off the Play Data safety declaration. Must run after
+  // setAccessToken — the Android implementation instantiates a MapView internally.
+  Mapbox.setTelemetryEnabled(false);
 }
 configService.initialize();
 
