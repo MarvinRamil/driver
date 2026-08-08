@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { walletTopUpEventsService } from '../services/walletTopUpEventsService';
+import { walletTopUpEventsService, type TopUpPaidPayload } from '../services/walletTopUpEventsService';
 
 /**
  * Subscribe to real-time top-up paid events (SignalR).
@@ -7,7 +7,7 @@ import { walletTopUpEventsService } from '../services/walletTopUpEventsService';
  */
 export function useWalletTopUpEvents(
   driverId: string | undefined,
-  onTopUpPaid: () => void
+  onTopUpPaid: (payload: TopUpPaidPayload) => void
 ): void {
   const onTopUpPaidRef = useRef(onTopUpPaid);
   onTopUpPaidRef.current = onTopUpPaid;
@@ -15,8 +15,8 @@ export function useWalletTopUpEvents(
   useEffect(() => {
     if (!driverId) return;
 
-    walletTopUpEventsService.start(driverId, () => {
-      onTopUpPaidRef.current();
+    walletTopUpEventsService.start(driverId, (payload) => {
+      onTopUpPaidRef.current(payload);
     });
 
     return () => {
