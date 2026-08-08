@@ -20,11 +20,15 @@ import { BeeColors } from '@/constants/theme';
 import { useAuth } from '@/features/auth';
 import { apiClient } from '@/shared/services/apiClient';
 import { setDriverApplicationSubmitted } from '@/shared/services/driverApplicationStorage';
+import {
+  vehicleService,
+  vehicleOptionLabel,
+  FALLBACK_VEHICLE_TYPES,
+  type VehiclePricingOption,
+} from '@/features/vehicles';
 import * as ImagePicker from 'expo-image-picker';
 
 type Step = 'profile' | 'vehicle' | 'documents' | 'review';
-
-const VEHICLE_TYPES = ['Motorcycle', 'Sedan', 'SUV', 'Van', 'Truck'] as const;
 
 interface DocumentState {
   uri: string | null;
@@ -77,6 +81,13 @@ export default function CompleteRegistrationScreen() {
   const [vehicleModel, setVehicleModel] = useState('');
   const [vehicleColor, setVehicleColor] = useState('');
 
+  // Vehicle types come from the pricing table (the single source of truth), not a
+  // hardcoded list — a driver must never register a class no booking can be priced for.
+  const [vehicleTypes, setVehicleTypes] = useState<VehiclePricingOption[]>([]);
+  const [isLoadingVehicleTypes, setIsLoadingVehicleTypes] = useState(true);
+  const [vehicleTypesError, setVehicleTypesError] = useState<string | null>(null);
+  const [vehicleTypesReloadKey, setVehicleTypesReloadKey] = useState(0);
+
   // If the driver already submitted an application, show the pending screen instead —
   // unless it was rejected, in which case they stay here to resubmit.
   useEffect(() => {
@@ -114,6 +125,47 @@ export default function CompleteRegistrationScreen() {
       mounted = false;
     };
   }, [router]);
+
+  // Load selectable vehicle types. Deliberately separate from the application check above:
+  // that one gates the whole screen, and the profile step does not need vehicle data, so
+  // chaining them would delay the first step behind a request it never uses.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setIsLoadingVehicleTypes(true);
+      setVehicleTypesError(null);
+      try {
+        const options = await vehicleService.getVehicleTypes();
+        if (!mounted) return;
+        // An empty catalog is a backend problem, not an empty answer — fall back rather
+        // than render a picker with nothing in it.
+        setVehicleTypes(options.length > 0 ? options : FALLBACK_VEHICLE_TYPES);
+      } catch {
+        if (!mounted) return;
+        setVehicleTypes(FALLBACK_VEHICLE_TYPES);
+        setVehicleTypesError(
+          'Could not load the latest vehicle types. Showing the standard list.'
+        );
+      } finally {
+        if (mounted) setIsLoadingVehicleTypes(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [vehicleTypesReloadKey]);
+
+  // A resubmitted application may carry a vehicle type that is no longer offered (e.g. a
+  // class that was deactivated). Clear it so the driver actively re-picks instead of
+  // submitting a stale value the backend will reject.
+  useEffect(() => {
+    if (isLoadingVehicleTypes || !vehicleType || vehicleTypes.length === 0) return;
+    const stillOffered = vehicleTypes.some((option) => option.vehicleType === vehicleType);
+    if (!stillOffered) {
+      setVehicleType(null);
+      setVehicleTypesError('Your previous vehicle type is no longer available. Please select one.');
+    }
+  }, [isLoadingVehicleTypes, vehicleType, vehicleTypes]);
 
   // Documents (all optional for now)
   const [documents, setDocuments] = useState<Record<string, DocumentState>>({
@@ -387,34 +439,55 @@ export default function CompleteRegistrationScreen() {
             <View style={styles.form}>
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: theme.text }]}>Vehicle Type *</Text>
-                <View style={styles.vehicleTypeGrid}>
-                  {VEHICLE_TYPES.map((type) => {
-                    const selected = vehicleType === type;
-                    return (
-                      <TouchableOpacity
-                        key={type}
-                        style={[
-                          styles.vehicleTypeChip,
-                          {
-                            backgroundColor: selected ? theme.primary : theme.surface,
-                            borderColor: selected ? theme.primary : theme.border,
-                          },
-                        ]}
-                        onPress={() => {
-                          setVehicleType(type);
-                          setError(null);
-                        }}>
-                        <Text
-                          style={[
-                            styles.vehicleTypeChipText,
-                            { color: selected ? theme.primaryText : theme.text },
-                          ]}>
-                          {type}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                {isLoadingVehicleTypes ? (
+                  <View style={styles.vehicleTypeLoading}>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={[styles.vehicleTypeLoadingText, { color: theme.textSecondary }]}>
+                      Loading vehicle types…
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {vehicleTypesError && (
+                      <View style={styles.errorContainer}>
+                        <Ionicons name="alert-circle" size={16} color={BeeColors.red[600]} />
+                        <Text style={styles.errorText}>{vehicleTypesError}</Text>
+                        <TouchableOpacity
+                          onPress={() => setVehicleTypesReloadKey((key) => key + 1)}>
+                          <Text style={[styles.retryText, { color: theme.primary }]}>Retry</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    <View style={styles.vehicleTypeGrid}>
+                      {vehicleTypes.map((option) => {
+                        const selected = vehicleType === option.vehicleType;
+                        return (
+                          <TouchableOpacity
+                            key={option.vehicleType}
+                            style={[
+                              styles.vehicleTypeChip,
+                              {
+                                backgroundColor: selected ? theme.primary : theme.surface,
+                                borderColor: selected ? theme.primary : theme.border,
+                              },
+                            ]}
+                            onPress={() => {
+                              setVehicleType(option.vehicleType);
+                              setError(null);
+                            }}>
+                            <Text
+                              style={[
+                                styles.vehicleTypeChipText,
+                                { color: selected ? theme.primaryText : theme.text },
+                              ]}>
+                              {vehicleOptionLabel(option)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
               </View>
 
               <View style={styles.inputGroup}>
@@ -990,6 +1063,19 @@ const styles = StyleSheet.create({
   },
   vehicleTypeChipText: {
     fontSize: 15,
+    fontWeight: '600',
+  },
+  vehicleTypeLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  vehicleTypeLoadingText: {
+    fontSize: 14,
+  },
+  retryText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   rejectionBanner: {
