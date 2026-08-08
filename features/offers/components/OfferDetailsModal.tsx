@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SwipeToAccept } from '@/shared/components/SwipeToAccept';
 import type { DriverOffer } from '../types';
 import { getPickupAddress, getDropoffAddress, getPickupStop, getDropoffStops, isMultiStopOffer } from '../utils/offerHelpers';
+import { EarningsBreakdown } from './EarningsBreakdown';
 
 // Manila fallback when no coordinates
 const DEFAULT_CENTER: [number, number] = [120.9842, 14.5995];
@@ -490,14 +491,22 @@ export function OfferDetailsModal({
                 </ThemedText>
               </View>
             )}
-            <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
-              <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                Fare
-              </ThemedText>
-              <ThemedText style={[styles.detailValue, { color: theme.primary, fontWeight: '700' }]}>
-                ₱{offer.estimatedFare.toFixed(2)}
-              </ThemedText>
-            </View>
+            {/* The breakdown replaces the bare fare row so the accept decision is made on
+                the net. Falls back when the server sends no breakdown — there is no
+                priceable fare then, and showing ₱0.00 would read as "this job pays
+                nothing" rather than "not priced yet". */}
+            {offer.earningDetails ? (
+              <EarningsBreakdown details={offer.earningDetails} variant="full" />
+            ) : (
+              <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
+                <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                  Fare
+                </ThemedText>
+                <ThemedText style={[styles.detailValue, { color: theme.primary, fontWeight: '700' }]}>
+                  ₱{offer.estimatedFare.toFixed(2)}
+                </ThemedText>
+              </View>
+            )}
             {offer.distanceKm != null && (
               <View style={[styles.detailRow, { borderBottomColor: theme.border }]}>
                 <ThemedText style={[styles.detailLabel, { color: theme.textSecondary }]}>

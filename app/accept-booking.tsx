@@ -3,7 +3,7 @@ import { StyleSheet, View, TouchableOpacity, Animated, Alert } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/shared/hooks/use-theme';
-import { useOffers } from '@/features/offers';
+import { useOffers, EarningsBreakdown } from '@/features/offers';
 import { useAuth } from '@/features/auth';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
@@ -176,14 +176,22 @@ export default function AcceptBookingScreen() {
 
       {/* Content */}
       <View style={styles.content}>
-        {/* Fare */}
+        {/* Earnings. This screen is opened straight from a push and can be accepted by
+            swiping, so the net has to be here — a driver may never open the details modal.
+            Falls back to the gross fare when the server sends no breakdown. */}
         <View style={styles.fareContainer}>
-          <ThemedText type="title" style={[styles.fareAmount, { color: theme.text }]}>
-            ₱{offer.estimatedFare.toFixed(2)}
-          </ThemedText>
-          <ThemedText style={[styles.fareSubtext, { color: theme.textSecondary }]}>
-            Estimated Fare • {(offer.estimatedDistance / 1000).toFixed(1)} km total
-          </ThemedText>
+          {offer.earningDetails ? (
+            <EarningsBreakdown details={offer.earningDetails} variant="compact" />
+          ) : (
+            <>
+              <ThemedText type="title" style={[styles.fareAmount, { color: theme.text }]}>
+                ₱{offer.estimatedFare.toFixed(2)}
+              </ThemedText>
+              <ThemedText style={[styles.fareSubtext, { color: theme.textSecondary }]}>
+                Estimated Fare • {(offer.estimatedDistance / 1000).toFixed(1)} km total
+              </ThemedText>
+            </>
+          )}
         </View>
 
         {/* Locations */}
@@ -215,12 +223,19 @@ export default function AcceptBookingScreen() {
 
         {/* Tags */}
         <View style={styles.tagsContainer}>
-          <View style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Ionicons name="cash-outline" size={18} color={theme.text} />
-            <ThemedText style={[styles.tagText, { color: theme.text }]}>
-              {offer.paymentMethod} Payment
-            </ThemedText>
-          </View>
+          {/* Was rendering "undefined Payment": `paymentMethod` is not on DriverOffer and was
+              never mapped. The method now comes from the earnings breakdown, which resolves it
+              server-side; hidden entirely when there is no breakdown rather than guessing. */}
+          {offer.earningDetails && (
+            <View style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Ionicons name="cash-outline" size={18} color={theme.text} />
+              <ThemedText style={[styles.tagText, { color: theme.text }]}>
+                {offer.earningDetails.paymentMethodConfirmed
+                  ? `${offer.earningDetails.paymentMethod} Payment`
+                  : 'Payment method unconfirmed'}
+              </ThemedText>
+            </View>
+          )}
           {offer.customerRating && (
             <View style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Ionicons name="star" size={18} color={theme.primary} />

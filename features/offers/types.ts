@@ -85,6 +85,12 @@ export interface DriverOffer {
   estimatedFare: number;
   /** Final fare (null until completed) */
   finalFare?: number | null;
+  /**
+   * Server-computed earnings breakdown. Null when the offer has no priceable fare — the
+   * backend withholds it rather than quoting ₱0.00, which would read as "this job pays
+   * nothing" instead of "not priced yet". Callers must fall back to the gross fare.
+   */
+  earningDetails?: OfferEarningDetails | null;
   /** Total route distance in km (nullable) */
   distanceKmTotal?: number | null;
   /** Multi-stop route information */
@@ -118,6 +124,73 @@ export interface DriverOffer {
 }
 
 export type OfferStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Expired';
+
+/**
+ * One deduction taken off the gross fare.
+ *
+ * Sent as a list rather than a single commission field so a second deduction (tips,
+ * surcharges, penalties) can ship without an app release — render the array, never a
+ * hardcoded row.
+ */
+export interface OfferEarningsDeduction {
+  /** Display label, e.g. "Platform commission" */
+  label: string;
+  /** Fractional rate, e.g. 0.05 */
+  rate: number;
+  /** The same rate as a percentage, so clients need not multiply */
+  ratePercent: number;
+  /** Amount deducted */
+  amount: number;
+}
+
+/**
+ * Present only for cash offers. The driver collects the whole fare from the customer and the
+ * platform's share is debited from their top-up wallet afterwards, so accepting a cash job
+ * creates an obligation the driver should see before they take it.
+ */
+export interface OfferCashSettlement {
+  /** What the driver collects from the customer, in full */
+  collectedFromCustomer: number;
+  /** What the platform will take back */
+  owedToPlatform: number;
+  /** Where the debit lands, e.g. "TopUpWallet" */
+  settledFrom: string;
+}
+
+/**
+ * What a driver actually takes home from an offer, computed server-side.
+ *
+ * Every amount here is authoritative and must be displayed verbatim — never recompute the
+ * split in the client. The backend derives it from a single shared formula precisely so the
+ * number quoted before accepting matches the number paid after completing.
+ */
+export interface OfferEarningDetails {
+  /** Resolved payment method */
+  paymentMethod: 'Cash' | 'Online';
+  /**
+   * False when no payment record existed yet and the method was inferred. Cash bookings
+   * always have one by offer time, so an unconfirmed method is effectively an assumed
+   * "Online" — hedge the label, not the cash warning.
+   */
+  paymentMethodConfirmed: boolean;
+  /** ISO-ish currency code, e.g. "PHP" */
+  currency: string;
+  /** True while based on the estimated fare — must never be presented as a promise */
+  isEstimate: boolean;
+  /** The gross fare the split is taken from */
+  baseEarnings: number;
+  /** Deductions applied to the base */
+  deductions: OfferEarningsDeduction[];
+  /** Base minus deductions */
+  netEarnings: number;
+  /**
+   * What the driver ends up with. Equal to netEarnings while commission is the only
+   * deduction; kept distinct so adding one later is not a breaking change.
+   */
+  totalNetEarnings: number;
+  /** Cash obligation (cash offers only) */
+  cashSettlement?: OfferCashSettlement | null;
+}
 
 export interface AcceptOfferResponse {
   success: boolean;
