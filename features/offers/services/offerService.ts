@@ -1,5 +1,57 @@
 import { apiClient } from '@/shared/services/apiClient';
-import type { DriverOffer, AcceptOfferResponse } from '../types';
+import type {
+  DriverOffer,
+  AcceptOfferResponse,
+  OfferEarningDetails,
+  OfferEarningsDeduction,
+} from '../types';
+
+/**
+ * Map the server's earnings breakdown, or null when it is absent or unusable.
+ *
+ * Returning null rather than a zeroed object is deliberate: the backend omits this whenever
+ * there is no priceable fare, and a ₱0.00 breakdown reads as "this job pays nothing" instead
+ * of "not priced yet". Callers fall back to the plain gross fare on null.
+ *
+ * Amounts are passed through as the server sent them. The split is never re-derived here —
+ * a second formula in the client would quote a driver a number they are not paid.
+ */
+function mapEarningDetails(raw: any): OfferEarningDetails | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  // A breakdown with no deductions array is malformed, not an empty answer.
+  const rawDeductions = raw.deductions ?? raw.Deductions;
+  if (!Array.isArray(rawDeductions)) return null;
+
+  const deductions: OfferEarningsDeduction[] = rawDeductions.map((d: any) => ({
+    label: String(d.label ?? d.Label ?? 'Deduction'),
+    rate: Number(d.rate ?? d.Rate ?? 0),
+    ratePercent: Number(d.ratePercent ?? d.RatePercent ?? 0),
+    amount: Number(d.amount ?? d.Amount ?? 0),
+  }));
+
+  const rawSettlement = raw.cashSettlement ?? raw.CashSettlement;
+
+  return {
+    paymentMethod: (raw.paymentMethod ?? raw.PaymentMethod) === 'Cash' ? 'Cash' : 'Online',
+    paymentMethodConfirmed: (raw.paymentMethodConfirmed ?? raw.PaymentMethodConfirmed) === true,
+    currency: String(raw.currency ?? raw.Currency ?? 'PHP'),
+    isEstimate: (raw.isEstimate ?? raw.IsEstimate) !== false,
+    baseEarnings: Number(raw.baseEarnings ?? raw.BaseEarnings ?? 0),
+    deductions,
+    netEarnings: Number(raw.netEarnings ?? raw.NetEarnings ?? 0),
+    totalNetEarnings: Number(raw.totalNetEarnings ?? raw.TotalNetEarnings ?? 0),
+    cashSettlement: rawSettlement
+      ? {
+          collectedFromCustomer: Number(
+            rawSettlement.collectedFromCustomer ?? rawSettlement.CollectedFromCustomer ?? 0
+          ),
+          owedToPlatform: Number(rawSettlement.owedToPlatform ?? rawSettlement.OwedToPlatform ?? 0),
+          settledFrom: String(rawSettlement.settledFrom ?? rawSettlement.SettledFrom ?? 'TopUpWallet'),
+        }
+      : null,
+  };
+}
 
 class OfferService {
   private parseDate(dateString: string | null | undefined): Date | null {
@@ -141,6 +193,7 @@ class OfferService {
           itemHeightCm: offer.itemHeightCm != null && !isNaN(Number(offer.itemHeightCm)) ? Number(offer.itemHeightCm) : null,
           estimatedFare: offer.estimatedFare ?? offer.fare ?? 0,
           finalFare: offer.finalFare ?? null,
+          earningDetails: mapEarningDetails(offer.earningDetails ?? offer.EarningDetails),
           distanceKmTotal: offer.distanceKmTotal ?? offer.distanceKm ?? null,
           stops: stops.map((stop: any) => ({
             sequence: stop.sequence ?? 0,

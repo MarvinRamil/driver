@@ -5,10 +5,19 @@ export { useOffers } from './hooks/useOffers';
 export { offerService } from './services/offerService';
 
 // Export types
-export type { DriverOffer, DeliveryStop, OfferStatus, AcceptOfferResponse } from './types';
+export type {
+  DriverOffer,
+  DeliveryStop,
+  OfferStatus,
+  AcceptOfferResponse,
+  OfferEarningDetails,
+  OfferEarningsDeduction,
+  OfferCashSettlement,
+} from './types';
 
 // Export components
 export { OfferDetailsModal } from './components/OfferDetailsModal';
+export { EarningsBreakdown } from './components/EarningsBreakdown';
 
 // Export utility functions
 export {
@@ -21,4 +30,5 @@ export {
   isOfferExpired,
   filterValidOffers,
 } from './utils/offerHelpers';
+export { formatPeso, formatRatePercent } from './utils/money';
 

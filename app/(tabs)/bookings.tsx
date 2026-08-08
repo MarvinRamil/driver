@@ -13,6 +13,7 @@ import {
   getTimeRemaining,
   filterValidOffers,
   OfferDetailsModal,
+  formatPeso,
 } from '@/features/offers';
 import type { DriverOffer } from '@/features/offers';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
@@ -199,6 +200,18 @@ export default function BookingsScreen() {
                       <ThemedText style={[styles.offerAmount, { color: theme.text }]}>
                         ₱{offer.estimatedFare.toFixed(2)}
                       </ThemedText>
+                      {/* Net only — the card is compact, so the full breakdown stays in the
+                          details modal. Omitted when the server sends no breakdown. */}
+                      {offer.earningDetails && (
+                        <ThemedText style={[styles.offerNet, { color: theme.primary }]}>
+                          Net {formatPeso(offer.earningDetails.totalNetEarnings)}
+                        </ThemedText>
+                      )}
+                      {offer.earningDetails?.cashSettlement && (
+                        <ThemedText style={[styles.offerCashPill, { color: theme.warning }]}>
+                          Cash · wallet debit
+                        </ThemedText>
+                      )}
                       {offer.distanceKm && (
                         <ThemedText style={[styles.offerDistance, { color: theme.textSecondary }]}>
                           {offer.distanceKm.toFixed(1)} km
@@ -687,6 +700,16 @@ const styles = StyleSheet.create({
   offerDistance: {
     fontSize: 11,
     fontWeight: '500',
+    marginTop: 2,
+  },
+  offerNet: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  offerCashPill: {
+    fontSize: 10,
+    fontWeight: '600',
     marginTop: 2,
   },
   countdownContainer: {
