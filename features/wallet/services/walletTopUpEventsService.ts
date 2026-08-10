@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import { tokenStorage } from '@/shared/services/tokenStorage';
+import { apiClient } from '@/shared/services/apiClient';
 
 export interface TopUpPaidPayload {
   topUpId: string;
@@ -33,7 +33,9 @@ class WalletTopUpEventsService {
       return;
     }
 
-    const token = await tokenStorage.getAccessToken();
+    // Must go through apiClient: under Clerk the legacy token store is empty, so reading it
+    // directly made this return early every time and TopUpPaid never arrived.
+    const token = await apiClient.getAuthToken();
     if (!token) return;
 
     if (this.connection) {
@@ -49,7 +51,7 @@ class WalletTopUpEventsService {
     if (!this.connection) {
       this.connection = new signalR.HubConnectionBuilder()
         .withUrl(`${this.apiBaseUrl}/hubs/notifications`, {
-          accessTokenFactory: async () => (await tokenStorage.getAccessToken()) || '',
+          accessTokenFactory: async () => (await apiClient.getAuthToken()) || '',
         })
         .withAutomaticReconnect({ nextRetryDelayInMilliseconds: () => 3000 })
         .configureLogging(signalR.LogLevel.Warning)

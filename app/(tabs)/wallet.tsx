@@ -13,7 +13,7 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "@/features/auth";
@@ -31,6 +31,7 @@ import {
 } from "@/features/wallet";
 import { ThemedView } from "@/shared/components/themed-view";
 import { ThemedText } from "@/shared/components/themed-text";
+import { Skeleton } from "@/shared/components/skeleton";
 import { Ionicons } from "@expo/vector-icons";
 import { useEarningsHistory } from "@/features/earnings";
 
@@ -48,8 +49,20 @@ export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { user } = useAuth();
-  const { wallet, isLoading, error, refresh, clearError: clearWalletError } = useWallet();
-  const { transactions, refresh: refreshTransactions } = useWalletTransactions();
+  const {
+    wallet,
+    isLoading,
+    error,
+    refresh,
+    applyWallet,
+    applyBalances,
+    clearError: clearWalletError,
+  } = useWallet();
+  const {
+    transactions,
+    isLoading: isLoadingTransactions,
+    refresh: refreshTransactions,
+  } = useWalletTransactions();
   const { data: cashEligibility, refresh: refreshEligibility } =
     useCashEligibility();
   const { topUps, refresh: refreshTopUps } = useTopUpHistory();
@@ -69,6 +82,7 @@ export default function WalletScreen() {
   const [bankAccount, setBankAccount] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
   const [withdrawalSuccessProcessing, setWithdrawalSuccessProcessing] = useState(false);
   const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
   const [saveBankAccount, setSaveBankAccount] = useState(false);
@@ -78,16 +92,21 @@ export default function WalletScreen() {
   );
   const [showEarningsBreakdown, setShowEarningsBreakdown] = useState(false);
   const withdrawIdempotencyKeyRef = useRef<string | null>(null);
-  const withdrawalSuccessGraceRef = useRef<number>(0);
+  /** Guards the transfer request itself. `isTransferring` drives the UI, but state updates are
+   *  async - only a ref is read-back synchronously within the same tap batch. */
+  const transferInFlightRef = useRef<boolean>(false);
+  /** Timestamp of the last successful money action (withdrawal, transfer); suppresses the error
+   *  card briefly so a transient background refresh failure doesn't overwrite a success. */
+  const successGraceRef = useRef<number>(0);
 
   const { history, refresh: refreshHistory } = useEarningsHistory(
     user?.id ?? "",
   );
 
-  const onRefreshAll = useCallback(async () => {
+  const onRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
     await Promise.all([
-      refresh(),
-      refreshTransactions(),
+      refresh(options),
+      refreshTransactions(options),
       refreshEligibility(),
       refreshTopUps(),
       refreshWithdrawals(),
@@ -111,7 +130,7 @@ export default function WalletScreen() {
     setAccountHolder("");
     setBankName("BPI");
     // Grace period: don't show fetch error for a few seconds after success (transient refresh failures)
-    withdrawalSuccessGraceRef.current = Date.now();
+    successGraceRef.current = Date.now();
     clearWalletError();
     try {
       await onRefreshAll();
@@ -129,9 +148,21 @@ export default function WalletScreen() {
   }, [withdrawalSuccessProcessing, withdrawModalVisible, closeWithdrawalSuccessAndRefresh]);
 
   // Real-time: when webhook marks top-up as paid, backend pushes TopUpPaid via SignalR; refresh wallet and history
-  useWalletTopUpEvents(user?.id, () => {
-    onRefreshAll();
+  // Fired when the backend credits the top-up (Xendit webhook). The payload already carries the
+  // new balances, so apply them directly - same principle as the transfer response. The silent
+  // refresh behind it is only to catch transactions/eligibility/history up.
+  useWalletTopUpEvents(user?.id, (payload) => {
+    applyBalances(payload.personalBalance, payload.topUpBalance);
+    void onRefreshAll({ silent: true });
   });
+
+  // The tab stays mounted, so without this the screen only ever fetches once. Re-query on focus
+  // so returning from a top-up (or any other screen) shows current balances.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) onRefreshAll();
+    }, [user?.id, onRefreshAll])
+  );
 
   // Must be called unconditionally (before any early return) to satisfy Rules of Hooks
   const topUpStatusText = useMemo(() => {
@@ -185,6 +216,11 @@ export default function WalletScreen() {
       </ThemedView>
     );
   }
+
+  // Skeletons stand in whenever a wallet query is actually in flight - first open, tab focus, or
+  // pull-to-refresh. The post-transfer refresh is silent, so it never sets isLoading and the
+  // balance applied from the transfer response stays on screen.
+  const isWalletLoading = isLoading;
 
   const personalBalance = wallet?.personalBalance ?? 0;
   const topUpBalance = wallet?.topUpBalance ?? 0;
@@ -283,6 +319,9 @@ export default function WalletScreen() {
 
   const handleTransfer = async () => {
     if (!user?.id) return;
+    // A second tap while the request is in flight would send a second transfer - there is no
+    // idempotency key on the endpoint, so both would go through.
+    if (transferInFlightRef.current) return;
     const amount = Number(transferAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       Alert.alert("Invalid Amount", "Please enter a valid transfer amount.");
@@ -290,24 +329,36 @@ export default function WalletScreen() {
     }
 
     const to = transferFrom === "Personal" ? "TopUp" : "Personal";
+    transferInFlightRef.current = true;
+    setIsTransferring(true);
     try {
-      await walletService.transferWalletBalance(
+      const updated = await walletService.transferWalletBalance(
         user.id,
         transferFrom,
         to,
         amount,
       );
+      // The response already carries the new balances - show them now instead of waiting on a
+      // second round trip.
+      applyWallet(updated);
+      // Same grace period the withdrawal flow uses: a transient failure in the background refresh
+      // below must not replace the freshly-updated ledger with an error card.
+      successGraceRef.current = Date.now();
       setTransferModalVisible(false);
       Alert.alert(
         "Transfer Complete",
         `Moved ₱${amount.toFixed(2)} from ${transferFrom} to ${to}.`,
       );
-      await onRefreshAll();
+      // Let transactions/eligibility/history catch up in the background without holding the screen.
+      void onRefreshAll({ silent: true });
     } catch (err) {
       Alert.alert(
         "Transfer Failed",
         err instanceof Error ? err.message : "Unable to transfer funds",
       );
+    } finally {
+      transferInFlightRef.current = false;
+      setIsTransferring(false);
     }
   };
 
@@ -407,7 +458,12 @@ export default function WalletScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={onRefreshAll} />
+          <RefreshControl
+            // Always false: the skeletons are the loading indicator, and showing this spinner on
+            // top of them gives the driver two competing signals for one fetch.
+            refreshing={false}
+            onRefresh={() => onRefreshAll()}
+          />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -478,13 +534,19 @@ export default function WalletScreen() {
                 </View>
               </View>
 
-              <ThemedText style={[styles.walletBalance, { color: "#fff" }]}>
-                ₱
-                {personalBalance.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </ThemedText>
+              {isWalletLoading ? (
+                <View style={styles.walletBalanceSkeleton}>
+                  <Skeleton width={180} height={34} radius={8} onDark />
+                </View>
+              ) : (
+                <ThemedText style={[styles.walletBalance, { color: "#fff" }]}>
+                  ₱
+                  {personalBalance.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </ThemedText>
+              )}
 
               <View style={styles.walletCardFooter}>
                 <View>
@@ -667,29 +729,44 @@ export default function WalletScreen() {
           <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
             Top-up Wallet
           </ThemedText>
-          <ThemedText style={[styles.summaryValue, { color: theme.text }]}>
-            ₱
-            {topUpBalance.toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </ThemedText>
-          <ThemedText
-            style={[
-              styles.summarySubtext,
-              { color: effectiveCashEligibility ? theme.success : theme.error },
-            ]}
-          >
-            {effectiveCashEligibility
-              ? "Eligible for cash jobs"
-              : "Cash jobs temporarily blocked"}
-          </ThemedText>
-          {!!topUpStatusText && (
-            <ThemedText
-              style={[styles.summarySubtext, { color: theme.textSecondary }]}
-            >
-              {topUpStatusText}
-            </ThemedText>
+          {isWalletLoading ? (
+            <>
+              <View style={styles.summaryValueSkeleton}>
+                <Skeleton width={140} height={26} radius={8} />
+              </View>
+              <Skeleton width={160} height={12} style={{ marginTop: 6 }} />
+            </>
+          ) : (
+            <>
+              <ThemedText style={[styles.summaryValue, { color: theme.text }]}>
+                ₱
+                {topUpBalance.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </ThemedText>
+              <ThemedText
+                style={[
+                  styles.summarySubtext,
+                  {
+                    color: effectiveCashEligibility
+                      ? theme.success
+                      : theme.error,
+                  },
+                ]}
+              >
+                {effectiveCashEligibility
+                  ? "Eligible for cash jobs"
+                  : "Cash jobs temporarily blocked"}
+              </ThemedText>
+              {!!topUpStatusText && (
+                <ThemedText
+                  style={[styles.summarySubtext, { color: theme.textSecondary }]}
+                >
+                  {topUpStatusText}
+                </ThemedText>
+              )}
+            </>
           )}
         </View>
 
@@ -793,13 +870,36 @@ export default function WalletScreen() {
             </View>
           </View>
 
-          {error && (Date.now() - withdrawalSuccessGraceRef.current > 5000) ? (
+          {error && (Date.now() - successGraceRef.current > 5000) ? (
             <View
               style={[styles.errorCard, { backgroundColor: theme.surface }]}
             >
               <ThemedText style={[styles.errorText, { color: theme.error }]}>
                 {error}
               </ThemedText>
+            </View>
+          ) : isLoadingTransactions ? (
+            // Don't claim the ledger is empty before it has loaded. The post-transfer refresh is
+            // silent, so it never sets this flag and the existing rows stay put.
+            <View style={styles.transactionsList}>
+              {[0, 1, 2, 3].map((row) => (
+                <View
+                  key={row}
+                  style={[
+                    styles.transactionCard,
+                    { backgroundColor: theme.surface },
+                  ]}
+                >
+                  <View style={styles.transactionLeft}>
+                    <Skeleton width={40} height={40} radius={20} />
+                    <View style={styles.transactionInfo}>
+                      <Skeleton width={130} height={13} />
+                      <Skeleton width={72} height={11} style={{ marginTop: 6 }} />
+                    </View>
+                  </View>
+                  <Skeleton width={70} height={14} />
+                </View>
+              ))}
             </View>
           ) : transactions.length === 0 ? (
             <View
@@ -1235,7 +1335,10 @@ export default function WalletScreen() {
         visible={transferModalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setTransferModalVisible(false)}
+        onRequestClose={() => {
+          if (isTransferring) return;
+          setTransferModalVisible(false);
+        }}
       >
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
@@ -1298,15 +1401,29 @@ export default function WalletScreen() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 onPress={() => setTransferModalVisible(false)}
-                style={[styles.modalBtn, { borderColor: theme.border }]}
+                disabled={isTransferring}
+                style={[
+                  styles.modalBtn,
+                  { borderColor: theme.border },
+                  isTransferring && { opacity: 0.6 },
+                ]}
               >
                 <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleTransfer}
-                style={[styles.modalBtn, { backgroundColor: theme.primary }]}
+                disabled={isTransferring}
+                style={[
+                  styles.modalBtn,
+                  { backgroundColor: theme.primary },
+                  isTransferring && { opacity: 0.6 },
+                ]}
               >
-                <ThemedText style={{ color: "#111" }}>Transfer</ThemedText>
+                {isTransferring ? (
+                  <ActivityIndicator size="small" color="#111" />
+                ) : (
+                  <ThemedText style={{ color: "#111" }}>Transfer</ThemedText>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1819,6 +1936,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginBottom: 32,
   },
+  // Occupies the same vertical space as walletBalance so the card doesn't resize on load
+  walletBalanceSkeleton: {
+    height: 43,
+    justifyContent: "center",
+    marginBottom: 32,
+  },
   walletCardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1882,6 +2005,11 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 24,
     fontWeight: "700",
+  },
+  // Matches the summaryValue line height so the card keeps its size while loading
+  summaryValueSkeleton: {
+    height: 29,
+    justifyContent: "center",
   },
   summarySubtext: {
     fontSize: 12,

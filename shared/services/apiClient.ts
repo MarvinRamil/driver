@@ -54,6 +54,26 @@ class ApiClient {
   }
 
   /**
+   * Resolve the current auth token: a Clerk-issued one when Clerk is enabled, otherwise the
+   * legacy stored token.
+   *
+   * Public because non-HTTP transports need the same token the REST calls use. Reading
+   * tokenStorage directly is wrong under Clerk - that store is empty, so the caller silently
+   * treats the user as signed out.
+   */
+  async getAuthToken(): Promise<string | null> {
+    if (this.clerkTokenProvider) {
+      try {
+        const token = await this.clerkTokenProvider();
+        if (token) return token;
+      } catch (err) {
+        if (__DEV__) console.warn('[API] Clerk token provider failed, falling back:', err);
+      }
+    }
+    return tokenStorage.getAccessToken();
+  }
+
+  /**
    * Get the full URL by combining base URL with endpoint
    * @param endpoint - API endpoint path
    * @returns Full URL string
@@ -115,17 +135,7 @@ class ApiClient {
     // Automatically inject token if auth is required (default: true)
     if (config.requiresAuth !== false) {
       // Prefer a Clerk-issued token when Clerk is enabled; otherwise use legacy storage.
-      let token: string | null = null;
-      if (this.clerkTokenProvider) {
-        try {
-          token = await this.clerkTokenProvider();
-        } catch (err) {
-          if (__DEV__) console.warn('[API] Clerk token provider failed, falling back:', err);
-        }
-      }
-      if (!token) {
-        token = await tokenStorage.getAccessToken();
-      }
+      let token: string | null = await this.getAuthToken();
       // One retry after short delay for cold start (e.g. app opened from push - storage may not be ready yet)
       if (!token) {
         await new Promise((r) => setTimeout(r, 350));
