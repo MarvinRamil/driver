@@ -2,13 +2,14 @@
   "expo": {
     "name": "BEE ON-DEMAND - DRIVER",
     "slug": "bee-drivers-app",
-    "version": "1.0.6",
+    "version": "1.0.8s",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "beedriversapp",
     "userInterfaceStyle": "light",
     "backgroundColor": "#ffcd36",
     "newArchEnabled": true,
+    "platforms": ["ios", "android"],
     "runtimeVersion": {
       "policy": "appVersion"
     },
