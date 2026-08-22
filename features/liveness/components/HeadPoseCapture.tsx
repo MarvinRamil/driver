@@ -40,9 +40,9 @@ interface HeadPoseCaptureProps {
 }
 
 /**
- * Head-pose challenge camera flow shared by onboarding liveness (app/liveness.tsx)
- * and the per-shift face check (app/shift-check.tsx): per-direction auto-capture
- * with a 3-2-1 countdown, submitting each frame through the provided callbacks.
+ * Head-pose challenge camera flow used by the per-shift face check
+ * (app/shift-check.tsx): per-direction auto-capture with a 3-2-1 countdown,
+ * submitting each frame through the provided callbacks.
  */
 export function HeadPoseCapture({
   title,

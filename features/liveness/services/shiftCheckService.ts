@@ -10,9 +10,9 @@ export interface SubmitShiftCheckImageResult extends SubmitLivenessImageResult {
 }
 
 /**
- * Per-shift face check service: same head-pose challenge as onboarding liveness,
- * but the backend also face-matches each frame against the driver's verified
- * KYC reference selfie. Required before going online when the last check is stale.
+ * Per-shift face check service: a head-pose challenge where the backend also
+ * face-matches each frame against the driver's verified Didit KYC reference selfie.
+ * Required before going online when the last check is stale.
  * Calls backend POST /api/shift-check/session, submit image, GET status.
  */
 class ShiftCheckService {
