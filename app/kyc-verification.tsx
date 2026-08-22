@@ -32,7 +32,7 @@ type Phase =
   | "approved"
   | "in-review"
   | "declined"
-  | "unavailable" // Didit disabled on backend → offer legacy liveness
+  | "unavailable" // Didit switched off on backend (503) → retry only, no legacy fallback
   | "error";
 
 /**
@@ -262,9 +262,9 @@ export default function KycVerificationScreen() {
         icon="cloud-offline"
         iconColor={BeeColors.yellow[500]}
         title="Verification unavailable"
-        subtitle="Identity verification is temporarily unavailable. You can complete a basic face check instead."
-        buttonLabel="Continue with face check"
-        onPress={() => router.replace("/liveness")}
+        subtitle="Identity verification is temporarily unavailable. Please try again in a few minutes."
+        buttonLabel="Try again"
+        onPress={startVerification}
         insetsBottom={insets.bottom}
       />
     );

@@ -101,7 +101,6 @@ function NavigationGuard() {
       const isLoginPage = currentRoute === 'login';
       const isSignupPage = currentRoute === 'signup';
       const isForgotPasswordPage = currentRoute === 'forgot-password';
-      const isLivenessPage = currentRoute === 'liveness';
       const isKycPage = currentRoute === 'kyc-verification';
       const isApplicationPage = currentRoute === 'complete-registration';
       const isWelcomePage = currentRoute === 'welcome';
@@ -110,8 +109,9 @@ function NavigationGuard() {
       const livenessVerifiedAt =
         user?.livenessVerifiedAt ??
         (user as { LivenessVerifiedAt?: string } | null)?.LivenessVerifiedAt;
-      // Onboarding order: identity verification first (Didit KYC or legacy liveness
-      // fallback), then driver documents/application, then welcome/pending approval.
+      // Onboarding order: identity verification first (Didit KYC — the legacy liveness
+      // check is never an alternative), then driver documents/application, then
+      // welcome/pending approval.
       const needsKyc = isDriver && !user?.isOnboarded && !livenessVerifiedAt;
       const needsApplication =
         isDriver && !user?.isOnboarded && !!livenessVerifiedAt && !applicationSubmitted;
@@ -130,9 +130,8 @@ function NavigationGuard() {
         clearDriverApplicationSubmitted().catch(() => {});
       }
 
-      // Allow the legacy liveness page too: the KYC screen falls back to it when
-      // the hosted verification provider is unavailable.
-      if (needsKyc && !isKycPage && !isLivenessPage) {
+      // KYC is the only route out of this state — no legacy liveness fallback.
+      if (needsKyc && !isKycPage) {
         router.replace('/kyc-verification');
         return;
       }
@@ -194,7 +193,6 @@ function NavigationGuard() {
         isAuthenticated &&
         hasAllowedRole &&
         (inTabsGroup ||
-          currentRoute === 'liveness' ||
           currentRoute === 'kyc-verification' ||
           currentRoute === 'shift-check' ||
           currentRoute === 'welcome' ||
@@ -285,7 +283,6 @@ function RootLayoutNav() {
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="signup" options={{ headerShown: false }} />
             <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
-            <Stack.Screen name="liveness" options={{ headerShown: false }} />
             <Stack.Screen name="kyc-verification" options={{ headerShown: false }} />
             <Stack.Screen name="shift-check" options={{ headerShown: false }} />
             <Stack.Screen name="complete-registration" options={{ headerShown: false }} />

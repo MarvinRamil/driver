@@ -1,7 +1,12 @@
 import { apiClient } from '@/shared/services/apiClient';
 import type { CreateKycSessionResult, KycStatusResult } from '../types';
 
-/** Thrown when the backend reports KYC is unavailable (Didit disabled) so callers can fall back. */
+/**
+ * Thrown only when the backend reports the KYC provider is switched off (HTTP 503), so callers
+ * can show a retry screen instead of a generic failure. A provider that is configured but
+ * erroring comes back as 502/500 and must stay a plain error. Either way the driver retries
+ * Didit — there is no second identity check to fall back to.
+ */
 export class KycUnavailableError extends Error {
   constructor(message = 'Identity verification is temporarily unavailable') {
     super(message);
@@ -34,6 +39,7 @@ class KycService {
       }
       return response.data;
     } catch (e) {
+      // 503 = provider disabled (distinct retry copy). 502/500 = provider erroring.
       if (statusOf(e) === 503) {
         throw new KycUnavailableError();
       }
