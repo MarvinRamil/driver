@@ -295,12 +295,13 @@ function RootLayoutNav() {
             <Stack.Screen name="support" options={{ headerShown: false }} />
             <Stack.Screen name="support/ticket/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="chat" options={{ headerShown: false }} />
             <Stack.Screen
               name="modal"
               options={{ presentation: 'modal', title: 'Modal' }}
             />
           </Stack>
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
           <SplashGate />
         </DriverStatusProvider>
       </AuthProvider>

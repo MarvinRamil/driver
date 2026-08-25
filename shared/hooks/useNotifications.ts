@@ -51,6 +51,13 @@ export function useNotifications() {
           } else if (data?.type === 'manifest') {
             // Navigate to bookings or relevant screen
             router.push('/(tabs)');
+          } else if (data?.type === 'booking_chat') {
+            if (data.bookingId) {
+              router.push({
+                pathname: '/chat',
+                params: { bookingId: data.bookingId as string, roomId: data.roomId as string | undefined },
+              });
+            }
           }
         } catch (error) {
           console.error('Error handling notification tap:', error);

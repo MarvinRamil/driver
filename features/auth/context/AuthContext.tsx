@@ -9,6 +9,7 @@ import { useAuth as useClerkAuth, useSignIn } from "@clerk/clerk-expo";
 import { authService } from "../services/authService";
 // Import chatSignalRService directly to avoid circular dependency
 import { chatSignalRService } from "@/features/support/services/chatSignalRService";
+import { matrixSessionService } from "@/features/chat";
 import { storeTempCredentialsForPrompt, clearTempCredentialsForPrompt } from "@/shared/services/biometricPromptStorage";
 import { biometricStorage } from "@/shared/services/biometricStorage";
 import { isAllowedRole, getRoleRestrictionMessage } from "../utils/roleValidation";
@@ -324,6 +325,13 @@ function LegacyAuthProvider({ children }: AuthProviderProps) {
         console.warn("Failed to stop SignalR:", signalRErr);
       }
 
+      // Clear the Matrix chat session (device info in SecureStore; access token was memory-only)
+      try {
+        await matrixSessionService.clearSession();
+      } catch (matrixErr) {
+        console.warn("Failed to clear Matrix session:", matrixErr);
+      }
+
       // Erase the stored MQTT token: it authorizes publishing as THIS driver, so it must not
       // survive logout on a shared device.
       try {
@@ -555,6 +563,11 @@ function ClerkAuthProvider({ children }: AuthProviderProps) {
         await chatSignalRService.stop();
       } catch (signalRErr) {
         console.warn("Failed to stop SignalR:", signalRErr);
+      }
+      try {
+        await matrixSessionService.clearSession();
+      } catch (matrixErr) {
+        console.warn("Failed to clear Matrix session:", matrixErr);
       }
       // Erase the stored MQTT token — it authorizes publishing as THIS driver.
       try {
