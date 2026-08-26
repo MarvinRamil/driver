@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/shared/hooks/use-theme';
 
 interface ChatComposerProps {
@@ -11,6 +12,7 @@ interface ChatComposerProps {
 
 export function ChatComposer({ disabled, disabledReason, onSend }: ChatComposerProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
 
   const handleSend = () => {
@@ -20,7 +22,12 @@ export function ChatComposer({ disabled, disabledReason, onSend }: ChatComposerP
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: theme.surface, borderTopColor: theme.border, paddingBottom: insets.bottom },
+      ]}
+    >
       {disabled && disabledReason ? (
         <Text style={[styles.disabledCaption, { color: theme.textMuted }]}>{disabledReason}</Text>
       ) : null}

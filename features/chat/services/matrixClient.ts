@@ -159,6 +159,9 @@ function toChatMessage(ev: MatrixSyncTimelineEvent, roomId: string, selfUserId: 
 
 const bookingRoomCache = new Map<string, RoomInfo>();
 const roomIdToBookingId = new Map<string, string>();
+/** Every room id ever seen in `rooms.join`, so `findRoomForBooking` can fall back to a
+ * direct state query for rooms `/sync` hasn't tagged with a bookingId yet. */
+const knownJoinedRoomIds = new Set<string>();
 
 /**
  * Optimistically register a (bookingId, roomId) pair known ahead of a sync — used
@@ -177,6 +180,7 @@ function processSyncResponse(data: MatrixSyncResponse, selfUserId: string): void
   const joined = data.rooms?.join ?? {};
 
   for (const [roomId, room] of Object.entries(joined)) {
+    knownJoinedRoomIds.add(roomId);
     const stateEvents = room.state?.events ?? [];
     const timelineEvents = room.timeline?.events ?? [];
 
@@ -251,7 +255,42 @@ async function findRoomForBooking(bookingId: string): Promise<RoomInfo> {
   const afterWait = bookingRoomCache.get(key);
   if (afterWait) return afterWait;
 
+  // `/sync`'s per-room `state` array can omit the booking-id tag for a room the client
+  // only recently joined, even with `full_state=true` — observed in practice, not just
+  // in theory. Fall back to querying each known-joined, not-yet-tagged room's state
+  // directly; that endpoint returns the room's authoritative current state rather than
+  // anything computed relative to a sync position.
+  for (const roomId of knownJoinedRoomIds) {
+    if (roomIdToBookingId.has(roomId)) continue;
+    const resolvedBookingId = await resolveBookingIdForRoom(roomId);
+    if (resolvedBookingId) {
+      roomIdToBookingId.set(roomId, resolvedBookingId);
+      if (!bookingRoomCache.has(resolvedBookingId)) {
+        bookingRoomCache.set(resolvedBookingId, { bookingId: resolvedBookingId, roomId, state: 'active' });
+      }
+    }
+  }
+
+  const afterFallback = bookingRoomCache.get(key);
+  if (afterFallback) return afterFallback;
+
   return { bookingId: key, roomId: '', state: 'not_provisioned' };
+}
+
+/** Direct state query for one room's booking-id tag, bypassing /sync entirely. */
+async function resolveBookingIdForRoom(roomId: string): Promise<string | undefined> {
+  try {
+    const session = await getSession();
+    const content = await matrixFetch<{ bookingId?: string }>(
+      session,
+      `_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/app.bee.booking`,
+      { method: 'GET' }
+    );
+    return typeof content.bookingId === 'string' ? content.bookingId.toLowerCase() : undefined;
+  } catch {
+    // No such state event on this room, or a transient error — not fatal, just unresolved.
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +329,13 @@ const BACKOFF_MS = [0, 2000, 10000, 30000];
 async function runSyncLoop(): Promise<void> {
   setStatus('connecting');
   let backoffIndex = 0;
+  // `since` is a module-level cursor that survives across start/stop cycles of this loop
+  // (e.g. re-opening the chat screen), but a room can still be new to the client relative
+  // to a stale `since` — Synapse then reports only the state that changed since that token,
+  // which can omit custom state (like our booking-id tag) set at room creation. Forcing
+  // `full_state=true` on this loop's first request guarantees a complete state snapshot for
+  // every joined room, regardless of how old `since` is.
+  let isFirstSyncThisLoop = true;
 
   while (subscriberCount > 0) {
     try {
@@ -298,6 +344,7 @@ async function runSyncLoop(): Promise<void> {
 
       const params = new URLSearchParams({ timeout: '30000' });
       if (since) params.set('since', since);
+      if (isFirstSyncThisLoop) params.set('full_state', 'true');
 
       const data = await matrixFetch<MatrixSyncResponse>(
         session,
@@ -305,6 +352,7 @@ async function runSyncLoop(): Promise<void> {
         { method: 'GET', signal: abortController.signal }
       );
 
+      isFirstSyncThisLoop = false;
       since = data.next_batch;
       processSyncResponse(data, session.userId);
 

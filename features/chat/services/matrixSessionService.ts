@@ -35,7 +35,12 @@ async function requestSession(): Promise<MatrixSessionState> {
   const response = await apiClient.post<MatrixSessionDto>('/api/matrix/session', {
     body: { platform: currentPlatform() },
   });
-  const dto = response.data;
+  // apiClient's own envelope wraps the backend's ApiResponse<T> envelope, so the real
+  // payload is nested one level deeper than the `ApiResponse<T>` return type claims.
+  let dto = response.data as unknown as MatrixSessionDto;
+  if (dto && typeof dto === 'object' && 'data' in dto && (dto as any).data) {
+    dto = (dto as any).data;
+  }
   const session: MatrixSessionState = {
     homeserverUrl: dto.homeserverUrl,
     userId: dto.userId,
