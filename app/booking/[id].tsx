@@ -815,6 +815,26 @@ export default function BookingDetailsScreen() {
           </View>
         )}
 
+        {/* Chat with customer — available for both active and past bookings; the
+            chat screen itself gates the composer on the room's lifecycle state. */}
+        {booking.customerId && (
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.border }]}
+              onPress={() =>
+                router.push({
+                  pathname: '/chat',
+                  params: { bookingId: booking.id, counterpartName: booking.customerName ?? 'Customer' },
+                })
+              }>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.text} />
+              <ThemedText style={[styles.actionButtonText, { color: theme.text }]}>
+                Message Customer
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Action Buttons */}
         {isActive && (
           <View style={styles.actionsContainer}>
