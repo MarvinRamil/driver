@@ -7,6 +7,10 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,6 +19,9 @@ import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useSavedWithdrawalMethods } from '@/features/wallet/hooks/useSavedWithdrawalMethods';
+import { useBanks } from '@/features/wallet/hooks/useBanks';
+import { BankPickerModal } from '@/features/wallet/components/BankPickerModal';
+import type { PhBank } from '@/shared/constants/banks';
 import type { SavedWithdrawalMethod } from '@/features/wallet/types';
 
 export default function SavedWithdrawalMethodsScreen() {
@@ -28,9 +35,57 @@ export default function SavedWithdrawalMethodsScreen() {
     refresh,
     delete: deleteMethod,
     setDefault,
+    create: createMethod,
   } = useSavedWithdrawalMethods();
+  const { banks, isLoading: isLoadingBanks } = useBanks();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+
+  // Add-account form. Until now an account could only be saved as a side effect of the
+  // withdraw modal's checkbox, so this screen could delete accounts but never create one.
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [bankPickerVisible, setBankPickerVisible] = useState(false);
+  const [newBank, setNewBank] = useState<PhBank | null>(null);
+  const [newAccountNumber, setNewAccountNumber] = useState('');
+  const [newAccountHolder, setNewAccountHolder] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const resetAddForm = () => {
+    setNewBank(null);
+    setNewAccountNumber('');
+    setNewAccountHolder('');
+  };
+
+  const handleCreate = async () => {
+    if (!newBank) {
+      Alert.alert('Missing Details', 'Please select a bank or e-wallet.');
+      return;
+    }
+    if (!newAccountNumber.trim() || !newAccountHolder.trim()) {
+      Alert.alert('Missing Details', 'Please fill in the account number and account holder name.');
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await createMethod({
+        bankName: newBank.name,
+        bankCode: newBank.code,
+        accountNumber: newAccountNumber.trim(),
+        accountHolderName: newAccountHolder.trim(),
+        isDefault: methods.length === 0,
+      });
+      setAddModalVisible(false);
+      resetAddForm();
+    } catch (err) {
+      Alert.alert(
+        'Could Not Save Account',
+        err instanceof Error ? err.message : 'Unable to save this bank account.',
+      );
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const handleDelete = async (method: SavedWithdrawalMethod) => {
     Alert.alert(
@@ -105,7 +160,9 @@ export default function SavedWithdrawalMethodsScreen() {
         <ThemedText type="title" style={{ color: theme.text }}>
           Saved Bank Accounts
         </ThemedText>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => setAddModalVisible(true)} hitSlop={12}>
+          <Ionicons name="add" size={24} color={theme.primary} />
+        </TouchableOpacity>
       </View>
 
       {error && (
@@ -128,8 +185,14 @@ export default function SavedWithdrawalMethodsScreen() {
               No saved bank accounts yet
             </ThemedText>
             <ThemedText style={{ color: theme.textMuted, marginTop: 8, textAlign: 'center', fontSize: 14 }}>
-              Save a bank account when making a withdrawal to use it again later
+              Add one here, or save it while making a withdrawal
             </ThemedText>
+            <TouchableOpacity
+              onPress={() => setAddModalVisible(true)}
+              style={[styles.addButton, { backgroundColor: theme.primary }]}
+            >
+              <ThemedText style={{ color: '#111', fontWeight: '700' }}>Add bank account</ThemedText>
+            </TouchableOpacity>
           </View>
         ) : (
           methods.map((method) => (
@@ -225,11 +288,131 @@ export default function SavedWithdrawalMethodsScreen() {
           ))
         )}
       </ScrollView>
+
+      <Modal
+        visible={addModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setAddModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+              <ThemedText type="title" style={{ color: theme.text, marginBottom: 16 }}>
+                Add Bank Account
+              </ThemedText>
+
+              <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                Bank or E-wallet
+              </ThemedText>
+              <TouchableOpacity
+                onPress={() => setBankPickerVisible(true)}
+                style={[styles.input, { borderColor: theme.border, flexDirection: 'row', alignItems: 'center' }]}
+              >
+                <ThemedText
+                  style={{ color: newBank ? theme.text : theme.textMuted, flex: 1 }}
+                  numberOfLines={1}
+                >
+                  {newBank ? newBank.name : 'Select bank or e-wallet'}
+                </ThemedText>
+                <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+
+              <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                Account Number
+              </ThemedText>
+              <TextInput
+                value={newAccountNumber}
+                onChangeText={setNewAccountNumber}
+                keyboardType="numeric"
+                placeholder="Account Number"
+                placeholderTextColor={theme.textMuted}
+                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+              />
+
+              <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                Account Holder Name
+              </ThemedText>
+              <TextInput
+                value={newAccountHolder}
+                onChangeText={setNewAccountHolder}
+                placeholder="Account Name"
+                placeholderTextColor={theme.textMuted}
+                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setAddModalVisible(false);
+                    resetAddForm();
+                  }}
+                  style={[styles.modalBtn, { borderColor: theme.border, borderWidth: 1 }]}
+                >
+                  <ThemedText style={{ color: theme.text }}>Cancel</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleCreate}
+                  disabled={isCreating}
+                  style={[styles.modalBtn, { backgroundColor: theme.primary }, isCreating && { opacity: 0.6 }]}
+                >
+                  <ThemedText style={{ color: '#111', fontWeight: '700' }}>
+                    {isCreating ? 'Saving…' : 'Save'}
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+
+          <BankPickerModal
+            visible={bankPickerVisible}
+            banks={banks}
+            isLoading={isLoadingBanks}
+            selectedCode={newBank?.code ?? null}
+            onSelect={setNewBank}
+            onClose={() => setBankPickerVisible(false)}
+          />
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  addButton: {
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalCard: {
+    borderRadius: 16,
+    padding: 20,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
   },

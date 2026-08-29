@@ -98,6 +98,9 @@ export interface CashJobEligibility {
   allowedNegativeLimit: number;
 }
 
+/** How the driver nominated where the money goes. */
+export type WithdrawalDestinationType = 'BankAccount' | 'QrPh';
+
 export interface WithdrawalRequest {
   id: string;
   driverId: string;
@@ -107,10 +110,31 @@ export interface WithdrawalRequest {
   bankAccountNumber: string;
   bankName: string;
   accountHolderName: string;
+  destinationType?: WithdrawalDestinationType;
   rejectionReason?: string | null;
   xenditDisbursementId?: string | null;
   requestedAt: Date;
   processedAt?: Date | null;
+}
+
+/**
+ * Everything needed to raise one withdrawal. Exactly one destination applies:
+ * a saved method, a picked bank/e-wallet, or a scanned QR Ph code.
+ */
+export interface WithdrawalRequestInput {
+  amount: number;
+  /** Use a previously saved bank account; the other bank fields are then ignored. */
+  savedWithdrawalMethodId?: string | null;
+  bankAccountNumber?: string;
+  bankName?: string;
+  accountHolderName?: string;
+  /** Catalog code from GET /api/payments/banks — what actually addresses the transfer. */
+  bankCode?: string;
+  destinationType?: WithdrawalDestinationType;
+  /** Raw scanned QR Ph payload; required when destinationType is 'QrPh'. */
+  qrString?: string;
+  /** Makes a retry after a timeout safe — the provider replays rather than paying twice. */
+  idempotencyKey?: string | null;
 }
 
 /**
