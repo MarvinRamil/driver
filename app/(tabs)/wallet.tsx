@@ -19,6 +19,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useWallet } from "@/features/wallet";
+import { transactionLabel } from "@/features/wallet/types";
 import { usePayMongoOnboarding } from "@/features/wallet/hooks/usePayMongoOnboarding";
 import { useWithdrawableBalance } from "@/features/wallet/hooks/useWithdrawableBalance";
 import { useWalletTransactions } from "@/features/wallet";
@@ -1083,7 +1084,7 @@ export default function WalletScreen() {
                             { color: theme.text },
                           ]}
                         >
-                          {transaction.description}
+                          {transactionLabel(transaction.type)}
                         </ThemedText>
                         <ThemedText
                           style={[

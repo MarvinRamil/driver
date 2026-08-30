@@ -20,6 +20,35 @@ export type WalletTransactionType =
 export type WalletBucket = 'Personal' | 'TopUp';
 
 /**
+ * What a driver sees for each transaction type.
+ *
+ * Derived from the type rather than shown from `description`, because the stored description is
+ * internal: it carries booking GUIDs ("Earning from booking 3f2a91c…"), provider names and period
+ * keys. Mapping here also fixes rows that were already written, which changing the backend copy
+ * would not.
+ *
+ * Colocated with WalletTransactionType on purpose — adding a type without a label is then visible
+ * in the same file rather than silently falling through to the default.
+ */
+const TRANSACTION_LABELS: Record<WalletTransactionType, string> = {
+  Earning: 'Earnings',
+  EarningReversal: 'Earnings reversed',
+  TopUp: 'Top-up',
+  Withdrawal: 'Withdrawal',
+  Payout: 'Payout',
+  Refund: 'Refund',
+  CashSettlementDebit: 'Deduction',
+  CashDeficitAdjustment: 'Adjustment',
+  WalletTransferIn: 'Transferred in',
+  WalletTransferOut: 'Transferred out',
+  AccountFee: 'Account fee',
+};
+
+export function transactionLabel(type: WalletTransactionType | string): string {
+  return TRANSACTION_LABELS[type as WalletTransactionType] ?? 'Transaction';
+}
+
+/**
  * Wallet transaction interface
  */
 export interface WalletTransaction {
