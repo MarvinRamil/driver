@@ -1,5 +1,6 @@
 import { apiClient } from '@/shared/services/apiClient';
 import type {
+  BeePayTopUpQr,
   PayMongoOnboarding,
   PayMongoOnboardingDetailsInput,
   WithdrawableBalance,
@@ -59,6 +60,32 @@ class PayMongoOnboardingService {
       withdrawable: Number(payload.withdrawable ?? 0),
       fee: Number(payload.fee ?? 0),
       feePaidByDriver: Boolean(payload.feePaidByDriver),
+    };
+  }
+
+  /**
+   * The QR for topping up the driver's own BeePay wallet.
+   *
+   * Fails for a driver who has not finished setup — there is no wallet of their own to credit yet,
+   * and the backend deliberately refuses rather than handing back the platform's QR.
+   */
+  async getBeePayTopUpQr(driverId: string): Promise<BeePayTopUpQr> {
+    const response = await apiClient.get<BeePayTopUpQr>(
+      `/api/drivers/${driverId}/wallet/beepay/topup-qr`,
+      { requiresAuth: true }
+    );
+    const payload = this.extractPayload<any>(response);
+    if (!payload?.qrImage) {
+      throw new Error(
+        (response as any)?.data?.message ?? 'Could not load your top-up QR code'
+      );
+    }
+    return {
+      qrString: payload.qrString,
+      qrImage: payload.qrImage,
+      merchantName: payload.merchantName ?? null,
+      accountNumber: payload.accountNumber ?? null,
+      expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
     };
   }
 

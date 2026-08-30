@@ -286,3 +286,22 @@ export interface WithdrawableBalance {
   fee: number;
   feePaidByDriver: boolean;
 }
+
+/**
+ * A QR the driver scans to add money to their own BeePay wallet.
+ *
+ * Credits land in real time over InstaPay rather than waiting on payment settlement — which is why
+ * this replaces the checkout, whose QR showed the platform as the merchant and only reached a
+ * wallet on the weekly settlement run.
+ */
+export interface BeePayTopUpQr {
+  /** Raw EMV payload, for copy-to-clipboard and support comparison. */
+  qrString: string;
+  /** PNG data URI, rendered server-side so the app needs no native QR dependency. */
+  qrImage: string;
+  /** Whose wallet it credits — the driver's own name, not the platform's. */
+  merchantName: string | null;
+  accountNumber: string | null;
+  /** Null for a static QR: it belongs to the driver, not to one payment. */
+  expiresAt: Date | null;
+}

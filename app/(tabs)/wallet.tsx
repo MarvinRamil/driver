@@ -20,6 +20,7 @@ import { useAuth } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useWallet } from "@/features/wallet";
 import { transactionLabel } from "@/features/wallet/types";
+import { BeePayTopUpQrModal } from "@/features/wallet/components/BeePayTopUpQrModal";
 import { usePayMongoOnboarding } from "@/features/wallet/hooks/usePayMongoOnboarding";
 import { useWithdrawableBalance } from "@/features/wallet/hooks/useWithdrawableBalance";
 import { useWalletTransactions } from "@/features/wallet";
@@ -71,6 +72,11 @@ export default function WalletScreen() {
   // Not derived from personalBalance: once a driver's money sits in their own PayMongo wallet the
   // transfer fee comes out of it, so the withdrawable maximum is strictly less than the balance.
   const { data: withdrawable, refresh: refreshWithdrawable } = useWithdrawableBalance();
+  // "Add funds" now has two destinations, because they are genuinely different money: BeePay is
+  // the driver's own wallet (instant, QR), Cash Wallet is ours and must be able to go negative for
+  // COD settlement, so it still goes through the platform checkout.
+  const [addFundsPickerVisible, setAddFundsPickerVisible] = useState(false);
+  const [beePayQrVisible, setBeePayQrVisible] = useState(false);
   const {
     transactions,
     isLoading: isLoadingTransactions,
@@ -901,7 +907,11 @@ export default function WalletScreen() {
         <View style={styles.quickActions}>
           <TouchableOpacity
             style={styles.quickAction}
-            onPress={() => setTopUpModalVisible(true)}
+            onPress={() =>
+              payMongoOnboarding?.walletReady
+                ? setAddFundsPickerVisible(true)
+                : setTopUpModalVisible(true)
+            }
           >
             <View
               style={[
@@ -1967,7 +1977,71 @@ export default function WalletScreen() {
 
           {/* Nested inside the withdraw modal so they stack above it rather than
               fighting it for the screen. */}
-          <BankPickerModal
+          {/* Which wallet are they funding? Only asked once BeePay exists — before that there is only
+          one destination and a choice would be noise. */}
+      <Modal
+        visible={addFundsPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddFundsPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setAddFundsPickerVisible(false)}
+        >
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <ThemedText type="subtitle" style={{ color: theme.text, marginBottom: 12 }}>
+              Add funds to
+            </ThemedText>
+
+            <TouchableOpacity
+              style={[styles.addFundsOption, { borderColor: theme.border }]}
+              onPress={() => {
+                setAddFundsPickerVisible(false);
+                setBeePayQrVisible(true);
+              }}
+            >
+              <Ionicons name="qr-code-outline" size={22} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>BeePay</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  Scan to add money — arrives straight away
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.addFundsOption, { borderColor: theme.border }]}
+              onPress={() => {
+                setAddFundsPickerVisible(false);
+                setTopUpModalVisible(true);
+              }}
+            >
+              <Ionicons name="card-outline" size={22} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cash Wallet</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  Covers cash you collect from customers
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <BeePayTopUpQrModal
+        visible={beePayQrVisible}
+        onClose={() => {
+          setBeePayQrVisible(false);
+          // The money lands in real time, so refresh rather than leaving a stale balance behind.
+          onRefreshAll({ silent: true });
+        }}
+      />
+
+      <BankPickerModal
             visible={bankPickerVisible}
             banks={banks}
             isLoading={isLoadingBanks}
@@ -2261,6 +2335,10 @@ const styles = StyleSheet.create({
   },
   // Matches the summaryValue line height so the card keeps its size while loading
   setupRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  addFundsOption: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10,
+  },
   withdrawableRow: {
     flexDirection: "row",
     alignItems: "center",
