@@ -66,7 +66,7 @@ export default function WalletScreen() {
   } = useWallet();
   // Drives the setup prompt below. Null until loaded, and once walletReady is true the prompt
   // disappears for good.
-  const { data: payMongoOnboarding } = usePayMongoOnboarding();
+  const { data: payMongoOnboarding, refresh: refreshOnboarding } = usePayMongoOnboarding();
   // Not derived from personalBalance: once a driver's money sits in their own PayMongo wallet the
   // transfer fee comes out of it, so the withdrawable maximum is strictly less than the balance.
   const { data: withdrawable, refresh: refreshWithdrawable } = useWithdrawableBalance();
@@ -130,6 +130,11 @@ export default function WalletScreen() {
       refreshTopUps(),
       refreshWithdrawals(),
       refreshHistory(),
+      // Both of these were missing, and the tab stays mounted — so after a driver finished wallet
+      // setup the banner kept showing the state from before they started, while the setup screen
+      // itself read fresh data and said the wallet was ready. Two screens, two different answers.
+      refreshOnboarding(),
+      refreshWithdrawable(),
     ]);
   }, [
     refresh,
@@ -138,6 +143,8 @@ export default function WalletScreen() {
     refreshTopUps,
     refreshWithdrawals,
     refreshHistory,
+    refreshOnboarding,
+    refreshWithdrawable,
   ]);
 
   const closeWithdrawalSuccessAndRefresh = useCallback(async () => {
