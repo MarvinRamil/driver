@@ -44,6 +44,39 @@ export const PATTERNS = {
   PLATE: /^[A-Za-z0-9\s\-]+$/,
 } as const;
 
+/**
+ * Converts a Philippine mobile number to E.164 (`+63…`), or null if it cannot be understood.
+ *
+ * Needed because this app's own convention (see `PATTERNS.PHONE`) is `09XXXXXXXXX` or
+ * `639XXXXXXXXX` — **neither carries a `+`** — while PayMongo rejects anything that does not:
+ * *"mobile number must start with + followed by 4 to 15 digits"*. That rejection lands on the
+ * account update, after the child account already exists, so it is worth normalising before we
+ * ever call them.
+ *
+ * Returns null rather than guessing at an unrecognised shape: a wrong number is frozen onto the
+ * account at activation, and silently "fixing" one into a different valid number is worse than
+ * asking the driver to check it.
+ */
+export function toE164Ph(input: string | null | undefined): string | null {
+  if (!input) return null;
+
+  const raw = input.trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+
+  // Already international: keep the country code they gave and just check the length PayMongo wants.
+  if (raw.startsWith('+')) {
+    return digits.length >= 4 && digits.length <= 15 ? `+${digits}` : null;
+  }
+
+  if (/^09\d{9}$/.test(digits)) return `+63${digits.slice(1)}`;   // 09171234567
+  if (/^639\d{9}$/.test(digits)) return `+${digits}`;             // 639171234567
+  if (/^9\d{9}$/.test(digits)) return `+63${digits}`;             // 9171234567
+
+  // Unrecognised. Do not invent a country code.
+  return null;
+}
+
 /** Trim and enforce max length */
 export function trimToMax(value: string, max: number): string {
   return value.trim().slice(0, max);

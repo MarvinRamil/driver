@@ -23,6 +23,7 @@ import { usePayMongoOnboarding } from '@/features/wallet/hooks/usePayMongoOnboar
 import { useWallet } from '@/features/wallet/hooks/useWallet';
 import type { PayMongoOnboardingDetailsInput } from '@/features/wallet/types';
 import { PH_PROVINCES, provinceName } from '@/shared/constants/provinces';
+import { toE164Ph } from '@/shared/constants/validation';
 
 /**
  * Wallet setup.
@@ -128,6 +129,17 @@ export default function WalletSetupScreen() {
       return;
     }
 
+    // PayMongo requires E.164 ("+63…"). This app stores numbers as 09XXXXXXXXX, so without this
+    // the update is rejected AFTER the child account has already been created.
+    const mobile = toE164Ph(form.mobileNumber);
+    if (!mobile) {
+      Alert.alert(
+        'Check your mobile number',
+        'Enter it as 09XXXXXXXXX, or with your country code like +639XXXXXXXXX.'
+      );
+      return;
+    }
+
     // Confirmed explicitly because this cannot be undone: once submitted the details are frozen
     // and cannot be corrected, and a rejection cannot be appealed or retried on this account.
     Alert.alert(
@@ -139,7 +151,7 @@ export default function WalletSetupScreen() {
           text: 'Confirm',
           style: 'destructive',
           onPress: async () => {
-            const ready = await activate(form);
+            const ready = await activate({ ...form, mobileNumber: mobile });
             if (ready) {
               Alert.alert('Wallet ready', 'Your wallet is set up. You can now be paid into it.', [
                 { text: 'Done', onPress: () => router.back() },
@@ -304,7 +316,19 @@ export default function WalletSetupScreen() {
 
                   <Field label="Mobile number" value={form.mobileNumber ?? ''}
                     onChange={(v) => set('mobileNumber', v)}
-                    placeholder="+639XXXXXXXXX" theme={theme} keyboardType="phone-pad" />
+                    placeholder="09XXXXXXXXX" theme={theme} keyboardType="phone-pad" />
+                  {form.mobileNumber ? (
+                    <ThemedText
+                      style={[
+                        styles.fine,
+                        { color: toE164Ph(form.mobileNumber) ? theme.textSecondary : theme.error },
+                      ]}
+                    >
+                      {toE164Ph(form.mobileNumber)
+                        ? `Will be saved as ${toE164Ph(form.mobileNumber)}`
+                        : 'Enter as 09XXXXXXXXX or +639XXXXXXXXX'}
+                    </ThemedText>
+                  ) : null}
                   <Field label="TIN (optional)" value={form.tin ?? ''}
                     onChange={(v) => set('tin', v)}
                     placeholder="Leave blank if you don't have one" theme={theme}
