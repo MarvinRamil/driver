@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,6 +22,7 @@ import { ThemedText } from '@/shared/components/themed-text';
 import { usePayMongoOnboarding } from '@/features/wallet/hooks/usePayMongoOnboarding';
 import { useWallet } from '@/features/wallet/hooks/useWallet';
 import type { PayMongoOnboardingDetailsInput } from '@/features/wallet/types';
+import { PH_PROVINCES, provinceName } from '@/shared/constants/provinces';
 
 /**
  * Wallet setup.
@@ -67,7 +70,11 @@ export default function WalletSetupScreen() {
     addressState: '',
     addressPostalCode: '',
     middleName: '',
+    mobileNumber: '',
   });
+
+  const [provincePickerOpen, setProvincePickerOpen] = useState(false);
+  const [provinceQuery, setProvinceQuery] = useState('');
 
   const status = data?.status ?? 'None';
   const floatBalance = wallet?.topUpBalance ?? 0;
@@ -80,8 +87,10 @@ export default function WalletSetupScreen() {
 
   const missing = useMemo(() => {
     // TIN deliberately absent: activation does not require it (verified against the live API),
-    // and many riders do not have one.
+    // and many riders do not have one. mobileNumber IS required — activation rejects an account
+    // without one, and that rejection lands after the account has already been created.
     const required: (keyof PayMongoOnboardingDetailsInput)[] = [
+      'mobileNumber',
       'placeOfBirthCity',
       'addressLine1',
       'addressCity',
@@ -293,6 +302,9 @@ export default function WalletSetupScreen() {
                     These must match your ID exactly. They cannot be changed afterwards.
                   </ThemedText>
 
+                  <Field label="Mobile number" value={form.mobileNumber ?? ''}
+                    onChange={(v) => set('mobileNumber', v)}
+                    placeholder="+639XXXXXXXXX" theme={theme} keyboardType="phone-pad" />
                   <Field label="TIN (optional)" value={form.tin ?? ''}
                     onChange={(v) => set('tin', v)}
                     placeholder="Leave blank if you don't have one" theme={theme}
@@ -305,9 +317,23 @@ export default function WalletSetupScreen() {
                     onChange={(v) => set('addressLine1', v)} theme={theme} />
                   <Field label="City" value={form.addressCity}
                     onChange={(v) => set('addressCity', v)} theme={theme} />
-                  <Field label="Province code" value={form.addressState}
-                    onChange={(v) => set('addressState', v.toUpperCase())}
-                    placeholder="PH-ILN" theme={theme} autoCapitalize="characters" />
+                  {/* A picker, not a text field. The first live run failed activation with
+                      "state must be a valid Philippine province code" because this was free text —
+                      and activation is irreversible, so there is no correcting it afterwards. */}
+                  <View style={styles.field}>
+                    <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                      Province
+                    </ThemedText>
+                    <TouchableOpacity
+                      onPress={() => setProvincePickerOpen(true)}
+                      style={[styles.input, styles.pickerField, { borderColor: theme.border, backgroundColor: theme.background }]}
+                    >
+                      <ThemedText style={{ color: form.addressState ? theme.text : theme.textSecondary }}>
+                        {provinceName(form.addressState) ?? 'Select your province'}
+                      </ThemedText>
+                      <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
                   <Field label="Postal code" value={form.addressPostalCode}
                     onChange={(v) => set('addressPostalCode', v)} placeholder="2900"
                     theme={theme} keyboardType="number-pad" />
@@ -344,6 +370,50 @@ export default function WalletSetupScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={provincePickerOpen} animationType="slide" onRequestClose={() => setProvincePickerOpen(false)}>
+        <ThemedView style={[styles.container, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setProvincePickerOpen(false)} style={styles.backButton}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+            <ThemedText style={styles.headerTitle}>Select province</ThemedText>
+            <View style={styles.backButton} />
+          </View>
+
+          <TextInput
+            style={[styles.input, { marginHorizontal: 16, color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+            value={provinceQuery}
+            onChangeText={setProvinceQuery}
+            placeholder="Search"
+            placeholderTextColor={theme.textSecondary}
+            autoCorrect={false}
+          />
+
+          <FlatList
+            data={PH_PROVINCES.filter((p) =>
+              p.name.toLowerCase().includes(provinceQuery.trim().toLowerCase())
+            )}
+            keyExtractor={(p) => p.code}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                onPress={() => {
+                  set('addressState', item.code);
+                  setProvincePickerOpen(false);
+                  setProvinceQuery('');
+                }}
+                style={[styles.provinceRow, { borderBottomColor: theme.border }]}
+              >
+                <ThemedText style={{ color: theme.text }}>{item.name}</ThemedText>
+                {form.addressState === item.code ? (
+                  <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+                ) : null}
+              </TouchableOpacity>
+            )}
+          />
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -474,6 +544,11 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 6 },
   fine: { fontSize: 12, lineHeight: 18 },
   field: { gap: 6 },
+  pickerField: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  provinceRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   fieldLabel: { fontSize: 13 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

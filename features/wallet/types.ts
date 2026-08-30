@@ -236,6 +236,11 @@ export interface PayMongoOnboardingDetailsInput {
   addressPostalCode: string;
   middleName?: string;
   sourceOfFundsOther?: string;
+  /**
+   * Required by PayMongo activation. Falls back to the driver's profile when omitted, but the
+   * profile is not always populated — and the rejection lands after the account already exists.
+   */
+  mobileNumber?: string;
 }
 
 /**
