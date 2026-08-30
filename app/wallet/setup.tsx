@@ -29,7 +29,7 @@ import { toE164Ph } from '@/shared/constants/validation';
  * Wallet setup.
  *
  * Deliberately never mentions PayMongo, child accounts or "creating a wallet" — that is
- * infrastructure. From the driver's side this is one thing: fund your starting float, verify who
+ * infrastructure. From the driver's side this is one thing: fund their Cash Wallet, verify who
  * you are, and start accepting jobs.
  */
 
@@ -226,7 +226,7 @@ export default function WalletSetupScreen() {
               {/* Fee disclosure. This is the driver's record of what they are agreeing to, so it
                   is shown before anything is charged and stays visible until setup completes. */}
               <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                <ThemedText style={styles.cardTitle}>Add your starting float</ThemedText>
+                <ThemedText style={styles.cardTitle}>Set up your Bee wallet</ThemedText>
                 <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>
                   ₱{STARTING_FLOAT.toLocaleString()} to begin accepting cash jobs.
                 </ThemedText>
@@ -245,26 +245,26 @@ export default function WalletSetupScreen() {
                 </View>
                 <View style={[styles.divider, { backgroundColor: theme.border }]} />
                 <View style={styles.feeRow}>
-                  <ThemedText style={styles.feeLabelStrong}>Stays in your Cash Float</ThemedText>
+                  <ThemedText style={styles.feeLabelStrong}>Stays in your Cash Wallet</ThemedText>
                   <ThemedText style={styles.feeValueStrong}>
                     ₱{(STARTING_FLOAT - KYC_FEE).toFixed(2)}
                   </ThemedText>
                 </View>
 
                 <ThemedText style={[styles.fine, { color: theme.textSecondary }]}>
-                  Your float stays yours — move it to Earnings and withdraw it any time, less any
+                  Your Cash Wallet stays yours — move it to BeePay and withdraw it any time, less any
                   cash you still owe from deliveries.
                 </ThemedText>
               </View>
 
               <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                <ThemedText style={styles.cardTitle}>Your Cash Float</ThemedText>
+                <ThemedText style={styles.cardTitle}>Your Cash Wallet</ThemedText>
                 <ThemedText style={[styles.balance, { color: floatCoversFee ? theme.success : theme.error }]}>
                   ₱{floatBalance.toFixed(2)}
                 </ThemedText>
                 {!floatCoversFee ? (
                   <ThemedText style={[styles.cardBody, { color: theme.error }]}>
-                    Add at least ₱{KYC_FEE.toFixed(2)} before setting up your wallet.
+                    Add at least ₱{KYC_FEE.toFixed(2)} to your Cash Wallet first.
                   </ThemedText>
                 ) : null}
               </View>
@@ -525,9 +525,9 @@ function ReadyCard({
   return (
     <View style={[styles.card, { backgroundColor: theme.surface }]}>
       <Ionicons name="checkmark-circle-outline" size={40} color={theme.success} />
-      <ThemedText style={styles.cardTitle}>Your wallet is ready</ThemedText>
+      <ThemedText style={styles.cardTitle}>BeePay is ready</ThemedText>
       <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>
-        Your earnings will be paid into it, and you can withdraw to your bank or e-wallet.
+        Your earnings are paid into BeePay, and you can withdraw to your bank or e-wallet.
       </ThemedText>
       {accountNumber ? (
         <ThemedText style={[styles.fine, { color: theme.textSecondary }]}>

@@ -596,7 +596,7 @@ export default function WalletScreen() {
                 <ThemedText
                   style={[styles.walletCardLabel, { color: "#9ca3af" }]}
                 >
-                  Earnings
+                  BeePay
                 </ThemedText>
                 <View
                   style={[styles.verifiedBadge, { backgroundColor: "#1f2937" }]}
@@ -834,7 +834,7 @@ export default function WalletScreen() {
                 >
                   {payMongoOnboarding.status === "Declined"
                     ? "Tap for help from support"
-                    : "Needed before you can be paid your earnings"}
+                    : "Needed before you can be paid into BeePay"}
                 </ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
@@ -850,7 +850,10 @@ export default function WalletScreen() {
           ]}
         >
           <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
-            Cash Float
+            Cash Wallet
+          </ThemedText>
+          <ThemedText style={[styles.summarySubtext, { color: theme.textSecondary }]}>
+            Covers cash you collect from customers
           </ThemedText>
           {isWalletLoading ? (
             <>
@@ -1487,7 +1490,7 @@ export default function WalletScreen() {
                     color: transferFrom === "Personal" ? "#111" : theme.text,
                   }}
                 >
-                  From Earnings
+                  From BeePay
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1506,7 +1509,7 @@ export default function WalletScreen() {
                     color: transferFrom === "TopUp" ? "#111" : theme.text,
                   }}
                 >
-                  From Cash Float
+                  From Cash Wallet
                 </ThemedText>
               </TouchableOpacity>
             </View>
