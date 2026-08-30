@@ -14,7 +14,9 @@ export type WalletTransactionType =
   | 'CashSettlementDebit'
   | 'WalletTransferIn'
   | 'WalletTransferOut'
-  | 'CashDeficitAdjustment';
+  | 'CashDeficitAdjustment'
+  | 'EarningReversal'
+  | 'AccountFee';
 export type WalletBucket = 'Personal' | 'TopUp';
 
 /**
@@ -168,4 +170,79 @@ export interface UpdateSavedWithdrawalMethodRequest {
   accountNumber?: string;
   accountHolderName?: string;
   isDefault?: boolean;
+}
+
+/**
+ * Where a driver is in PayMongo wallet setup.
+ *
+ * `Declined` is terminal: PayMongo's risk review cannot be appealed and the account cannot be
+ * reused, so the UI must route to support rather than offering a retry.
+ */
+export type PayMongoOnboardingStatus =
+  | 'None'
+  | 'Pending'
+  | 'Verifying'
+  | 'Verified'
+  | 'Activated'
+  | 'Declined';
+
+export interface PayMongoOnboarding {
+  status: PayMongoOnboardingStatus;
+  accountId: string | null;
+  /**
+   * The address the wallet was opened under. Not always the driver's plain email — if theirs was
+   * already registered with PayMongo it becomes a plus-tagged variant, which still reaches the
+   * same inbox. Frozen once the wallet is active.
+   */
+  accountEmail: string | null;
+  walletAccountNumber: string | null;
+  /**
+   * Hosted identity-verification link, present only on the response that issues a session.
+   * Not stored or replayed: sessions expire in ~72 hours and a stale link is indistinguishable
+   * from a broken one to the driver.
+   */
+  verificationUrl: string | null;
+  verificationExpiresAt: Date | null;
+  /** True once the wallet exists AND is addressable, so earnings can actually be paid into it. */
+  walletReady: boolean;
+}
+
+/**
+ * Details PayMongo requires before it will activate a wallet.
+ *
+ * Country is fixed server-side. `addressState` is an ISO 3166-2 code such as "PH-ILN", not a
+ * province name.
+ */
+export interface PayMongoOnboardingDetailsInput {
+  nationality: string;
+  natureOfWork: string;
+  sourceOfFunds: string;
+  /**
+   * Optional. Proven against live activation: TIN is not in the required set, despite PayMongo's
+   * activation guide listing it as a prerequisite. Requiring it would gate out every rider who
+   * does not have one.
+   */
+  tin?: string;
+  placeOfBirthCity: string;
+  addressLine1: string;
+  addressCity: string;
+  addressState: string;
+  addressPostalCode: string;
+  middleName?: string;
+  sourceOfFundsOther?: string;
+}
+
+/**
+ * What a driver can withdraw, and why it differs from their balance.
+ *
+ * Once earnings sit in the driver's own PayMongo wallet the transfer fee comes out of that same
+ * wallet, so `withdrawable` is always less than `balance`. On the original path the platform
+ * absorbs the fee and the two are equal.
+ */
+export interface WithdrawableBalance {
+  balance: number;
+  withdrawable: number;
+  /** Estimated. The amount actually charged is read back from the transfer. */
+  fee: number;
+  feePaidByDriver: boolean;
 }

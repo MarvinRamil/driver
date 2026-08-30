@@ -19,6 +19,8 @@ import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useWallet } from "@/features/wallet";
+import { usePayMongoOnboarding } from "@/features/wallet/hooks/usePayMongoOnboarding";
+import { useWithdrawableBalance } from "@/features/wallet/hooks/useWithdrawableBalance";
 import { useWalletTransactions } from "@/features/wallet";
 import {
   useCashEligibility,
@@ -62,6 +64,12 @@ export default function WalletScreen() {
     applyBalances,
     clearError: clearWalletError,
   } = useWallet();
+  // Drives the setup prompt below. Null until loaded, and once walletReady is true the prompt
+  // disappears for good.
+  const { data: payMongoOnboarding } = usePayMongoOnboarding();
+  // Not derived from personalBalance: once a driver's money sits in their own PayMongo wallet the
+  // transfer fee comes out of it, so the withdrawable maximum is strictly less than the balance.
+  const { data: withdrawable, refresh: refreshWithdrawable } = useWithdrawableBalance();
   const {
     transactions,
     isLoading: isLoadingTransactions,
@@ -249,8 +257,8 @@ export default function WalletScreen() {
   const handleCancelTopUp = (topUpId: string) => {
     if (!user?.id) return;
     Alert.alert(
-      "Cancel top-up",
-      "Are you sure you want to cancel this top-up? You will need to create a new one to pay.",
+      "Cancel payment",
+      "Are you sure you want to cancel this payment? You will need to start a new one.",
       [
         { text: "No", style: "cancel" },
         {
@@ -263,7 +271,7 @@ export default function WalletScreen() {
             } catch (e) {
               Alert.alert(
                 "Error",
-                e instanceof Error ? e.message : "Failed to cancel top-up",
+                e instanceof Error ? e.message : "Could not cancel this payment",
               );
             }
           },
@@ -275,12 +283,12 @@ export default function WalletScreen() {
   const handleCreateTopUp = async () => {
     const amount = Number(topUpAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid top-up amount.");
+      Alert.alert("Invalid Amount", "Please enter a valid amount.");
       return;
     }
 
     if (amount > 5000) {
-      Alert.alert("Limit Exceeded", "Maximum top-up amount is ₱5000 per transaction.");
+      Alert.alert("Limit Exceeded", "You can add up to ₱5,000 at a time.");
       return;
     }
 
@@ -288,7 +296,7 @@ export default function WalletScreen() {
       const topUp = await createTopUp(
         amount,
         undefined,
-        "Driver top-up wallet funding",
+        "Cash float top-up",
       );
       setTopUpModalVisible(false);
       if (topUp.xenditInvoiceUrl) {
@@ -304,28 +312,28 @@ export default function WalletScreen() {
               await Linking.openURL(topUp.xenditInvoiceUrl);
             } else {
               Alert.alert(
-                "Top-up Created",
+                "Payment Created",
                 "Invoice was created, but your device cannot open the payment link.",
               );
             }
           } catch {
             Alert.alert(
-              "Top-up Created",
+              "Payment Created",
               "Invoice created, but failed to open link automatically.",
             );
           }
         }
       } else {
         Alert.alert(
-          "Top-up Created",
-          "Top-up request created. You can open it from Top-up History.",
+          "Payment Created",
+          "Payment created. You can open it again from Payment History.",
         );
       }
       await onRefreshAll();
     } catch (err) {
       Alert.alert(
-        "Top-up Failed",
-        err instanceof Error ? err.message : "Unable to create top-up",
+        "Could Not Add Funds",
+        err instanceof Error ? err.message : "Could not add funds",
       );
     }
   };
@@ -379,6 +387,22 @@ export default function WalletScreen() {
     const amount = Number(withdrawAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       Alert.alert("Invalid Amount", "Please enter a valid amount.");
+      return;
+    }
+
+    // Checked here rather than left to the backend so the driver sees the number they CAN
+    // withdraw. PayMongo takes its fee from the same wallet, so asking for the full balance is
+    // always rejected - and "your withdrawal failed" reads as a broken app, not a fixable amount.
+    if (withdrawable && withdrawable.feePaidByDriver && amount > withdrawable.withdrawable) {
+      Alert.alert(
+        "Amount Too Large",
+        withdrawable.withdrawable > 0
+          ? `You can withdraw up to ₱${withdrawable.withdrawable.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}. A ₱${withdrawable.fee.toFixed(2)} transfer fee is taken from your wallet on top of the amount.`
+          : `Your balance doesn't cover the ₱${withdrawable.fee.toFixed(2)} transfer fee yet.`
+      );
       return;
     }
 
@@ -481,7 +505,7 @@ export default function WalletScreen() {
 
   const openTopUpLink = async (url?: string | null) => {
     if (!url) {
-      Alert.alert("No Link", "This top-up has no invoice URL.");
+      Alert.alert("No Link", "This payment has no link to open.");
       return;
     }
 
@@ -565,7 +589,7 @@ export default function WalletScreen() {
                 <ThemedText
                   style={[styles.walletCardLabel, { color: "#9ca3af" }]}
                 >
-                  Personal Wallet (Net Earnings)
+                  Earnings
                 </ThemedText>
                 <View
                   style={[styles.verifiedBadge, { backgroundColor: "#1f2937" }]}
@@ -676,7 +700,7 @@ export default function WalletScreen() {
                   <ThemedText
                     style={[styles.earningsRowLabel, { color: theme.error }]}
                   >
-                    System Commission
+                    Platform fee
                   </ThemedText>
                 </View>
                 <ThemedText
@@ -768,6 +792,49 @@ export default function WalletScreen() {
           )}
         </View>
 
+        {/* Wallet setup prompt. Shown only until the driver's wallet is ready, and deliberately
+            never mentions PayMongo or "creating an account" - that is infrastructure. */}
+        {payMongoOnboarding && !payMongoOnboarding.walletReady ? (
+          <TouchableOpacity
+            style={[
+              styles.summaryCard,
+              { backgroundColor: theme.surface, borderColor: theme.primary },
+            ]}
+            // `as any` matches the saved-withdrawal-methods call below: .expo/types/router.d.ts
+            // is generated and only picks up new routes on the next `expo start`.
+            onPress={() => router.push("/wallet/setup" as any)}
+          >
+            <View style={styles.setupRow}>
+              <Ionicons
+                name={
+                  payMongoOnboarding.status === "Declined"
+                    ? "alert-circle-outline"
+                    : "wallet-outline"
+                }
+                size={22}
+                color={
+                  payMongoOnboarding.status === "Declined" ? theme.error : theme.primary
+                }
+              />
+              <View style={styles.setupTextWrap}>
+                <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
+                  {payMongoOnboarding.status === "Declined"
+                    ? "Wallet setup was declined"
+                    : "Finish setting up your wallet"}
+                </ThemedText>
+                <ThemedText
+                  style={[styles.summarySubtext, { color: theme.textSecondary }]}
+                >
+                  {payMongoOnboarding.status === "Declined"
+                    ? "Tap for help from support"
+                    : "Needed before you can be paid your earnings"}
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Top-up wallet status */}
         <View
           style={[
@@ -776,7 +843,7 @@ export default function WalletScreen() {
           ]}
         >
           <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
-            Top-up Wallet
+            Cash Float
           </ThemedText>
           {isWalletLoading ? (
             <>
@@ -836,7 +903,7 @@ export default function WalletScreen() {
             <ThemedText
               style={[styles.quickActionLabel, { color: theme.textSecondary }]}
             >
-              Top Up
+              Add funds
             </ThemedText>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1048,14 +1115,14 @@ export default function WalletScreen() {
           )}
         </View>
 
-        {/* Top-up History */}
+        {/* Payment History */}
         <View style={styles.activitySection}>
           <View style={styles.activityHeader}>
             <ThemedText
               type="subtitle"
               style={[styles.activityTitle, { color: theme.text }]}
             >
-              Top-up History
+              Payment History
             </ThemedText>
           </View>
           {topUps.length === 0 ? (
@@ -1347,7 +1414,7 @@ export default function WalletScreen() {
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
             <ThemedText type="subtitle" style={{ color: theme.text }}>
-              Create Top-up
+              Add funds
             </ThemedText>
             <TextInput
               value={topUpAmount}
@@ -1392,7 +1459,7 @@ export default function WalletScreen() {
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
             <ThemedText type="subtitle" style={{ color: theme.text }}>
-              Transfer Wallet Balance
+              Move money
             </ThemedText>
             <View style={styles.transferToggle}>
               <TouchableOpacity
@@ -1413,7 +1480,7 @@ export default function WalletScreen() {
                     color: transferFrom === "Personal" ? "#111" : theme.text,
                   }}
                 >
-                  From Personal
+                  From Earnings
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1432,7 +1499,7 @@ export default function WalletScreen() {
                     color: transferFrom === "TopUp" ? "#111" : theme.text,
                   }}
                 >
-                  From Top-up
+                  From Cash Float
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -1555,6 +1622,37 @@ export default function WalletScreen() {
                     placeholder="Amount"
                     placeholderTextColor={theme.textMuted}
                   />
+
+                  {/* Shown only when the fee actually comes out of the driver's wallet. On the
+                      original path the platform absorbs it, and displaying a deduction that does
+                      not apply to them would be simply wrong. */}
+                  {withdrawable?.feePaidByDriver ? (
+                    <View style={styles.withdrawableRow}>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                        You can withdraw up to ₱
+                        {withdrawable.withdrawable.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        {" · ₱"}
+                        {withdrawable.fee.toFixed(2)} transfer fee
+                      </ThemedText>
+                      <TouchableOpacity
+                        onPress={() => setWithdrawAmount(String(withdrawable.withdrawable))}
+                        disabled={withdrawable.withdrawable <= 0}
+                      >
+                        <ThemedText
+                          style={{
+                            color: withdrawable.withdrawable > 0 ? theme.primary : theme.textMuted,
+                            fontSize: 12,
+                            fontWeight: "600",
+                          }}
+                        >
+                          Max
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
 
                   {/* Destination: a bank/e-wallet account, or a scanned QR Ph code */}
                   <View style={{ flexDirection: "row", marginBottom: 16, gap: 8 }}>
@@ -2151,6 +2249,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   // Matches the summaryValue line height so the card keeps its size while loading
+  setupRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  withdrawableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: -8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  setupTextWrap: { flex: 1, gap: 2 },
   summaryValueSkeleton: {
     height: 29,
     justifyContent: "center",
