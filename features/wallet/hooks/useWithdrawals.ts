@@ -1,21 +1,14 @@
 import { useAuth } from '@/features/auth';
 import { useCallback, useEffect, useState } from 'react';
 import { walletService } from '../services/walletService';
-import type { WithdrawalRequest } from '../types';
+import type { WithdrawalRequest, WithdrawalRequestInput } from '../types';
 
 interface UseWithdrawalsReturn {
     requests: WithdrawalRequest[];
     isLoading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
-    requestWithdrawal: (
-        amount: number,
-        savedWithdrawalMethodId?: string | null,
-        bankAccountNumber?: string,
-        bankName?: string,
-        accountHolderName?: string,
-        idempotencyKey?: string | null
-    ) => Promise<void>;
+    requestWithdrawal: (request: WithdrawalRequestInput) => Promise<void>;
 }
 
 export function useWithdrawals(): UseWithdrawalsReturn {
@@ -45,25 +38,10 @@ export function useWithdrawals(): UseWithdrawalsReturn {
         }
     }, [user]);
 
-    const requestWithdrawal = useCallback(async (
-        amount: number,
-        savedWithdrawalMethodId?: string | null,
-        bankAccountNumber?: string,
-        bankName?: string,
-        accountHolderName?: string,
-        idempotencyKey?: string | null
-    ) => {
+    const requestWithdrawal = useCallback(async (request: WithdrawalRequestInput) => {
         if (!user) throw new Error('User not authenticated');
 
-        await walletService.requestWithdrawal(
-            user.id,
-            amount,
-            savedWithdrawalMethodId,
-            bankAccountNumber,
-            bankName,
-            accountHolderName,
-            idempotencyKey
-        );
+        await walletService.requestWithdrawal(user.id, request);
         await fetchRequests();
     }, [user, fetchRequests]);
 

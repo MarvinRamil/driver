@@ -8,6 +8,7 @@ import type {
   WalletTransaction,
   WalletTransactionType,
   WithdrawalRequest,
+  WithdrawalRequestInput,
 } from '../types';
 
 /**
@@ -171,56 +172,46 @@ class WalletService {
   }
 
   /**
-   * Request withdrawal
+   * Request a withdrawal.
    * POST /api/drivers/{driverId}/wallet/withdraw
-   * @param driverId - Driver ID
-   * @param amount - Withdrawal amount
-   * @param savedWithdrawalMethodId - Optional saved withdrawal method ID (if using saved method)
-   * @param bankAccountNumber - Bank account number (required if not using saved method)
-   * @param bankName - Bank name (required if not using saved method)
-   * @param accountHolderName - Account holder name (required if not using saved method)
-   * @returns Promise resolving when withdrawal is requested
+   *
+   * Three mutually exclusive destinations:
+   *  - a saved withdrawal method, by id;
+   *  - a bank/e-wallet picked from the catalog, which sends `bankCode` alongside the
+   *    display name so the backend never has to guess the institution from free text;
+   *  - a scanned QR Ph code, which carries the destination itself.
    */
-  async requestWithdrawal(
-    driverId: string,
-    amount: number,
-    savedWithdrawalMethodId?: string | null,
-    bankAccountNumber?: string,
-    bankName?: string,
-    accountHolderName?: string,
-    idempotencyKey?: string | null
-  ): Promise<void> {
+  async requestWithdrawal(driverId: string, request: WithdrawalRequestInput): Promise<void> {
     try {
-      const body: any = {
-        amount,
-      };
+      const body: Record<string, unknown> = { amount: request.amount };
+      const idempotencyKey = request.idempotencyKey?.trim();
 
-      // If using saved withdrawal method, include its ID
-      if (savedWithdrawalMethodId) {
-        body.savedWithdrawalMethodId = savedWithdrawalMethodId;
+      if (request.destinationType === 'QrPh') {
+        if (!request.qrString) throw new Error('Scan a QR Ph code to withdraw this way');
+        body.destinationType = 'QrPh';
+        body.qrString = request.qrString;
+        if (request.accountHolderName) body.accountHolderName = request.accountHolderName;
+      } else if (request.savedWithdrawalMethodId) {
+        body.savedWithdrawalMethodId = request.savedWithdrawalMethodId;
       } else {
-        // Otherwise, require manual bank details
-        if (!bankAccountNumber || !bankName || !accountHolderName) {
+        if (!request.bankAccountNumber || !request.bankName || !request.accountHolderName) {
           throw new Error('Bank account details are required when not using a saved withdrawal method');
         }
-        body.bankAccountNumber = bankAccountNumber;
-        body.bankName = bankName;
-        body.accountHolderName = accountHolderName;
+        body.bankAccountNumber = request.bankAccountNumber;
+        body.bankName = request.bankName;
+        body.accountHolderName = request.accountHolderName;
+        // Older builds omitted this and the backend fell back to matching on the name.
+        if (request.bankCode) body.bankCode = request.bankCode;
       }
 
-      if (idempotencyKey != null && idempotencyKey.trim()) {
-        body.idempotencyKey = idempotencyKey.trim();
-      }
+      if (idempotencyKey) body.idempotencyKey = idempotencyKey;
 
       const response = await apiClient.post(
         `/api/drivers/${driverId}/wallet/withdraw`,
         {
           body,
           requiresAuth: true,
-          headers:
-            idempotencyKey != null && idempotencyKey.trim()
-              ? { 'Idempotency-Key': idempotencyKey.trim() }
-              : undefined,
+          headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
         }
       );
 

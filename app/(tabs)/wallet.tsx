@@ -28,7 +28,11 @@ import {
   walletService,
   useWithdrawals,
   useSavedWithdrawalMethods,
+  useBanks,
 } from "@/features/wallet";
+import { BankPickerModal } from "@/features/wallet/components/BankPickerModal";
+import { QrScannerModal } from "@/features/wallet/components/QrScannerModal";
+import { maxAmountFor, type PhBank } from "@/shared/constants/banks";
 import { ThemedView } from "@/shared/components/themed-view";
 import { ThemedText } from "@/shared/components/themed-text";
 import { Skeleton } from "@/shared/components/skeleton";
@@ -78,7 +82,13 @@ export default function WalletScreen() {
   const [topUpAmount, setTopUpAmount] = useState("200");
   const [transferAmount, setTransferAmount] = useState("100");
   const [withdrawAmount, setWithdrawAmount] = useState("500");
-  const [bankName, setBankName] = useState("BPI");
+  // The bank is picked from the catalog, never typed: a free-text name cannot address a
+  // transfer, and the backend has to reject anything it can't resolve to a BIC.
+  const [selectedBank, setSelectedBank] = useState<PhBank | null>(null);
+  const [bankPickerVisible, setBankPickerVisible] = useState(false);
+  const [withdrawMode, setWithdrawMode] = useState<"bank" | "qr">("bank");
+  const [qrScannerVisible, setQrScannerVisible] = useState(false);
+  const [scannedQr, setScannedQr] = useState<string | null>(null);
   const [bankAccount, setBankAccount] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -87,6 +97,7 @@ export default function WalletScreen() {
   const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
   const [saveBankAccount, setSaveBankAccount] = useState(false);
   const { methods: savedMethods, isLoading: isLoadingSavedMethods, create: createSavedMethod } = useSavedWithdrawalMethods();
+  const { banks, isLoading: isLoadingBanks } = useBanks();
   const [transferFrom, setTransferFrom] = useState<"Personal" | "TopUp">(
     "Personal",
   );
@@ -128,7 +139,9 @@ export default function WalletScreen() {
     setSaveBankAccount(false);
     setBankAccount("");
     setAccountHolder("");
-    setBankName("BPI");
+    setSelectedBank(null);
+    setWithdrawMode("bank");
+    setScannedQr(null);
     // Grace period: don't show fetch error for a few seconds after success (transient refresh failures)
     successGraceRef.current = Date.now();
     clearWalletError();
@@ -369,10 +382,35 @@ export default function WalletScreen() {
       return;
     }
 
-    // If using saved method, no need to validate manual bank details
-    if (!selectedSavedMethodId) {
-      if (!bankAccount || !accountHolder || !bankName) {
+    const isQr = withdrawMode === "qr";
+
+    if (isQr) {
+      if (!scannedQr) {
+        Alert.alert("No QR Code", "Scan the recipient's QR Ph code first.");
+        return;
+      }
+      // QR Ph settles over InstaPay, which caps at PHP 50,000 per transfer.
+      if (amount > 50_000) {
+        Alert.alert("Amount Too Large", "QR Ph transfers are limited to ₱50,000. Use a bank transfer instead.");
+        return;
+      }
+    } else if (!selectedSavedMethodId) {
+      if (!selectedBank) {
+        Alert.alert("Missing Details", "Please select a bank or e-wallet.");
+        return;
+      }
+      if (!bankAccount || !accountHolder) {
         Alert.alert("Missing Details", "Please fill in all bank details or select a saved method.");
+        return;
+      }
+      // Mirrors the backend check so the driver hears about the rail limit before the
+      // request goes out, not as a rejection after it.
+      const limit = maxAmountFor(selectedBank);
+      if (amount > limit) {
+        Alert.alert(
+          "Amount Too Large",
+          `${selectedBank.name} can only receive up to ₱${limit.toLocaleString()} per transfer.`,
+        );
         return;
       }
     }
@@ -381,11 +419,11 @@ export default function WalletScreen() {
     try {
       // If saving bank account, create saved method first
       let savedMethodIdToUse = selectedSavedMethodId;
-      if (saveBankAccount && !selectedSavedMethodId && bankAccount && bankName && accountHolder) {
+      if (!isQr && saveBankAccount && !selectedSavedMethodId && bankAccount && selectedBank && accountHolder) {
         try {
           const newSavedMethod = await createSavedMethod({
-            bankName,
-            bankCode: bankName, // Use bank name as bank code (matches backend behavior)
+            bankName: selectedBank.name,
+            bankCode: selectedBank.code,
             accountNumber: bankAccount,
             accountHolderName: accountHolder,
             isDefault: savedMethods.length === 0, // Set as default if first method
@@ -393,10 +431,11 @@ export default function WalletScreen() {
           savedMethodIdToUse = newSavedMethod.id;
         } catch (saveErr) {
           console.error('[Wallet] Failed to save bank account:', saveErr);
-          // Continue with withdrawal even if save fails
+          // Saving is a convenience; the withdrawal itself is unaffected, so it continues.
+          // The driver is told rather than left to discover the account was not kept.
           Alert.alert(
-            "Warning",
-            "Withdrawal will proceed, but failed to save bank account. You can save it later."
+            "Bank Account Not Saved",
+            "Your withdrawal will still go through, but this account wasn't saved. You can add it later from Manage Accounts."
           );
         }
       }
@@ -407,14 +446,24 @@ export default function WalletScreen() {
       }
       const idempotencyKey = withdrawIdempotencyKeyRef.current;
 
-      // Request withdrawal with saved method or manual details
       await requestWithdrawal(
-        amount,
-        savedMethodIdToUse || undefined,
-        savedMethodIdToUse ? undefined : bankAccount,
-        savedMethodIdToUse ? undefined : bankName,
-        savedMethodIdToUse ? undefined : accountHolder,
-        idempotencyKey
+        isQr
+          ? {
+              amount,
+              destinationType: "QrPh",
+              qrString: scannedQr!,
+              accountHolderName: accountHolder || undefined,
+              idempotencyKey,
+            }
+          : {
+              amount,
+              savedWithdrawalMethodId: savedMethodIdToUse || undefined,
+              bankAccountNumber: savedMethodIdToUse ? undefined : bankAccount,
+              bankName: savedMethodIdToUse ? undefined : selectedBank!.name,
+              bankCode: savedMethodIdToUse ? undefined : selectedBank!.code,
+              accountHolderName: savedMethodIdToUse ? undefined : accountHolder,
+              idempotencyKey,
+            },
       );
 
       // Show "Processing your withdrawal…" in-modal; close and refresh on Done or after 3s
@@ -1507,8 +1556,67 @@ export default function WalletScreen() {
                     placeholderTextColor={theme.textMuted}
                   />
 
+                  {/* Destination: a bank/e-wallet account, or a scanned QR Ph code */}
+                  <View style={{ flexDirection: "row", marginBottom: 16, gap: 8 }}>
+                    {(["bank", "qr"] as const).map((mode) => (
+                      <TouchableOpacity
+                        key={mode}
+                        onPress={() => setWithdrawMode(mode)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 10,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          alignItems: "center",
+                          backgroundColor: withdrawMode === mode ? theme.primary + "20" : "transparent",
+                          borderColor: withdrawMode === mode ? theme.primary : theme.border,
+                        }}
+                      >
+                        <ThemedText
+                          style={{
+                            color: withdrawMode === mode ? theme.text : theme.textSecondary,
+                            fontWeight: withdrawMode === mode ? "700" : "500",
+                            fontSize: 13,
+                          }}
+                        >
+                          {mode === "bank" ? "Bank transfer" : "Scan QR Ph"}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {withdrawMode === "qr" && (
+                    <>
+                      <TouchableOpacity
+                        onPress={() => setQrScannerVisible(true)}
+                        style={[
+                          styles.input,
+                          {
+                            borderColor: scannedQr ? theme.primary : theme.border,
+                            marginBottom: 8,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          },
+                        ]}
+                      >
+                        <ThemedText style={{ color: scannedQr ? theme.text : theme.textMuted, flex: 1 }}>
+                          {scannedQr ? "QR Ph code scanned" : "Tap to scan a QR Ph code"}
+                        </ThemedText>
+                        <Ionicons
+                          name={scannedQr ? "checkmark-circle" : "qr-code-outline"}
+                          size={20}
+                          color={scannedQr ? theme.primary : theme.textSecondary}
+                        />
+                      </TouchableOpacity>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 11, marginBottom: 16 }}>
+                        QR Ph transfers are instant and limited to ₱50,000.
+                      </ThemedText>
+                    </>
+                  )}
+
                   {/* Saved Methods Selector */}
-                  {savedMethods.length > 0 && (
+                  {withdrawMode === "bank" && savedMethods.length > 0 && (
                     <>
                       <ThemedText style={{ color: theme.textSecondary, marginBottom: 8 }}>
                         Use Saved Bank Account
@@ -1523,7 +1631,7 @@ export default function WalletScreen() {
                             setSelectedSavedMethodId(null);
                             setBankAccount("");
                             setAccountHolder("");
-                            setBankName("BPI");
+                            setSelectedBank(null);
                           }}
                           style={[
                             styles.savedMethodCard,
@@ -1545,7 +1653,7 @@ export default function WalletScreen() {
                               setSelectedSavedMethodId(method.id);
                               setBankAccount("");
                               setAccountHolder("");
-                              setBankName("");
+                              setSelectedBank(null);
                             }}
                             style={[
                               styles.savedMethodCard,
@@ -1577,25 +1685,40 @@ export default function WalletScreen() {
                   )}
 
                   {/* Manual Bank Details (shown when no saved method selected or when "Manual Entry" is selected) */}
-                  {!selectedSavedMethodId && (
+                  {withdrawMode === "bank" && !selectedSavedMethodId && (
                     <>
                       <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
-                        Bank Name
+                        Bank or E-wallet
                       </ThemedText>
-                      <TextInput
-                        value={bankName}
-                        onChangeText={setBankName}
+                      <TouchableOpacity
+                        onPress={() => setBankPickerVisible(true)}
                         style={[
                           styles.input,
                           {
                             borderColor: theme.border,
-                            color: theme.text,
                             marginBottom: 16,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
                           },
                         ]}
-                        placeholder="e.g. BPI, BDO, GCASH"
-                        placeholderTextColor={theme.textMuted}
-                      />
+                      >
+                        <View style={{ flex: 1 }}>
+                          <ThemedText
+                            style={{ color: selectedBank ? theme.text : theme.textMuted }}
+                            numberOfLines={1}
+                          >
+                            {selectedBank ? selectedBank.name : "Select bank or e-wallet"}
+                          </ThemedText>
+                          {selectedBank && (
+                            <ThemedText style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>
+                              {selectedBank.instapay ? "Instant · 24/7" : "Arrives next banking day"}
+                              {` · max ₱${maxAmountFor(selectedBank).toLocaleString()}`}
+                            </ThemedText>
+                          )}
+                        </View>
+                        <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+                      </TouchableOpacity>
 
                       <ThemedText style={{ color: theme.textSecondary, marginBottom: 4 }}>
                         Account Number
@@ -1732,6 +1855,27 @@ export default function WalletScreen() {
               )}
             </View>
           </KeyboardAvoidingView>
+
+          {/* Nested inside the withdraw modal so they stack above it rather than
+              fighting it for the screen. */}
+          <BankPickerModal
+            visible={bankPickerVisible}
+            banks={banks}
+            isLoading={isLoadingBanks}
+            selectedCode={selectedBank?.code ?? null}
+            amount={Number(withdrawAmount) || null}
+            onSelect={setSelectedBank}
+            onClose={() => setBankPickerVisible(false)}
+          />
+
+          <QrScannerModal
+            visible={qrScannerVisible}
+            onScanned={(qr) => {
+              setScannedQr(qr);
+              setQrScannerVisible(false);
+            }}
+            onClose={() => setQrScannerVisible(false)}
+          />
         </View>
       </Modal>
     </ThemedView>
