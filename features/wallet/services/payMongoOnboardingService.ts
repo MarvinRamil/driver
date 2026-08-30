@@ -33,6 +33,7 @@ class PayMongoOnboardingService {
       verificationExpiresAt: raw?.verificationExpiresAt
         ? new Date(raw.verificationExpiresAt)
         : null,
+      verificationFailureReason: raw?.verificationFailureReason ?? null,
       walletReady: Boolean(raw?.walletReady),
     };
   }

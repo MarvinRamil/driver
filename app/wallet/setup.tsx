@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { ThemedView } from '@/shared/components/themed-view';
@@ -95,12 +95,22 @@ export default function WalletSetupScreen() {
     const url = await start();
     if (!url) return;
 
-    const canOpen = await Linking.canOpenURL(url);
-    if (!canOpen) {
+    // An in-app browser rather than Linking.openURL: the driver stays inside the app, and control
+    // returns here when they finish so we can refresh instead of leaving them to navigate back.
+    //
+    // Deliberately NOT a raw WebView. Identity verification needs the camera, and getUserMedia in
+    // a WebView depends on per-platform permission plumbing that KYC providers do not always
+    // support. SFSafariViewController and Custom Tabs are the real browser engine, so the camera
+    // behaves exactly as it does on the web.
+    try {
+      await WebBrowser.openBrowserAsync(url, { showTitle: true, enableBarCollapsing: true });
+    } catch {
       Alert.alert('Cannot Open Link', 'Your device could not open the verification page.');
       return;
     }
-    await Linking.openURL(url);
+
+    // They are back. PayMongo may not have told us the outcome yet, so re-read rather than assume.
+    await refresh();
   };
 
   const handleActivate = () => {
@@ -158,6 +168,23 @@ export default function WalletSetupScreen() {
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
           keyboardShouldPersistTaps="handled"
         >
+          {data?.verificationFailureReason ? (
+            <View style={[styles.notice, { backgroundColor: theme.error + '18' }]}>
+              <Ionicons name="camera-outline" size={20} color={theme.error} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={[styles.noticeText, { color: theme.error, fontWeight: '600' }]}>
+                  Verification didn&apos;t pass
+                </ThemedText>
+                <ThemedText style={[styles.noticeText, { color: theme.textSecondary }]}>
+                  {data.verificationFailureReason}
+                </ThemedText>
+                <ThemedText style={[styles.fine, { color: theme.textSecondary }]}>
+                  Try again in good light, holding your ID flat and steady.
+                </ThemedText>
+              </View>
+            </View>
+          ) : null}
+
           {error ? (
             <View style={[styles.notice, { backgroundColor: theme.error + '18' }]}>
               <Ionicons name="alert-circle-outline" size={20} color={theme.error} />
@@ -236,7 +263,11 @@ export default function WalletSetupScreen() {
                       <ActivityIndicator color="#111" />
                     ) : (
                       <ThemedText style={styles.primaryButtonText}>
-                        {status === 'Verifying' ? 'Continue verification' : 'Verify my identity'}
+                        {data?.verificationFailureReason
+                          ? 'Try verification again'
+                          : status === 'Verifying'
+                            ? 'Continue verification'
+                            : 'Verify my identity'}
                       </ThemedText>
                     )}
                   </TouchableOpacity>

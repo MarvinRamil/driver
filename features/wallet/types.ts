@@ -203,6 +203,12 @@ export interface PayMongoOnboarding {
    */
   verificationUrl: string | null;
   verificationExpiresAt: Date | null;
+  /**
+   * Why the last identity check failed, in the driver's terms — e.g. "Image quality check failed:
+   * blur detection". Usually one retry away from passing, so it must be shown rather than leaving
+   * them on a screen that says nothing.
+   */
+  verificationFailureReason: string | null;
   /** True once the wallet exists AND is addressable, so earnings can actually be paid into it. */
   walletReady: boolean;
 }
