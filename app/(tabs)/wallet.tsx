@@ -1567,6 +1567,75 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
+      {/* Which wallet are they funding? Only asked once BeePay exists — before that there is
+          only one destination and a choice would be noise.
+
+          Kept at top level, NOT nested inside the withdraw modal like BankPickerModal below: a
+          modal only mounts when its parent renders, so nesting it here meant "Add funds" set the
+          state and nothing appeared — the picker was unmounted whenever the withdraw sheet was
+          closed, which is every time you press Add funds. */}
+      <Modal
+        visible={addFundsPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddFundsPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setAddFundsPickerVisible(false)}
+        >
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <ThemedText type="subtitle" style={{ color: theme.text, marginBottom: 12 }}>
+              Add funds to
+            </ThemedText>
+
+            <TouchableOpacity
+              style={[styles.addFundsOption, { borderColor: theme.border }]}
+              onPress={() => {
+                setAddFundsPickerVisible(false);
+                setBeePayQrVisible(true);
+              }}
+            >
+              <Ionicons name="qr-code-outline" size={22} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>BeePay</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  Scan to add money — arrives straight away
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.addFundsOption, { borderColor: theme.border }]}
+              onPress={() => {
+                setAddFundsPickerVisible(false);
+                setTopUpModalVisible(true);
+              }}
+            >
+              <Ionicons name="card-outline" size={22} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cash Wallet</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  Covers cash you collect from customers
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <BeePayTopUpQrModal
+        visible={beePayQrVisible}
+        onClose={() => {
+          setBeePayQrVisible(false);
+          // The money lands in real time, so refresh rather than leaving a stale balance behind.
+          onRefreshAll({ silent: true });
+        }}
+      />
+
       <Modal
         visible={withdrawModalVisible}
         animationType="slide"
@@ -1977,69 +2046,6 @@ export default function WalletScreen() {
 
           {/* Nested inside the withdraw modal so they stack above it rather than
               fighting it for the screen. */}
-          {/* Which wallet are they funding? Only asked once BeePay exists — before that there is only
-          one destination and a choice would be noise. */}
-      <Modal
-        visible={addFundsPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAddFundsPickerVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setAddFundsPickerVisible(false)}
-        >
-          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
-            <ThemedText type="subtitle" style={{ color: theme.text, marginBottom: 12 }}>
-              Add funds to
-            </ThemedText>
-
-            <TouchableOpacity
-              style={[styles.addFundsOption, { borderColor: theme.border }]}
-              onPress={() => {
-                setAddFundsPickerVisible(false);
-                setBeePayQrVisible(true);
-              }}
-            >
-              <Ionicons name="qr-code-outline" size={22} color={theme.primary} />
-              <View style={{ flex: 1 }}>
-                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>BeePay</ThemedText>
-                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
-                  Scan to add money — arrives straight away
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.addFundsOption, { borderColor: theme.border }]}
-              onPress={() => {
-                setAddFundsPickerVisible(false);
-                setTopUpModalVisible(true);
-              }}
-            >
-              <Ionicons name="card-outline" size={22} color={theme.primary} />
-              <View style={{ flex: 1 }}>
-                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cash Wallet</ThemedText>
-                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
-                  Covers cash you collect from customers
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      <BeePayTopUpQrModal
-        visible={beePayQrVisible}
-        onClose={() => {
-          setBeePayQrVisible(false);
-          // The money lands in real time, so refresh rather than leaving a stale balance behind.
-          onRefreshAll({ silent: true });
-        }}
-      />
 
       <BankPickerModal
             visible={bankPickerVisible}
