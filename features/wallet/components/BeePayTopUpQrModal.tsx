@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   StyleSheet,
@@ -12,6 +13,7 @@ import { useTheme } from '@/shared/hooks/use-theme';
 import { ThemedText } from '@/shared/components/themed-text';
 import { ThemedView } from '@/shared/components/themed-view';
 import { useBeePayTopUpQr } from '../hooks/useBeePayTopUpQr';
+import { canSaveQrImage, saveQrImage } from '../lib/saveQrImage';
 
 interface Props {
   visible: boolean;
@@ -30,14 +32,41 @@ interface Props {
  * The merchant name is shown deliberately. Before this existed, topping up produced a checkout
  * whose QR read the platform's name — drivers reasonably asked why they were paying us. Showing
  * whose wallet the code credits answers that up front.
+ *
+ * Saving is the one thing here that needs native code (expo-sharing / expo-file-system), so the
+ * button is shown only once those modules answer for themselves. On a binary built before they
+ * were added — which happens routinely, since JS ships over expo-updates ahead of new builds —
+ * the button is simply absent rather than throwing.
  */
 export function BeePayTopUpQrModal({ visible, onClose }: Props) {
   const theme = useTheme();
   const { data, isLoading, error, load } = useBeePayTopUpQr();
+  const [canSave, setCanSave] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (visible) load();
   }, [visible, load]);
+
+  useEffect(() => {
+    let active = true;
+    canSaveQrImage().then((ok) => {
+      // The modal can close while this resolves; setting state on the way out warns in dev and
+      // does nothing useful.
+      if (active) setCanSave(ok);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const onSave = useCallback(async () => {
+    if (!data?.qrImage || isSaving) return;
+    setIsSaving(true);
+    const result = await saveQrImage(data.qrImage);
+    setIsSaving(false);
+    if (!result.ok) Alert.alert('Could not save QR', result.reason);
+  }, [data?.qrImage, isSaving]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -85,6 +114,23 @@ export function BeePayTopUpQrModal({ visible, onClose }: Props) {
               <ThemedText style={[styles.note, { color: theme.textSecondary }]}>
                 Money arrives in your wallet straight away.
               </ThemedText>
+
+              {canSave ? (
+                <TouchableOpacity
+                  onPress={onSave}
+                  disabled={isSaving}
+                  style={[styles.saveButton, { borderColor: theme.border, opacity: isSaving ? 0.6 : 1 }]}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : (
+                    <Ionicons name="download-outline" size={18} color={theme.primary} />
+                  )}
+                  <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
+                    Save or share QR
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : null}
             </>
           ) : null}
         </View>
@@ -111,4 +157,8 @@ const styles = StyleSheet.create({
   note: { fontSize: 12, textAlign: 'center' },
   error: { fontSize: 14, textAlign: 'center' },
   retry: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
+  saveButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12, marginTop: 4,
+  },
 });
