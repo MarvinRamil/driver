@@ -252,7 +252,7 @@ export default function WalletSetupScreen() {
                 </View>
 
                 <ThemedText style={[styles.fine, { color: theme.textSecondary }]}>
-                  Your Cash Wallet stays yours — move it to BeePay and withdraw it any time, less any
+                  Your Cash Wallet stays yours — move it to BeeWallet and withdraw it any time, less any
                   cash you still owe from deliveries.
                 </ThemedText>
               </View>
@@ -525,9 +525,9 @@ function ReadyCard({
   return (
     <View style={[styles.card, { backgroundColor: theme.surface }]}>
       <Ionicons name="checkmark-circle-outline" size={40} color={theme.success} />
-      <ThemedText style={styles.cardTitle}>BeePay is ready</ThemedText>
+      <ThemedText style={styles.cardTitle}>BeeWallet is ready</ThemedText>
       <ThemedText style={[styles.cardBody, { color: theme.textSecondary }]}>
-        Your earnings are paid into BeePay, and you can withdraw to your bank or e-wallet.
+        Your earnings are paid into BeeWallet, and you can withdraw to your bank or e-wallet.
       </ThemedText>
       {accountNumber ? (
         <ThemedText style={[styles.fine, { color: theme.textSecondary }]}>

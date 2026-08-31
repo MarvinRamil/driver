@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { ThemedText } from '@/shared/components/themed-text';
 import { ThemedView } from '@/shared/components/themed-view';
-import { useBeePayTopUpQr } from '../hooks/useBeePayTopUpQr';
+import { useBeeWalletTopUpQr } from '../hooks/useBeeWalletTopUpQr';
 import { canSaveQrImage, saveQrImage } from '../lib/saveQrImage';
 
 interface Props {
@@ -21,7 +21,7 @@ interface Props {
 }
 
 /**
- * The QR a driver scans to put money into their own BeePay wallet.
+ * The QR a driver scans to put money into their own BeeWallet wallet.
  *
  * <Image> rather than a QR component: the payload is rendered to a PNG server-side, so the app
  * needs no native QR dependency and this ships as a JavaScript-only update.
@@ -38,9 +38,9 @@ interface Props {
  * were added — which happens routinely, since JS ships over expo-updates ahead of new builds —
  * the button is simply absent rather than throwing.
  */
-export function BeePayTopUpQrModal({ visible, onClose }: Props) {
+export function BeeWalletTopUpQrModal({ visible, onClose }: Props) {
   const theme = useTheme();
-  const { data, isLoading, error, load } = useBeePayTopUpQr();
+  const { data, isLoading, error, load } = useBeeWalletTopUpQr();
   const [canSave, setCanSave] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -75,7 +75,7 @@ export function BeePayTopUpQrModal({ visible, onClose }: Props) {
           <TouchableOpacity onPress={onClose} style={styles.close}>
             <Ionicons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
-          <ThemedText style={styles.title}>Add to BeePay</ThemedText>
+          <ThemedText style={styles.title}>Add to BeeWallet</ThemedText>
           <View style={styles.close} />
         </View>
 
@@ -93,7 +93,7 @@ export function BeePayTopUpQrModal({ visible, onClose }: Props) {
           ) : data ? (
             <>
               <ThemedText style={[styles.instruction, { color: theme.textSecondary }]}>
-                Scan with GCash, Maya or your bank app to add money to your BeePay wallet.
+                Scan with GCash, Maya or your bank app to add money to your BeeWallet wallet.
               </ThemedText>
 
               <View style={styles.qrFrame}>

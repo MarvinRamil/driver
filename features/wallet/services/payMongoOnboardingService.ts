@@ -1,6 +1,6 @@
 import { apiClient } from '@/shared/services/apiClient';
 import type {
-  BeePayTopUpQr,
+  BeeWalletTopUpQr,
   PayMongoOnboarding,
   PayMongoOnboardingDetailsInput,
   WithdrawableBalance,
@@ -64,14 +64,14 @@ class PayMongoOnboardingService {
   }
 
   /**
-   * The QR for topping up the driver's own BeePay wallet.
+   * The QR for topping up the driver's own BeeWallet wallet.
    *
    * Fails for a driver who has not finished setup — there is no wallet of their own to credit yet,
    * and the backend deliberately refuses rather than handing back the platform's QR.
    */
-  async getBeePayTopUpQr(driverId: string): Promise<BeePayTopUpQr> {
-    const response = await apiClient.get<BeePayTopUpQr>(
-      `/api/drivers/${driverId}/wallet/beepay/topup-qr`,
+  async getBeeWalletTopUpQr(driverId: string): Promise<BeeWalletTopUpQr> {
+    const response = await apiClient.get<BeeWalletTopUpQr>(
+      `/api/drivers/${driverId}/wallet/beewallet/topup-qr`,
       { requiresAuth: true }
     );
     const payload = this.extractPayload<any>(response);

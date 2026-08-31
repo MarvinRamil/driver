@@ -1,5 +1,5 @@
 /**
- * Saving a BeePay QR out of the app, so a driver can print it, stick it on the bike, or send it
+ * Saving a BeeWallet QR out of the app, so a driver can print it, stick it on the bike, or send it
  * to a customer.
  *
  * The two native modules are loaded lazily rather than imported at the top of the file, and that
@@ -54,7 +54,7 @@ export type SaveQrResult = { ok: true } | { ok: false; reason: string };
  *   QR *payload* string, never an image, so this PNG is ours and is the only thing there is to
  *   save.
  */
-export async function saveQrImage(dataUri: string, fileName = 'beepay-qr.png'): Promise<SaveQrResult> {
+export async function saveQrImage(dataUri: string, fileName = 'beewallet-qr.png'): Promise<SaveQrResult> {
   const modules = loadModules();
   if (!modules) return { ok: false, reason: 'Saving needs a newer version of the app.' };
 
@@ -79,7 +79,7 @@ export async function saveQrImage(dataUri: string, fileName = 'beepay-qr.png'): 
 
     await modules.sharing.shareAsync(file.uri, {
       mimeType: 'image/png',
-      dialogTitle: 'Save or share your BeePay QR',
+      dialogTitle: 'Save or share your BeeWallet QR',
       UTI: 'public.png',
     });
 
