@@ -52,6 +52,21 @@ const TOP_UP_BROWSER_OPTIONS: WebBrowser.WebBrowserOpenOptions = {
   controlsColor: "#000000",
 };
 
+/**
+ * Whether the Cash Wallet and the money-between-buckets transfer are shown.
+ *
+ * Off for now: the wallet screen is BeeWallet only. Everything behind this flag is left in place
+ * rather than deleted — the bucket still exists on the backend, still holds cash collected from
+ * customers and still gates cash jobs, so this is a UI decision that is expected to be reversed.
+ *
+ * Flip to true to bring back the balance card, the Transfer action, the transfer modal and the
+ * add-funds picker together; they only make sense as a set.
+ *
+ * Not gated by this: the plain amount modal behind "Add funds" before wallet setup is finished.
+ * That funds the verification fee, and without it a new driver cannot onboard at all.
+ */
+const SHOW_CASH_WALLET = false;
+
 export default function WalletScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -72,9 +87,10 @@ export default function WalletScreen() {
   // Not derived from personalBalance: once a driver's money sits in their own PayMongo wallet the
   // transfer fee comes out of it, so the withdrawable maximum is strictly less than the balance.
   const { data: withdrawable, refresh: refreshWithdrawable } = useWithdrawableBalance();
-  // "Add funds" now has two destinations, because they are genuinely different money: BeeWallet is
-  // the driver's own wallet (instant, QR), Cash Wallet is ours and must be able to go negative for
-  // COD settlement, so it still goes through the platform checkout.
+  // "Add funds" has two destinations whenever the Cash Wallet is shown, because they are genuinely
+  // different money: BeeWallet is the driver's own wallet (instant, QR), Cash Wallet is ours and
+  // must be able to go negative for COD settlement, so it still goes through the platform checkout.
+  // Under SHOW_CASH_WALLET=false there is only one, and this picker never opens.
   const [addFundsPickerVisible, setAddFundsPickerVisible] = useState(false);
   const [beeWalletQrVisible, setBeeWalletQrVisible] = useState(false);
   const {
@@ -850,6 +866,7 @@ export default function WalletScreen() {
         ) : null}
 
         {/* Top-up wallet status */}
+        {SHOW_CASH_WALLET ? (
         <View
           style={[
             styles.summaryCard,
@@ -902,15 +919,22 @@ export default function WalletScreen() {
             </>
           )}
         </View>
+        ) : null}
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
+          {/* With the Cash Wallet hidden there is nothing to pick between, so this goes straight
+              to the BeeWallet QR. Before setup is finished there is no BeeWallet to credit — the
+              backend refuses a QR for one — and the driver still has to fund the verification fee,
+              so that case keeps the plain amount modal either way. */}
           <TouchableOpacity
             style={styles.quickAction}
             onPress={() =>
-              payMongoOnboarding?.walletReady
-                ? setAddFundsPickerVisible(true)
-                : setTopUpModalVisible(true)
+              !payMongoOnboarding?.walletReady
+                ? setTopUpModalVisible(true)
+                : SHOW_CASH_WALLET
+                  ? setAddFundsPickerVisible(true)
+                  : setBeeWalletQrVisible(true)
             }
           >
             <View
@@ -927,6 +951,7 @@ export default function WalletScreen() {
               Add funds
             </ThemedText>
           </TouchableOpacity>
+          {SHOW_CASH_WALLET ? (
           <TouchableOpacity
             style={styles.quickAction}
             onPress={() => setTransferModalVisible(true)}
@@ -945,6 +970,7 @@ export default function WalletScreen() {
               Transfer
             </ThemedText>
           </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.quickAction}
             onPress={() => setWithdrawModalVisible(true)}
@@ -1468,6 +1494,7 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
+      {SHOW_CASH_WALLET ? (
       <Modal
         visible={transferModalVisible}
         animationType="slide"
@@ -1566,14 +1593,17 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
+      ) : null}
 
       {/* Which wallet are they funding? Only asked once BeeWallet exists — before that there is
-          only one destination and a choice would be noise.
+          only one destination and a choice would be noise. Hidden with the Cash Wallet, since one
+          destination is again the only one.
 
           Kept at top level, NOT nested inside the withdraw modal like BankPickerModal below: a
           modal only mounts when its parent renders, so nesting it here meant "Add funds" set the
           state and nothing appeared — the picker was unmounted whenever the withdraw sheet was
           closed, which is every time you press Add funds. */}
+      {SHOW_CASH_WALLET ? (
       <Modal
         visible={addFundsPickerVisible}
         transparent
@@ -1626,6 +1656,7 @@ export default function WalletScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+      ) : null}
 
       <BeeWalletTopUpQrModal
         visible={beeWalletQrVisible}
