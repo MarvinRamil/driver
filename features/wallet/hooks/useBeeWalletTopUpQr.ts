@@ -7,7 +7,8 @@ interface UseBeeWalletTopUpQrReturn {
   data: BeeWalletTopUpQr | null;
   isLoading: boolean;
   error: string | null;
-  load: () => Promise<void>;
+  /** @param amount Optional top-up amount, passed to the backend for the QR it generates. */
+  load: (amount?: number | null) => Promise<void>;
   /** Drops the fetched QR so the next open starts clean rather than flashing the previous one. */
   reset: () => void;
 }
@@ -24,13 +25,13 @@ export function useBeeWalletTopUpQr(): UseBeeWalletTopUpQrReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (amount?: number | null) => {
     if (!user?.id) return;
 
     setIsLoading(true);
     setError(null);
     try {
-      setData(await payMongoOnboardingService.getBeeWalletTopUpQr(user.id));
+      setData(await payMongoOnboardingService.getBeeWalletTopUpQr(user.id, amount));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load your top-up QR code');
       setData(null);

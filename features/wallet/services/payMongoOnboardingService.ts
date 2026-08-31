@@ -68,10 +68,29 @@ class PayMongoOnboardingService {
    *
    * Fails for a driver who has not finished setup — there is no wallet of their own to credit yet,
    * and the backend deliberately refuses rather than handing back the platform's QR.
+   *
+   * @param amount Optional. Sent as `?amount=`, which fixes the figure into the code so the payer
+   * cannot mistype it. That makes the QR dynamic, and a dynamic QR **expires** — PayMongo defaults
+   * to 30 minutes, returned as `expiresAt`. Omitted, the driver gets their reusable static code,
+   * which never expires and carries no amount.
    */
-  async getBeeWalletTopUpQr(driverId: string): Promise<BeeWalletTopUpQr> {
+  async getBeeWalletTopUpQr(
+    driverId: string,
+    amount?: number | null
+  ): Promise<BeeWalletTopUpQr> {
+    // Only a positive, finite figure is worth sending; anything else is the driver having skipped
+    // the step, and an `amount=` with nothing after it reads as a malformed request.
+    //
+    // Two decimal places exactly: the backend rejects finer precision outright, because QR Ph
+    // carries the amount in the payload and a sub-centavo value yields a code that either fails to
+    // parse or silently rounds. Formatting here means that guard can never fire on us.
+    const query =
+      typeof amount === 'number' && Number.isFinite(amount) && amount > 0
+        ? `?amount=${amount.toFixed(2)}`
+        : '';
+
     const response = await apiClient.get<BeeWalletTopUpQr>(
-      `/api/drivers/${driverId}/wallet/beewallet/topup-qr`,
+      `/api/drivers/${driverId}/wallet/beewallet/topup-qr${query}`,
       { requiresAuth: true }
     );
     const payload = this.extractPayload<any>(response);
@@ -86,6 +105,9 @@ class PayMongoOnboardingService {
       merchantName: payload.merchantName ?? null,
       accountNumber: payload.accountNumber ?? null,
       expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
+      // Read from the response rather than echoing the argument back: this is what the code was
+      // actually generated with, and it is null whenever the backend fell back to the static QR.
+      amount: payload.amount != null ? Number(payload.amount) : null,
     };
   }
 

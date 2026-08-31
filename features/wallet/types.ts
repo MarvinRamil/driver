@@ -302,6 +302,16 @@ export interface BeeWalletTopUpQr {
   /** Whose wallet it credits — the driver's own name, not the platform's. */
   merchantName: string | null;
   accountNumber: string | null;
-  /** Null for a static QR: it belongs to the driver, not to one payment. */
+  /**
+   * Null for a static QR: it belongs to the driver, not to one payment.
+   *
+   * Non-null means the amount was fixed into the code, which is what makes it expire — PayMongo
+   * defaults to 30 minutes. The two always travel together.
+   */
   expiresAt: Date | null;
+  /**
+   * The amount fixed into the code, echoed back by the backend. Null for a static QR, where the
+   * payer types whatever they like.
+   */
+  amount: number | null;
 }
