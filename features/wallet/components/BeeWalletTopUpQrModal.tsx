@@ -13,6 +13,7 @@ import { useTheme } from '@/shared/hooks/use-theme';
 import { ThemedText } from '@/shared/components/themed-text';
 import { ThemedView } from '@/shared/components/themed-view';
 import { useBeeWalletTopUpQr } from '../hooks/useBeeWalletTopUpQr';
+import { useBeeWalletTopUpWatcher } from '../hooks/useBeeWalletTopUpWatcher';
 import { canSaveQrImage, saveQrImage } from '../lib/saveQrImage';
 
 interface Props {
@@ -40,13 +41,30 @@ interface Props {
  */
 export function BeeWalletTopUpQrModal({ visible, onClose }: Props) {
   const theme = useTheme();
-  const { data, isLoading, error, load } = useBeeWalletTopUpQr();
+  const { data, isLoading, error, load, reset } = useBeeWalletTopUpQr();
   const [canSave, setCanSave] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (visible) load();
   }, [visible, load]);
+
+  // Closing clears the fetched QR, so reopening shows a spinner and a fresh code rather than
+  // flashing the previous one. It also means a QR is never left on screen after the driver has
+  // moved on.
+  const close = useCallback(() => {
+    reset();
+    onClose();
+  }, [reset, onClose]);
+
+  // Nothing pushes this: PayMongo emits transaction events on the child account, so the SignalR
+  // channel that carries checkout top-ups never fires for a QR paid into the driver's own wallet.
+  // Polling the live balance while the QR is on screen is the only way to notice, and it is exactly
+  // the moment worth paying for.
+  useBeeWalletTopUpWatcher(visible, (amount) => {
+    Alert.alert('Top-up received', `₱${amount.toFixed(2)} has been added to your BeeWallet.`);
+    close();
+  });
 
   useEffect(() => {
     let active = true;
@@ -69,10 +87,10 @@ export function BeeWalletTopUpQrModal({ visible, onClose }: Props) {
   }, [data?.qrImage, isSaving]);
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={close}>
       <ThemedView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.close}>
+          <TouchableOpacity onPress={close} style={styles.close}>
             <Ionicons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
           <ThemedText style={styles.title}>Add to BeeWallet</ThemedText>

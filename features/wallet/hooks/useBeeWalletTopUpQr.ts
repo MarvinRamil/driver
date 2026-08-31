@@ -8,6 +8,8 @@ interface UseBeeWalletTopUpQrReturn {
   isLoading: boolean;
   error: string | null;
   load: () => Promise<void>;
+  /** Drops the fetched QR so the next open starts clean rather than flashing the previous one. */
+  reset: () => void;
 }
 
 /**
@@ -37,5 +39,11 @@ export function useBeeWalletTopUpQr(): UseBeeWalletTopUpQrReturn {
     }
   }, [user]);
 
-  return { data, isLoading, error, load };
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+    setIsLoading(false);
+  }, []);
+
+  return { data, isLoading, error, load, reset };
 }
