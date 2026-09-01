@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useAuth } from '@/features/auth';
@@ -24,11 +24,34 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { isLoading, error, updateProfile, changePassword, uploadProfilePicture } = useProfile();
   const { isOnline, toggleOnlineStatus, isLoading: statusLoading } = useDriverStatusContext();
   const cashBond = useCashBond();
+  const { refresh: refreshCashBond } = cashBond;
   const [cashBondQrVisible, setCashBondQrVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // The tab stays mounted, so without this the screen only ever fetches once — a cashbond that
+  // becomes payable while the app is open would never appear until a full restart. Silent so
+  // returning to the tab does not flash a skeleton over a card that is already correct.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshCashBond({ silent: true });
+    }, [refreshCashBond])
+  );
+
+  // Pull to refresh. Refreshes the signed-in user too, since most of this screen is their profile
+  // fields rather than the cashbond. Silent for the cashbond: RefreshControl already shows a
+  // spinner, and a second skeleton underneath it reads as two things loading.
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refreshUser(), refreshCashBond({ silent: true })]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshUser, refreshCashBond]);
 
   const handlePayCashBond = async () => {
     try {
@@ -281,7 +304,15 @@ export default function ProfileScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }>
         
         {/* Top App Bar */}
         <View style={[styles.topBar, { backgroundColor: theme.background + 'E6' }]}>

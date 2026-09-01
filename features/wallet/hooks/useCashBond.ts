@@ -3,12 +3,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { payMongoOnboardingService } from '../services/payMongoOnboardingService';
 import type { CashBondStatus } from '../types';
 
+interface RefreshOptions {
+  /**
+   * Refetch without showing the loading skeleton, and keep the last good status if the call
+   * fails. For refreshes the driver did not ask for — on screen focus, say — where flashing a
+   * skeleton over a card that is already correct reads as a glitch, and where dropping the card
+   * on a transient network error would look exactly like the bug this refetch exists to work
+   * around.
+   */
+  silent?: boolean;
+}
+
 interface UseCashBondReturn {
   data: CashBondStatus | null;
   isLoading: boolean;
   isPaying: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (options?: RefreshOptions) => Promise<void>;
   pay: () => Promise<CashBondStatus>;
 }
 
@@ -21,41 +32,48 @@ interface UseCashBondReturn {
  */
 export function useCashBond(): UseCashBondReturn {
   const { user } = useAuth();
+  // Destructured rather than depending on `user` itself: the callbacks below are used as
+  // useFocusEffect deps by the profile screen, so an auth context that hands back a new object
+  // each render would turn "refetch on focus" into a refetch loop.
+  const userId = user?.id;
+  const role = user?.role;
   const [data, setData] = useState<CashBondStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!user?.id || user.role !== 'Driver') {
+  const refresh = useCallback(async ({ silent = false }: RefreshOptions = {}) => {
+    if (!userId || role !== 'Driver') {
       setData(null);
       setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     setError(null);
     try {
-      setData(await payMongoOnboardingService.getCashBondStatus(user.id));
+      setData(await payMongoOnboardingService.getCashBondStatus(userId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load your cashbond status');
-      setData(null);
+      // A silent refresh keeps whatever was already on screen: a failed background poll should
+      // not blank out a card the driver is looking at.
+      if (!silent) setData(null);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
-  }, [user]);
+  }, [userId, role]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   const pay = useCallback(async () => {
-    if (!user?.id) throw new Error('Not signed in');
+    if (!userId) throw new Error('Not signed in');
 
     setIsPaying(true);
     setError(null);
     try {
-      const result = await payMongoOnboardingService.payCashBond(user.id);
+      const result = await payMongoOnboardingService.payCashBond(userId);
       setData(result);
       return result;
     } catch (err) {
@@ -65,7 +83,7 @@ export function useCashBond(): UseCashBondReturn {
     } finally {
       setIsPaying(false);
     }
-  }, [user]);
+  }, [userId]);
 
   return { data, isLoading, isPaying, error, refresh, pay };
 }
