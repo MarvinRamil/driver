@@ -14,8 +14,39 @@ export type WalletTransactionType =
   | 'CashSettlementDebit'
   | 'WalletTransferIn'
   | 'WalletTransferOut'
-  | 'CashDeficitAdjustment';
+  | 'CashDeficitAdjustment'
+  | 'EarningReversal'
+  | 'AccountFee';
 export type WalletBucket = 'Personal' | 'TopUp';
+
+/**
+ * What a driver sees for each transaction type.
+ *
+ * Derived from the type rather than shown from `description`, because the stored description is
+ * internal: it carries booking GUIDs ("Earning from booking 3f2a91c…"), provider names and period
+ * keys. Mapping here also fixes rows that were already written, which changing the backend copy
+ * would not.
+ *
+ * Colocated with WalletTransactionType on purpose — adding a type without a label is then visible
+ * in the same file rather than silently falling through to the default.
+ */
+const TRANSACTION_LABELS: Record<WalletTransactionType, string> = {
+  Earning: 'Earnings',
+  EarningReversal: 'Earnings reversed',
+  TopUp: 'Top-up',
+  Withdrawal: 'Withdrawal',
+  Payout: 'Payout',
+  Refund: 'Refund',
+  CashSettlementDebit: 'Deduction',
+  CashDeficitAdjustment: 'Adjustment',
+  WalletTransferIn: 'Transferred in',
+  WalletTransferOut: 'Transferred out',
+  AccountFee: 'Account fee',
+};
+
+export function transactionLabel(type: WalletTransactionType | string): string {
+  return TRANSACTION_LABELS[type as WalletTransactionType] ?? 'Transaction';
+}
 
 /**
  * Wallet transaction interface
@@ -168,4 +199,119 @@ export interface UpdateSavedWithdrawalMethodRequest {
   accountNumber?: string;
   accountHolderName?: string;
   isDefault?: boolean;
+}
+
+/**
+ * Where a driver is in PayMongo wallet setup.
+ *
+ * `Declined` is terminal: PayMongo's risk review cannot be appealed and the account cannot be
+ * reused, so the UI must route to support rather than offering a retry.
+ */
+export type PayMongoOnboardingStatus =
+  | 'None'
+  | 'Pending'
+  | 'Verifying'
+  | 'Verified'
+  | 'Activated'
+  | 'Declined';
+
+export interface PayMongoOnboarding {
+  status: PayMongoOnboardingStatus;
+  accountId: string | null;
+  /**
+   * The address the wallet was opened under. Not always the driver's plain email — if theirs was
+   * already registered with PayMongo it becomes a plus-tagged variant, which still reaches the
+   * same inbox. Frozen once the wallet is active.
+   */
+  accountEmail: string | null;
+  walletAccountNumber: string | null;
+  /**
+   * Hosted identity-verification link, present only on the response that issues a session.
+   * Not stored or replayed: sessions expire in ~72 hours and a stale link is indistinguishable
+   * from a broken one to the driver.
+   */
+  verificationUrl: string | null;
+  verificationExpiresAt: Date | null;
+  /**
+   * Why the last identity check failed, in the driver's terms — e.g. "Image quality check failed:
+   * blur detection". Usually one retry away from passing, so it must be shown rather than leaving
+   * them on a screen that says nothing.
+   */
+  verificationFailureReason: string | null;
+  /** True once the wallet exists AND is addressable, so earnings can actually be paid into it. */
+  walletReady: boolean;
+}
+
+/**
+ * Details PayMongo requires before it will activate a wallet.
+ *
+ * Country is fixed server-side. `addressState` is an ISO 3166-2 code such as "PH-ILN", not a
+ * province name.
+ */
+export interface PayMongoOnboardingDetailsInput {
+  nationality: string;
+  natureOfWork: string;
+  sourceOfFunds: string;
+  /**
+   * Optional. Proven against live activation: TIN is not in the required set, despite PayMongo's
+   * activation guide listing it as a prerequisite. Requiring it would gate out every rider who
+   * does not have one.
+   */
+  tin?: string;
+  placeOfBirthCity: string;
+  addressLine1: string;
+  addressCity: string;
+  addressState: string;
+  addressPostalCode: string;
+  middleName?: string;
+  sourceOfFundsOther?: string;
+  /**
+   * Required by PayMongo activation. Falls back to the driver's profile when omitted, but the
+   * profile is not always populated — and the rejection lands after the account already exists.
+   */
+  mobileNumber?: string;
+}
+
+/**
+ * What a driver can withdraw, and why it differs from their balance.
+ *
+ * Once earnings sit in the driver's own PayMongo wallet the transfer fee comes out of that same
+ * wallet, so `withdrawable` is always less than `balance`. On the original path the platform
+ * absorbs the fee and the two are equal.
+ */
+export interface WithdrawableBalance {
+  balance: number;
+  withdrawable: number;
+  /** Estimated. The amount actually charged is read back from the transfer. */
+  fee: number;
+  feePaidByDriver: boolean;
+}
+
+/**
+ * A QR the driver scans to add money to their own BeeWallet wallet.
+ *
+ * Credits land in real time over InstaPay rather than waiting on payment settlement — which is why
+ * this replaces the checkout, whose QR showed the platform as the merchant and only reached a
+ * wallet on the weekly settlement run.
+ */
+export interface BeeWalletTopUpQr {
+  /** Raw EMV payload, for copy-to-clipboard and support comparison. */
+  qrString: string;
+  /** PNG data URI, rendered server-side so the app needs no native QR dependency. */
+  qrImage: string;
+  /** Whose wallet it credits — the driver's own name, not the platform's. */
+  merchantName: string | null;
+  accountNumber: string | null;
+  /**
+   * Null for a static QR: it belongs to the driver, not to one payment.
+   *
+   * Non-null means the amount was fixed into the code, which is what makes it expire — PayMongo
+   * defaults to 30 minutes. The two always travel together.
+   */
+  expiresAt: Date | null;
+  /**
+   * The amount fixed into the code, echoed back by the backend. Null for a static QR, where the
+   * payer types whatever they like.
+   */
+  amount: number | null;
 }

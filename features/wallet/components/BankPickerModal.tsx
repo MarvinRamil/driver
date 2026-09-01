@@ -1,6 +1,6 @@
 import { ThemedText } from '@/shared/components/themed-text';
 import { useTheme } from '@/shared/hooks/use-theme';
-import { maxAmountFor, type PhBank } from '@/shared/constants/banks';
+import { maxAmountFor, railFor, type PhBank } from '@/shared/constants/banks';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import {
@@ -115,7 +115,7 @@ export function BankPickerModal({
           <ThemedText style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>
             {overLimit
               ? `Max ₱${limit.toLocaleString()} per transfer`
-              : bank.instapay
+              : railFor(bank, amount) === 'instapay'
                 ? 'Instant · 24/7'
                 : 'Arrives next banking day'}
           </ThemedText>

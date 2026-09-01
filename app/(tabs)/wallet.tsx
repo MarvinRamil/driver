@@ -19,6 +19,10 @@ import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "@/features/auth";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useWallet } from "@/features/wallet";
+import { transactionLabel } from "@/features/wallet/types";
+import { BeeWalletTopUpQrModal } from "@/features/wallet/components/BeeWalletTopUpQrModal";
+import { usePayMongoOnboarding } from "@/features/wallet/hooks/usePayMongoOnboarding";
+import { useWithdrawableBalance } from "@/features/wallet/hooks/useWithdrawableBalance";
 import { useWalletTransactions } from "@/features/wallet";
 import {
   useCashEligibility,
@@ -48,6 +52,21 @@ const TOP_UP_BROWSER_OPTIONS: WebBrowser.WebBrowserOpenOptions = {
   controlsColor: "#000000",
 };
 
+/**
+ * Whether the Cash Wallet and the money-between-buckets transfer are shown.
+ *
+ * Off for now: the wallet screen is BeeWallet only. Everything behind this flag is left in place
+ * rather than deleted — the bucket still exists on the backend, still holds cash collected from
+ * customers and still gates cash jobs, so this is a UI decision that is expected to be reversed.
+ *
+ * Flip to true to bring back the balance card, the Transfer action, the transfer modal and the
+ * add-funds picker together; they only make sense as a set.
+ *
+ * Not gated by this: the plain amount modal behind "Add funds" before wallet setup is finished.
+ * That funds the verification fee, and without it a new driver cannot onboard at all.
+ */
+const SHOW_CASH_WALLET = false;
+
 export default function WalletScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -62,6 +81,18 @@ export default function WalletScreen() {
     applyBalances,
     clearError: clearWalletError,
   } = useWallet();
+  // Drives the setup prompt below. Null until loaded, and once walletReady is true the prompt
+  // disappears for good.
+  const { data: payMongoOnboarding, refresh: refreshOnboarding } = usePayMongoOnboarding();
+  // Not derived from personalBalance: once a driver's money sits in their own PayMongo wallet the
+  // transfer fee comes out of it, so the withdrawable maximum is strictly less than the balance.
+  const { data: withdrawable, refresh: refreshWithdrawable } = useWithdrawableBalance();
+  // "Add funds" has two destinations whenever the Cash Wallet is shown, because they are genuinely
+  // different money: BeeWallet is the driver's own wallet (instant, QR), Cash Wallet is ours and
+  // must be able to go negative for COD settlement, so it still goes through the platform checkout.
+  // Under SHOW_CASH_WALLET=false there is only one, and this picker never opens.
+  const [addFundsPickerVisible, setAddFundsPickerVisible] = useState(false);
+  const [beeWalletQrVisible, setBeeWalletQrVisible] = useState(false);
   const {
     transactions,
     isLoading: isLoadingTransactions,
@@ -122,6 +153,11 @@ export default function WalletScreen() {
       refreshTopUps(),
       refreshWithdrawals(),
       refreshHistory(),
+      // Both of these were missing, and the tab stays mounted — so after a driver finished wallet
+      // setup the banner kept showing the state from before they started, while the setup screen
+      // itself read fresh data and said the wallet was ready. Two screens, two different answers.
+      refreshOnboarding(),
+      refreshWithdrawable(),
     ]);
   }, [
     refresh,
@@ -130,6 +166,8 @@ export default function WalletScreen() {
     refreshTopUps,
     refreshWithdrawals,
     refreshHistory,
+    refreshOnboarding,
+    refreshWithdrawable,
   ]);
 
   const closeWithdrawalSuccessAndRefresh = useCallback(async () => {
@@ -249,8 +287,8 @@ export default function WalletScreen() {
   const handleCancelTopUp = (topUpId: string) => {
     if (!user?.id) return;
     Alert.alert(
-      "Cancel top-up",
-      "Are you sure you want to cancel this top-up? You will need to create a new one to pay.",
+      "Cancel payment",
+      "Are you sure you want to cancel this payment? You will need to start a new one.",
       [
         { text: "No", style: "cancel" },
         {
@@ -263,7 +301,7 @@ export default function WalletScreen() {
             } catch (e) {
               Alert.alert(
                 "Error",
-                e instanceof Error ? e.message : "Failed to cancel top-up",
+                e instanceof Error ? e.message : "Could not cancel this payment",
               );
             }
           },
@@ -275,12 +313,12 @@ export default function WalletScreen() {
   const handleCreateTopUp = async () => {
     const amount = Number(topUpAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid top-up amount.");
+      Alert.alert("Invalid Amount", "Please enter a valid amount.");
       return;
     }
 
     if (amount > 5000) {
-      Alert.alert("Limit Exceeded", "Maximum top-up amount is ₱5000 per transaction.");
+      Alert.alert("Limit Exceeded", "You can add up to ₱5,000 at a time.");
       return;
     }
 
@@ -288,7 +326,7 @@ export default function WalletScreen() {
       const topUp = await createTopUp(
         amount,
         undefined,
-        "Driver top-up wallet funding",
+        "Cash float top-up",
       );
       setTopUpModalVisible(false);
       if (topUp.xenditInvoiceUrl) {
@@ -304,28 +342,28 @@ export default function WalletScreen() {
               await Linking.openURL(topUp.xenditInvoiceUrl);
             } else {
               Alert.alert(
-                "Top-up Created",
+                "Payment Created",
                 "Invoice was created, but your device cannot open the payment link.",
               );
             }
           } catch {
             Alert.alert(
-              "Top-up Created",
+              "Payment Created",
               "Invoice created, but failed to open link automatically.",
             );
           }
         }
       } else {
         Alert.alert(
-          "Top-up Created",
-          "Top-up request created. You can open it from Top-up History.",
+          "Payment Created",
+          "Payment created. You can open it again from Payment History.",
         );
       }
       await onRefreshAll();
     } catch (err) {
       Alert.alert(
-        "Top-up Failed",
-        err instanceof Error ? err.message : "Unable to create top-up",
+        "Could Not Add Funds",
+        err instanceof Error ? err.message : "Could not add funds",
       );
     }
   };
@@ -379,6 +417,22 @@ export default function WalletScreen() {
     const amount = Number(withdrawAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       Alert.alert("Invalid Amount", "Please enter a valid amount.");
+      return;
+    }
+
+    // Checked here rather than left to the backend so the driver sees the number they CAN
+    // withdraw. PayMongo takes its fee from the same wallet, so asking for the full balance is
+    // always rejected - and "your withdrawal failed" reads as a broken app, not a fixable amount.
+    if (withdrawable && withdrawable.feePaidByDriver && amount > withdrawable.withdrawable) {
+      Alert.alert(
+        "Amount Too Large",
+        withdrawable.withdrawable > 0
+          ? `You can withdraw up to ₱${withdrawable.withdrawable.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}. A ₱${withdrawable.fee.toFixed(2)} transfer fee is taken from your wallet on top of the amount.`
+          : `Your balance doesn't cover the ₱${withdrawable.fee.toFixed(2)} transfer fee yet.`
+      );
       return;
     }
 
@@ -481,7 +535,7 @@ export default function WalletScreen() {
 
   const openTopUpLink = async (url?: string | null) => {
     if (!url) {
-      Alert.alert("No Link", "This top-up has no invoice URL.");
+      Alert.alert("No Link", "This payment has no link to open.");
       return;
     }
 
@@ -565,7 +619,7 @@ export default function WalletScreen() {
                 <ThemedText
                   style={[styles.walletCardLabel, { color: "#9ca3af" }]}
                 >
-                  Personal Wallet (Net Earnings)
+                  BeeWallet
                 </ThemedText>
                 <View
                   style={[styles.verifiedBadge, { backgroundColor: "#1f2937" }]}
@@ -676,7 +730,7 @@ export default function WalletScreen() {
                   <ThemedText
                     style={[styles.earningsRowLabel, { color: theme.error }]}
                   >
-                    System Commission
+                    Platform fee
                   </ThemedText>
                 </View>
                 <ThemedText
@@ -768,7 +822,51 @@ export default function WalletScreen() {
           )}
         </View>
 
+        {/* Wallet setup prompt. Shown only until the driver's wallet is ready, and deliberately
+            never mentions PayMongo or "creating an account" - that is infrastructure. */}
+        {payMongoOnboarding && !payMongoOnboarding.walletReady ? (
+          <TouchableOpacity
+            style={[
+              styles.summaryCard,
+              { backgroundColor: theme.surface, borderColor: theme.primary },
+            ]}
+            // `as any` matches the saved-withdrawal-methods call below: .expo/types/router.d.ts
+            // is generated and only picks up new routes on the next `expo start`.
+            onPress={() => router.push("/wallet/setup" as any)}
+          >
+            <View style={styles.setupRow}>
+              <Ionicons
+                name={
+                  payMongoOnboarding.status === "Declined"
+                    ? "alert-circle-outline"
+                    : "wallet-outline"
+                }
+                size={22}
+                color={
+                  payMongoOnboarding.status === "Declined" ? theme.error : theme.primary
+                }
+              />
+              <View style={styles.setupTextWrap}>
+                <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
+                  {payMongoOnboarding.status === "Declined"
+                    ? "Wallet setup was declined"
+                    : "Finish setting up your wallet"}
+                </ThemedText>
+                <ThemedText
+                  style={[styles.summarySubtext, { color: theme.textSecondary }]}
+                >
+                  {payMongoOnboarding.status === "Declined"
+                    ? "Tap for help from support"
+                    : "Needed before you can be paid into BeeWallet"}
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Top-up wallet status */}
+        {SHOW_CASH_WALLET ? (
         <View
           style={[
             styles.summaryCard,
@@ -776,7 +874,10 @@ export default function WalletScreen() {
           ]}
         >
           <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
-            Top-up Wallet
+            Cash Wallet
+          </ThemedText>
+          <ThemedText style={[styles.summarySubtext, { color: theme.textSecondary }]}>
+            Covers cash you collect from customers
           </ThemedText>
           {isWalletLoading ? (
             <>
@@ -818,12 +919,23 @@ export default function WalletScreen() {
             </>
           )}
         </View>
+        ) : null}
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
+          {/* With the Cash Wallet hidden there is nothing to pick between, so this goes straight
+              to the BeeWallet QR. Before setup is finished there is no BeeWallet to credit — the
+              backend refuses a QR for one — and the driver still has to fund the verification fee,
+              so that case keeps the plain amount modal either way. */}
           <TouchableOpacity
             style={styles.quickAction}
-            onPress={() => setTopUpModalVisible(true)}
+            onPress={() =>
+              !payMongoOnboarding?.walletReady
+                ? setTopUpModalVisible(true)
+                : SHOW_CASH_WALLET
+                  ? setAddFundsPickerVisible(true)
+                  : setBeeWalletQrVisible(true)
+            }
           >
             <View
               style={[
@@ -836,9 +948,10 @@ export default function WalletScreen() {
             <ThemedText
               style={[styles.quickActionLabel, { color: theme.textSecondary }]}
             >
-              Top Up
+              Add funds
             </ThemedText>
           </TouchableOpacity>
+          {SHOW_CASH_WALLET ? (
           <TouchableOpacity
             style={styles.quickAction}
             onPress={() => setTransferModalVisible(true)}
@@ -857,6 +970,7 @@ export default function WalletScreen() {
               Transfer
             </ThemedText>
           </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.quickAction}
             onPress={() => setWithdrawModalVisible(true)}
@@ -1006,7 +1120,7 @@ export default function WalletScreen() {
                             { color: theme.text },
                           ]}
                         >
-                          {transaction.description}
+                          {transactionLabel(transaction.type)}
                         </ThemedText>
                         <ThemedText
                           style={[
@@ -1048,14 +1162,14 @@ export default function WalletScreen() {
           )}
         </View>
 
-        {/* Top-up History */}
+        {/* Payment History */}
         <View style={styles.activitySection}>
           <View style={styles.activityHeader}>
             <ThemedText
               type="subtitle"
               style={[styles.activityTitle, { color: theme.text }]}
             >
-              Top-up History
+              Payment History
             </ThemedText>
           </View>
           {topUps.length === 0 ? (
@@ -1347,7 +1461,7 @@ export default function WalletScreen() {
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
             <ThemedText type="subtitle" style={{ color: theme.text }}>
-              Create Top-up
+              Add funds
             </ThemedText>
             <TextInput
               value={topUpAmount}
@@ -1380,6 +1494,7 @@ export default function WalletScreen() {
         </View>
       </Modal>
 
+      {SHOW_CASH_WALLET ? (
       <Modal
         visible={transferModalVisible}
         animationType="slide"
@@ -1392,7 +1507,7 @@ export default function WalletScreen() {
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
             <ThemedText type="subtitle" style={{ color: theme.text }}>
-              Transfer Wallet Balance
+              Move money
             </ThemedText>
             <View style={styles.transferToggle}>
               <TouchableOpacity
@@ -1413,7 +1528,7 @@ export default function WalletScreen() {
                     color: transferFrom === "Personal" ? "#111" : theme.text,
                   }}
                 >
-                  From Personal
+                  From BeeWallet
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1432,7 +1547,7 @@ export default function WalletScreen() {
                     color: transferFrom === "TopUp" ? "#111" : theme.text,
                   }}
                 >
-                  From Top-up
+                  From Cash Wallet
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -1478,6 +1593,79 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
+      ) : null}
+
+      {/* Which wallet are they funding? Only asked once BeeWallet exists — before that there is
+          only one destination and a choice would be noise. Hidden with the Cash Wallet, since one
+          destination is again the only one.
+
+          Kept at top level, NOT nested inside the withdraw modal like BankPickerModal below: a
+          modal only mounts when its parent renders, so nesting it here meant "Add funds" set the
+          state and nothing appeared — the picker was unmounted whenever the withdraw sheet was
+          closed, which is every time you press Add funds. */}
+      {SHOW_CASH_WALLET ? (
+      <Modal
+        visible={addFundsPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddFundsPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setAddFundsPickerVisible(false)}
+        >
+          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
+            <ThemedText type="subtitle" style={{ color: theme.text, marginBottom: 12 }}>
+              Add funds to
+            </ThemedText>
+
+            <TouchableOpacity
+              style={[styles.addFundsOption, { borderColor: theme.border }]}
+              onPress={() => {
+                setAddFundsPickerVisible(false);
+                setBeeWalletQrVisible(true);
+              }}
+            >
+              <Ionicons name="qr-code-outline" size={22} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>BeeWallet</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  Scan to add money — arrives straight away
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.addFundsOption, { borderColor: theme.border }]}
+              onPress={() => {
+                setAddFundsPickerVisible(false);
+                setTopUpModalVisible(true);
+              }}
+            >
+              <Ionicons name="card-outline" size={22} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cash Wallet</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  Covers cash you collect from customers
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      ) : null}
+
+      <BeeWalletTopUpQrModal
+        visible={beeWalletQrVisible}
+        onClose={() => {
+          setBeeWalletQrVisible(false);
+          // The money lands in real time, so refresh rather than leaving a stale balance behind.
+          onRefreshAll({ silent: true });
+        }}
+      />
 
       <Modal
         visible={withdrawModalVisible}
@@ -1555,6 +1743,37 @@ export default function WalletScreen() {
                     placeholder="Amount"
                     placeholderTextColor={theme.textMuted}
                   />
+
+                  {/* Shown only when the fee actually comes out of the driver's wallet. On the
+                      original path the platform absorbs it, and displaying a deduction that does
+                      not apply to them would be simply wrong. */}
+                  {withdrawable?.feePaidByDriver ? (
+                    <View style={styles.withdrawableRow}>
+                      <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>
+                        You can withdraw up to ₱
+                        {withdrawable.withdrawable.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        {" · ₱"}
+                        {withdrawable.fee.toFixed(2)} transfer fee
+                      </ThemedText>
+                      <TouchableOpacity
+                        onPress={() => setWithdrawAmount(String(withdrawable.withdrawable))}
+                        disabled={withdrawable.withdrawable <= 0}
+                      >
+                        <ThemedText
+                          style={{
+                            color: withdrawable.withdrawable > 0 ? theme.primary : theme.textMuted,
+                            fontSize: 12,
+                            fontWeight: "600",
+                          }}
+                        >
+                          Max
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
 
                   {/* Destination: a bank/e-wallet account, or a scanned QR Ph code */}
                   <View style={{ flexDirection: "row", marginBottom: 16, gap: 8 }}>
@@ -1858,7 +2077,8 @@ export default function WalletScreen() {
 
           {/* Nested inside the withdraw modal so they stack above it rather than
               fighting it for the screen. */}
-          <BankPickerModal
+
+      <BankPickerModal
             visible={bankPickerVisible}
             banks={banks}
             isLoading={isLoadingBanks}
@@ -2151,6 +2371,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   // Matches the summaryValue line height so the card keeps its size while loading
+  setupRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  addFundsOption: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10,
+  },
+  withdrawableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: -8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  setupTextWrap: { flex: 1, gap: 2 },
   summaryValueSkeleton: {
     height: 29,
     justifyContent: "center",

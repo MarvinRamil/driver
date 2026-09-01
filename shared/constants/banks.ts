@@ -30,9 +30,30 @@ export const RAIL_LIMITS = {
   PESONET: 10_000_000,
 } as const;
 
-/** The fastest rail an institution supports decides how much it can take at once. */
+/**
+ * The most an institution can receive in one transfer.
+ *
+ * This is the HIGHEST-capacity rail it supports, not the fastest. A bank on both rails takes up to
+ * PESONet's ceiling — anything over InstaPay's ₱50,000 simply routes over PESONet instead, which is
+ * exactly what the backend's WithdrawalRailSelector does. Returning the InstaPay limit for such a
+ * bank disabled it in the picker for amounts the server would have accepted.
+ */
 export function maxAmountFor(bank: Pick<PhBank, 'instapay' | 'pesonet'>): number {
-  return bank.instapay ? RAIL_LIMITS.INSTAPAY : RAIL_LIMITS.PESONET;
+  if (bank.pesonet) return RAIL_LIMITS.PESONET;
+  return bank.instapay ? RAIL_LIMITS.INSTAPAY : 0;
+}
+
+/**
+ * Which rail an amount will actually travel on, mirroring the backend's selection: InstaPay when
+ * the institution supports it AND the amount fits, otherwise PESONet.
+ */
+export function railFor(
+  bank: Pick<PhBank, 'instapay' | 'pesonet'>,
+  amount: number | null | undefined
+): 'instapay' | 'pesonet' | null {
+  if (bank.instapay && (amount == null || amount <= RAIL_LIMITS.INSTAPAY)) return 'instapay';
+  if (bank.pesonet) return 'pesonet';
+  return bank.instapay ? 'instapay' : null;
 }
 
 /** E-wallets first, then banks — the order the picker renders them in. */
