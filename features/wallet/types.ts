@@ -301,6 +301,25 @@ export interface CashBondStatus {
 }
 
 /**
+ * The QR that pays a driver's cashbond into the *platform* wallet.
+ *
+ * Deliberately not the driver's own BeeWallet: the cashbond is collateral the platform holds, and
+ * it falls due before BeeWallet onboarding has even happened — so there is no child wallet to pay
+ * from yet. Routing it through the driver's wallet would also make it briefly their money, and
+ * therefore withdrawable before we collected it.
+ */
+export interface CashBondQr {
+  /** The raw EMV payload. Kept for saving/sharing; not what gets displayed. */
+  qrString: string;
+  /** The payload rendered to a PNG data URI server-side, so the app needs no native QR library. */
+  qrImage: string;
+  amount: number;
+  /** Identifies which cashbond payment this code settles. */
+  referenceLabel: string;
+  expiresAt: Date | null;
+}
+
+/**
  * A QR the driver scans to add money to their own BeeWallet wallet.
  *
  * Credits land in real time over InstaPay rather than waiting on payment settlement — which is why

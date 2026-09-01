@@ -7,7 +7,6 @@ import { useTheme } from '@/shared/hooks/use-theme';
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
-import { useCashBond, BeeWalletTopUpQrModal } from '@/features/wallet';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
 import { Skeleton } from '@/shared/components/skeleton';
@@ -27,43 +26,26 @@ export default function ProfileScreen() {
   const { user, logout, refreshUser } = useAuth();
   const { isLoading, error, updateProfile, changePassword, uploadProfilePicture } = useProfile();
   const { isOnline, toggleOnlineStatus, isLoading: statusLoading } = useDriverStatusContext();
-  const cashBond = useCashBond();
-  const { refresh: refreshCashBond } = cashBond;
-  const [cashBondQrVisible, setCashBondQrVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // The tab stays mounted, so without this the screen only ever fetches once — a cashbond that
-  // becomes payable while the app is open would never appear until a full restart. Silent so
-  // returning to the tab does not flash a skeleton over a card that is already correct.
+  // The tab stays mounted, so without this the screen only ever fetches once and edits made
+  // elsewhere never show up here.
   useFocusEffect(
     useCallback(() => {
-      void refreshCashBond({ silent: true });
-    }, [refreshCashBond])
+      void refreshUser();
+    }, [refreshUser])
   );
 
-  // Pull to refresh. Refreshes the signed-in user too, since most of this screen is their profile
-  // fields rather than the cashbond. Silent for the cashbond: RefreshControl already shows a
-  // spinner, and a second skeleton underneath it reads as two things loading.
+  // Pull to refresh.
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([refreshUser(), refreshCashBond({ silent: true })]);
+      await refreshUser();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refreshUser, refreshCashBond]);
+  }, [refreshUser]);
 
-  const handlePayCashBond = async () => {
-    try {
-      await cashBond.pay();
-      Alert.alert('Cashbond paid', 'Your cashbond has been paid and is now held as refundable collateral.');
-    } catch (err) {
-      Alert.alert(
-        'Could not pay cashbond',
-        err instanceof Error ? err.message : 'Please try again.'
-      );
-    }
-  };
   const [profileImageUri, setProfileImageUri] = useState<string | null>(
     user?.profilePictureUrl || null
   );
@@ -740,98 +722,6 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Cashbond — a one-time, fixed deposit priced by vehicle type, required before the driver
-            can be offered bookings. Nothing renders while amountDue is null: that means no rate is
-            configured yet for this driver's vehicle type, and blocking the whole account page over
-            missing admin config would be worse than staying silent. */}
-        {cashBond.data?.amountDue != null && (
-          <View style={styles.section}>
-            <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.text }]}>
-              Cashbond
-            </ThemedText>
-            {cashBond.isLoading ? (
-              <View style={{ marginHorizontal: 16 }}>
-                <Skeleton width="100%" height={88} radius={12} />
-              </View>
-            ) : cashBond.data.paid ? (
-              <View
-                style={[
-                  styles.cashBondCard,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
-                ]}>
-                <View style={[styles.supportIcon, { backgroundColor: theme.success + '20' }]}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color={theme.success} />
-                </View>
-                <View style={styles.supportContent}>
-                  <ThemedText style={[styles.supportTitle, { color: theme.text }]}>
-                    Cashbond paid
-                  </ThemedText>
-                  <ThemedText style={[styles.supportSubtitle, { color: theme.textSecondary }]}>
-                    ₱{cashBond.data.cashBondBalance.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                    held as refundable collateral
-                  </ThemedText>
-                </View>
-              </View>
-            ) : (
-              <View
-                style={[
-                  styles.cashBondCard,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
-                ]}>
-                <View style={[styles.supportIcon, { backgroundColor: theme.error + '20' }]}>
-                  <Ionicons name="alert-circle-outline" size={20} color={theme.error} />
-                </View>
-                <View style={styles.supportContent}>
-                  <ThemedText style={[styles.supportTitle, { color: theme.text }]}>
-                    Cashbond required
-                  </ThemedText>
-                  <ThemedText style={[styles.supportSubtitle, { color: theme.textSecondary }]}>
-                    Pay ₱{cashBond.data.amountDue.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                    before you can be offered bookings
-                  </ThemedText>
-                </View>
-              </View>
-            )}
-            {!cashBond.isLoading && !cashBond.data.paid && (
-              <>
-                <TouchableOpacity
-                  style={[styles.editButton, { backgroundColor: theme.primary, marginTop: 12 }]}
-                  disabled={cashBond.isPaying}
-                  onPress={handlePayCashBond}>
-                  {cashBond.isPaying ? (
-                    <ActivityIndicator color="#111" />
-                  ) : (
-                    <ThemedText style={[styles.editButtonText, { color: '#111' }]}>
-                      Pay Cashbond
-                    </ThemedText>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.cashBondFundLink}
-                  onPress={() => setCashBondQrVisible(true)}>
-                  <ThemedText style={[styles.supportSubtitle, { color: theme.primary }]}>
-                    Need to fund your wallet first? Tap here
-                  </ThemedText>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        )}
-
-        <BeeWalletTopUpQrModal
-          visible={cashBondQrVisible}
-          onClose={() => setCashBondQrVisible(false)}
-          initialAmount={cashBond.data?.amountDue ?? undefined}
-          onFunded={() => {
-            void handlePayCashBond();
-          }}
-        />
 
         {/* Delete Account */}
         <TouchableOpacity
@@ -1092,20 +982,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginHorizontal: 16,
     gap: 12,
-  },
-  cashBondCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginHorizontal: 16,
-    gap: 12,
-  },
-  cashBondFundLink: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    marginHorizontal: 16,
   },
   supportIcon: {
     width: 40,

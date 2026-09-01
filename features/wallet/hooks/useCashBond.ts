@@ -1,7 +1,7 @@
 import { useAuth } from '@/features/auth';
 import { useCallback, useEffect, useState } from 'react';
 import { payMongoOnboardingService } from '../services/payMongoOnboardingService';
-import type { CashBondStatus } from '../types';
+import type { CashBondQr, CashBondStatus } from '../types';
 
 interface RefreshOptions {
   /**
@@ -17,18 +17,24 @@ interface RefreshOptions {
 interface UseCashBondReturn {
   data: CashBondStatus | null;
   isLoading: boolean;
-  isPaying: boolean;
+  isCreatingQr: boolean;
   error: string | null;
   refresh: (options?: RefreshOptions) => Promise<void>;
-  pay: () => Promise<CashBondStatus>;
+  /**
+   * Issues the QR that pays the cashbond into the platform wallet. Replaces the old `pay()`, which
+   * swept the driver's own BeeWallet — that could not work, since the cashbond falls due before
+   * BeeWallet onboarding exists.
+   */
+  createQr: () => Promise<CashBondQr>;
 }
 
 /**
- * Where the driver stands on their cashbond, and the action to pay it.
+ * Where the driver stands on their cashbond, and the way to pay it.
  *
- * `pay()` writes the response straight into state rather than triggering a refetch — same
- * principle as `useWallet`'s `applyBalances`: the POST already returns the settled status, so a
- * second round trip would only add a delay before the screen agrees with itself.
+ * `createQr()` does not write the status into state, unlike the `pay()` it replaces: issuing a QR
+ * is not a payment. The cashbond only becomes paid when the driver actually scans it and the
+ * platform account's `qr.paid` webhook settles it, so the screen learns about it through a refresh
+ * — which is what the focus refetch and pull-to-refresh exist for.
  */
 export function useCashBond(): UseCashBondReturn {
   const { user } = useAuth();
@@ -39,7 +45,7 @@ export function useCashBond(): UseCashBondReturn {
   const role = user?.role;
   const [data, setData] = useState<CashBondStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPaying, setIsPaying] = useState(false);
+  const [isCreatingQr, setIsCreatingQr] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async ({ silent = false }: RefreshOptions = {}) => {
@@ -67,23 +73,21 @@ export function useCashBond(): UseCashBondReturn {
     refresh();
   }, [refresh]);
 
-  const pay = useCallback(async () => {
+  const createQr = useCallback(async () => {
     if (!userId) throw new Error('Not signed in');
 
-    setIsPaying(true);
+    setIsCreatingQr(true);
     setError(null);
     try {
-      const result = await payMongoOnboardingService.payCashBond(userId);
-      setData(result);
-      return result;
+      return await payMongoOnboardingService.createCashBondQr(userId);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not pay your cashbond';
+      const message = err instanceof Error ? err.message : 'Could not create your cashbond QR';
       setError(message);
       throw new Error(message);
     } finally {
-      setIsPaying(false);
+      setIsCreatingQr(false);
     }
   }, [userId]);
 
-  return { data, isLoading, isPaying, error, refresh, pay };
+  return { data, isLoading, isCreatingQr, error, refresh, createQr };
 }

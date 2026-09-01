@@ -1,6 +1,7 @@
 import { apiClient } from '@/shared/services/apiClient';
 import type {
   BeeWalletTopUpQr,
+  CashBondQr,
   CashBondStatus,
   PayMongoOnboarding,
   PayMongoOnboardingDetailsInput,
@@ -119,6 +120,35 @@ class PayMongoOnboardingService {
       amountDue: raw?.amountDue != null ? Number(raw.amountDue) : null,
       cashBondBalance: Number(raw?.cashBondBalance ?? 0),
       paid: Boolean(raw?.paid),
+    };
+  }
+
+  /**
+   * Issues the QR that pays the cashbond into the platform wallet.
+   *
+   * Safe to call again: an outstanding payment re-issues a code for the same transaction rather
+   * than opening a second one, so a driver who closes the sheet and reopens it does not end up
+   * with two live codes for one debt.
+   */
+  async createCashBondQr(driverId: string): Promise<CashBondQr> {
+    const response = await apiClient.post<CashBondQr>(
+      `/api/drivers/${driverId}/wallet/cashbond/qr`,
+      { requiresAuth: true }
+    );
+    const payload = this.extractPayload<any>(response);
+    if (!payload) {
+      throw new Error(
+        (response as any)?.data?.message ??
+          (response as any)?.message ??
+          'Could not create your cashbond QR'
+      );
+    }
+    return {
+      qrString: payload.qrString ?? '',
+      qrImage: payload.qrImage ?? '',
+      amount: Number(payload.amount ?? 0),
+      referenceLabel: payload.referenceLabel ?? '',
+      expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
     };
   }
 
