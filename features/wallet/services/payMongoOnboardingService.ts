@@ -1,6 +1,7 @@
 import { apiClient } from '@/shared/services/apiClient';
 import type {
   BeeWalletTopUpQr,
+  CashBondStatus,
   PayMongoOnboarding,
   PayMongoOnboardingDetailsInput,
   WithdrawableBalance,
@@ -109,6 +110,52 @@ class PayMongoOnboardingService {
       // actually generated with, and it is null whenever the backend fell back to the static QR.
       amount: payload.amount != null ? Number(payload.amount) : null,
     };
+  }
+
+  private parseCashBond(raw: any, driverId: string): CashBondStatus {
+    return {
+      driverId,
+      vehicleType: raw?.vehicleType ?? null,
+      amountDue: raw?.amountDue != null ? Number(raw.amountDue) : null,
+      cashBondBalance: Number(raw?.cashBondBalance ?? 0),
+      paid: Boolean(raw?.paid),
+    };
+  }
+
+  /** Where the driver stands on their cashbond — amount due for their vehicle type, and paid status. */
+  async getCashBondStatus(driverId: string): Promise<CashBondStatus> {
+    const response = await apiClient.get<CashBondStatus>(
+      `/api/drivers/${driverId}/wallet/cashbond`,
+      { requiresAuth: true }
+    );
+    const payload = this.extractPayload<any>(response);
+    if (!payload) {
+      throw new Error('Unable to check your cashbond status');
+    }
+    return this.parseCashBond(payload, driverId);
+  }
+
+  /**
+   * Pays the cashbond in full, sweeping it from the driver's PayMongo child wallet.
+   *
+   * Fails with a message telling the driver to fund their wallet first if the child wallet does
+   * not yet hold the configured amount — that funding happens through the existing BeeWallet QR
+   * top-up flow, not here.
+   */
+  async payCashBond(driverId: string): Promise<CashBondStatus> {
+    const response = await apiClient.post<CashBondStatus>(
+      `/api/drivers/${driverId}/wallet/cashbond/pay`,
+      { requiresAuth: true }
+    );
+    const payload = this.extractPayload<any>(response);
+    if (!payload) {
+      throw new Error(
+        (response as any)?.data?.message ??
+          (response as any)?.message ??
+          'Could not pay your cashbond'
+      );
+    }
+    return this.parseCashBond(payload, driverId);
   }
 
   async getStatus(driverId: string): Promise<PayMongoOnboarding> {

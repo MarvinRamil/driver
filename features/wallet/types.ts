@@ -288,6 +288,19 @@ export interface WithdrawableBalance {
 }
 
 /**
+ * Where a driver stands on their cashbond: a fixed, vehicle-type-priced deposit paid once before
+ * they can be offered bookings — not accrued, not deducted from. `amountDue` is null when no
+ * cashbond amount has been configured yet for the driver's vehicle type.
+ */
+export interface CashBondStatus {
+  driverId: string;
+  vehicleType: string | null;
+  amountDue: number | null;
+  cashBondBalance: number;
+  paid: boolean;
+}
+
+/**
  * A QR the driver scans to add money to their own BeeWallet wallet.
  *
  * Credits land in real time over InstaPay rather than waiting on payment settlement — which is why
