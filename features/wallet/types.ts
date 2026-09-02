@@ -16,7 +16,8 @@ export type WalletTransactionType =
   | 'WalletTransferOut'
   | 'CashDeficitAdjustment'
   | 'EarningReversal'
-  | 'AccountFee';
+  | 'AccountFee'
+  | 'PackageInsurancePayment';
 export type WalletBucket = 'Personal' | 'TopUp';
 
 /**
@@ -42,6 +43,7 @@ const TRANSACTION_LABELS: Record<WalletTransactionType, string> = {
   WalletTransferIn: 'Transferred in',
   WalletTransferOut: 'Transferred out',
   AccountFee: 'Account fee',
+  PackageInsurancePayment: 'Insurance premium',
 };
 
 export function transactionLabel(type: WalletTransactionType | string): string {
