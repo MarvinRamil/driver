@@ -20,6 +20,16 @@ import { canSaveQrImage, saveQrImage } from '../lib/saveQrImage';
 interface Props {
   visible: boolean;
   onClose: () => void;
+  /**
+   * Pre-fills the amount step with a specific figure (e.g. an exact cashbond amount due), so the
+   * driver doesn't have to type it themselves. Still editable — this only sets the initial value.
+   */
+  initialAmount?: number;
+  /**
+   * Called right after a top-up is detected, before the modal closes itself. Lets a caller chain
+   * an action off the funding — e.g. retrying a payment that failed for insufficient balance.
+   */
+  onFunded?: (amount: number) => void;
 }
 
 /** Offered as taps so the common top-ups need no typing. */
@@ -45,7 +55,7 @@ type Step = 'amount' | 'qr';
  * were added — which happens routinely, since JS ships over expo-updates ahead of new builds —
  * the button is simply absent rather than throwing.
  */
-export function BeeWalletTopUpQrModal({ visible, onClose }: Props) {
+export function BeeWalletTopUpQrModal({ visible, onClose, initialAmount, onFunded }: Props) {
   const theme = useTheme();
   const { data, isLoading, error, load, reset } = useBeeWalletTopUpQr();
   const [canSave, setCanSave] = useState(false);
@@ -103,6 +113,15 @@ export function BeeWalletTopUpQrModal({ visible, onClose }: Props) {
     }
   }, [visible, reset]);
 
+  // Pre-fills the amount step with a caller-supplied figure (e.g. an exact cashbond amount due).
+  // Only on open, and only into an empty field — a driver who edits it is not overwritten mid-edit.
+  useEffect(() => {
+    if (visible && initialAmount && initialAmount > 0 && !amountText) {
+      setAmountText(initialAmount.toFixed(2));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, initialAmount]);
+
   // Closing clears the fetched QR, so reopening shows a spinner and a fresh code rather than
   // flashing the previous one. It also means a QR is never left on screen after the driver has
   // moved on.
@@ -135,6 +154,7 @@ export function BeeWalletTopUpQrModal({ visible, onClose }: Props) {
   // expired, would spend calls on money that cannot arrive.
   useBeeWalletTopUpWatcher(visible && step === 'qr' && !expired, (received) => {
     Alert.alert('Top-up received', `₱${received.toFixed(2)} has been added to your BeeWallet.`);
+    onFunded?.(received);
     close();
   });
 

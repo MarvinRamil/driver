@@ -21,6 +21,7 @@ import { useTheme } from "@/shared/hooks/use-theme";
 import { useWallet } from "@/features/wallet";
 import { transactionLabel } from "@/features/wallet/types";
 import { BeeWalletTopUpQrModal } from "@/features/wallet/components/BeeWalletTopUpQrModal";
+import { CashBondModal } from "@/features/wallet/components/CashBondModal";
 import { usePayMongoOnboarding } from "@/features/wallet/hooks/usePayMongoOnboarding";
 import { useWithdrawableBalance } from "@/features/wallet/hooks/useWithdrawableBalance";
 import { useWalletTransactions } from "@/features/wallet";
@@ -110,6 +111,7 @@ export default function WalletScreen() {
   const [topUpModalVisible, setTopUpModalVisible] = useState(false);
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
+  const [cashBondVisible, setCashBondVisible] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("200");
   const [transferAmount, setTransferAmount] = useState("100");
   const [withdrawAmount, setWithdrawAmount] = useState("500");
@@ -989,7 +991,10 @@ export default function WalletScreen() {
               Withdraw
             </ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity
+            style={styles.quickAction}
+            onPress={() => setCashBondVisible(true)}
+          >
             <View
               style={[
                 styles.quickActionIcon,
@@ -997,7 +1002,7 @@ export default function WalletScreen() {
               ]}
             >
               <Ionicons
-                name="ellipsis-horizontal-outline"
+                name="shield-checkmark-outline"
                 size={24}
                 color={theme.text}
               />
@@ -1005,7 +1010,7 @@ export default function WalletScreen() {
             <ThemedText
               style={[styles.quickActionLabel, { color: theme.textSecondary }]}
             >
-              More
+              Cashbond
             </ThemedText>
           </TouchableOpacity>
         </View>
@@ -1666,6 +1671,10 @@ export default function WalletScreen() {
           onRefreshAll({ silent: true });
         }}
       />
+
+      {/* The cashbond is paid to the platform, not into this wallet, so nothing here needs
+          refreshing when it closes — the sheet tracks its own status while it is open. */}
+      <CashBondModal visible={cashBondVisible} onClose={() => setCashBondVisible(false)} />
 
       <Modal
         visible={withdrawModalVisible}

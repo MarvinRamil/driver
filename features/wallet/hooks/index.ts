@@ -11,3 +11,4 @@ export * from './usePayMongoOnboarding';
 export * from './useWithdrawableBalance';
 export * from './useBeeWalletTopUpQr';
 export * from './useBeeWalletTopUpWatcher';
+export * from './useCashBond';

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, Switch, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/shared/hooks/use-theme';
 import { useAuth } from '@/features/auth';
@@ -9,6 +9,7 @@ import { useProfile } from '@/features/profile';
 import { useDriverStatusContext } from '@/features/driver/context/DriverStatusContext';
 import { ThemedView } from '@/shared/components/themed-view';
 import { ThemedText } from '@/shared/components/themed-text';
+import { Skeleton } from '@/shared/components/skeleton';
 import { Ionicons } from '@expo/vector-icons';
 import { biometricAuth } from '@/shared/services/biometricAuth';
 import { biometricStorage } from '@/shared/services/biometricStorage';
@@ -22,9 +23,29 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { isLoading, error, updateProfile, changePassword, uploadProfilePicture } = useProfile();
   const { isOnline, toggleOnlineStatus, isLoading: statusLoading } = useDriverStatusContext();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // The tab stays mounted, so without this the screen only ever fetches once and edits made
+  // elsewhere never show up here.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshUser();
+    }, [refreshUser])
+  );
+
+  // Pull to refresh.
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshUser();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshUser]);
+
   const [profileImageUri, setProfileImageUri] = useState<string | null>(
     user?.profilePictureUrl || null
   );
@@ -265,7 +286,15 @@ export default function ProfileScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }>
         
         {/* Top App Bar */}
         <View style={[styles.topBar, { backgroundColor: theme.background + 'E6' }]}>
@@ -692,6 +721,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
+
 
         {/* Delete Account */}
         <TouchableOpacity
